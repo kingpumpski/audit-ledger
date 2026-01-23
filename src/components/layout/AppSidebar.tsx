@@ -47,8 +47,9 @@ const navItems: NavItem[] = [
   { label: 'Products', href: '/products', icon: Package },
   { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
-  { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
   { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
+  { label: 'User Management', href: '/admin/users', icon: Users, roles: ['admin'] },
 ];
 
 const bottomNavItems: NavItem[] = [
