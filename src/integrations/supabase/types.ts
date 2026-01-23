@@ -424,6 +424,7 @@ export type Database = {
           amount: number
           created_at: string
           customer_id: string
+          deleted_at: string | null
           id: string
           invoice_id: string
           notes: string | null
@@ -437,6 +438,7 @@ export type Database = {
           amount: number
           created_at?: string
           customer_id: string
+          deleted_at?: string | null
           id?: string
           invoice_id: string
           notes?: string | null
@@ -450,6 +452,7 @@ export type Database = {
           amount?: number
           created_at?: string
           customer_id?: string
+          deleted_at?: string | null
           id?: string
           invoice_id?: string
           notes?: string | null
@@ -475,6 +478,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      permissions: {
+        Row: {
+          code: string
+          description: string | null
+          id: string
+        }
+        Insert: {
+          code: string
+          description?: string | null
+          id?: string
+        }
+        Update: {
+          code?: string
+          description?: string | null
+          id?: string
+        }
+        Relationships: []
       }
       product_price_history: {
         Row: {
@@ -625,6 +646,7 @@ export type Database = {
           checksum: string | null
           created_at: string
           customer_id: string
+          deleted_at: string | null
           id: string
           invoice_id: string | null
           is_locked: boolean | null
@@ -636,6 +658,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           receipt_number: string
           signature_data: string | null
+          signature_hash: string | null
           status: Database["public"]["Enums"]["receipt_status"]
         }
         Insert: {
@@ -643,6 +666,7 @@ export type Database = {
           checksum?: string | null
           created_at?: string
           customer_id: string
+          deleted_at?: string | null
           id?: string
           invoice_id?: string | null
           is_locked?: boolean | null
@@ -654,6 +678,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           receipt_number: string
           signature_data?: string | null
+          signature_hash?: string | null
           status?: Database["public"]["Enums"]["receipt_status"]
         }
         Update: {
@@ -661,6 +686,7 @@ export type Database = {
           checksum?: string | null
           created_at?: string
           customer_id?: string
+          deleted_at?: string | null
           id?: string
           invoice_id?: string | null
           is_locked?: boolean | null
@@ -672,6 +698,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"]
           receipt_number?: string
           signature_data?: string | null
+          signature_hash?: string | null
           status?: Database["public"]["Enums"]["receipt_status"]
         }
         Relationships: [
@@ -694,6 +721,29 @@ export type Database = {
             columns: ["payment_id"]
             isOneToOne: false
             referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      role_permissions: {
+        Row: {
+          permission_id: string
+          role: string
+        }
+        Insert: {
+          permission_id: string
+          role: string
+        }
+        Update: {
+          permission_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
             referencedColumns: ["id"]
           },
         ]
@@ -799,19 +849,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_user_role: {
+        Args: {
+          granted_by_user: string
+          role_name: Database["public"]["Enums"]["app_role"]
+          target_user: string
+        }
+        Returns: undefined
+      }
+      claim_initial_admin: { Args: never; Returns: boolean }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
       }
-      has_any_role: { Args: { _user_id: string }; Returns: boolean }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
+      get_users_with_roles: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          created_at: string
+          department: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          job_title: string
+          phone: string
+          roles: Database["public"]["Enums"]["app_role"][]
+        }[]
       }
+      has_any_role:
+        | { Args: { _user_id: string }; Returns: boolean }
+        | { Args: { roles: string[] }; Returns: boolean }
+      has_permission: { Args: { permission_code: string }; Returns: boolean }
+      has_role:
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["app_role"]
+              _user_id: string
+            }
+            Returns: boolean
+          }
+        | { Args: { role_name: string }; Returns: boolean }
+      is_first_user: { Args: never; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "accountant" | "cashier" | "auditor"
