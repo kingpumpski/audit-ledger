@@ -15,7 +15,7 @@ export default {
   	extend: {
   		fontFamily: {
   			sans: [
-  				'Inter',
+  				'Space Grotesk',
   				'ui-sans-serif',
   				'system-ui',
   				'-apple-system',
@@ -207,7 +207,7 @@ export default {
   					opacity: '0.5'
   				}
   			},
-  			'shimmer': {
+  			shimmer: {
   				'0%': {
   					backgroundPosition: '-200% 0'
   				},
@@ -225,7 +225,7 @@ export default {
   			'fade-in-up': 'fade-in-up 0.4s ease-out',
   			'scale-in': 'scale-in 0.2s ease-out',
   			'pulse-slow': 'pulse-slow 2s ease-in-out infinite',
-  			'shimmer': 'shimmer 2s linear infinite'
+  			shimmer: 'shimmer 2s linear infinite'
   		}
   	}
   },
