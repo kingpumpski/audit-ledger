@@ -9,6 +9,8 @@ interface SignaturePadProps {
   disabled?: boolean;
   width?: number;
   height?: number;
+  signerName?: string;
+  initialData?: string;
 }
 
 export function SignaturePad({
@@ -18,6 +20,8 @@ export function SignaturePad({
   disabled = false,
   width = 400,
   height = 150,
+  signerName,
+  initialData,
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -39,7 +43,17 @@ export function SignaturePad({
     // Fill with white background
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }, []);
+
+    // Load initial data if provided
+    if (initialData) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        setHasSignature(true);
+      };
+      img.src = initialData;
+    }
+  }, [initialData]);
 
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current;
@@ -136,6 +150,9 @@ export function SignaturePad({
             <span className="text-muted-foreground text-sm">Sign here</span>
           </div>
         )}
+      {signerName && (
+        <p className="text-center text-sm text-muted-foreground mt-1">{signerName}</p>
+      )}
       </div>
 
       <div className="flex gap-2">
