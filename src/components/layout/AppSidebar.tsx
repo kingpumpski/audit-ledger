@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Profile', href: '/profile', icon: User },
 ];
 
 export function AppSidebar() {

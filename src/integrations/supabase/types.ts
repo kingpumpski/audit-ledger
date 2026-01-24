@@ -904,6 +904,9 @@ export type Database = {
         | "view"
         | "export"
         | "sign"
+        | "INSERT"
+        | "UPDATE"
+        | "DELETE"
       discount_type: "fixed" | "percentage"
       invoice_status:
         | "draft"
@@ -1059,6 +1062,9 @@ export const Constants = {
         "view",
         "export",
         "sign",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
       ],
       discount_type: ["fixed", "percentage"],
       invoice_status: [
