@@ -53,6 +53,7 @@ const navItems: NavItem[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
+  { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
   { label: 'Profile', href: '/profile', icon: User },
 ];
 

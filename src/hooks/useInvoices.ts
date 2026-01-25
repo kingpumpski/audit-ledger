@@ -168,6 +168,19 @@ export function useInvoices() {
         .eq('status', 'draft');
 
       if (error) throw error;
+
+      // Send invoice email automatically
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await supabase.functions.invoke('send-invoice-email', {
+            body: { invoiceId },
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to send invoice email:', emailError);
+        // Don't throw - invoice was issued successfully, email is secondary
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });

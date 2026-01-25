@@ -59,6 +59,90 @@ export type Database = {
         }
         Relationships: []
       }
+      company_settings: {
+        Row: {
+          company_address: string | null
+          company_city: string | null
+          company_country: string | null
+          company_email: string | null
+          company_logo_url: string | null
+          company_name: string
+          company_phone: string | null
+          company_postal_code: string | null
+          company_state: string | null
+          company_tax_id: string | null
+          created_at: string
+          currency_code: string | null
+          currency_symbol: string | null
+          default_invoice_notes: string | null
+          default_invoice_terms: string | null
+          default_payment_terms: string | null
+          id: string
+          invoice_prefix: string | null
+          notify_on_invoice_issued: boolean | null
+          notify_on_overdue: boolean | null
+          notify_on_payment_received: boolean | null
+          overdue_reminder_days: number[] | null
+          payment_prefix: string | null
+          receipt_prefix: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_address?: string | null
+          company_city?: string | null
+          company_country?: string | null
+          company_email?: string | null
+          company_logo_url?: string | null
+          company_name?: string
+          company_phone?: string | null
+          company_postal_code?: string | null
+          company_state?: string | null
+          company_tax_id?: string | null
+          created_at?: string
+          currency_code?: string | null
+          currency_symbol?: string | null
+          default_invoice_notes?: string | null
+          default_invoice_terms?: string | null
+          default_payment_terms?: string | null
+          id?: string
+          invoice_prefix?: string | null
+          notify_on_invoice_issued?: boolean | null
+          notify_on_overdue?: boolean | null
+          notify_on_payment_received?: boolean | null
+          overdue_reminder_days?: number[] | null
+          payment_prefix?: string | null
+          receipt_prefix?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_address?: string | null
+          company_city?: string | null
+          company_country?: string | null
+          company_email?: string | null
+          company_logo_url?: string | null
+          company_name?: string
+          company_phone?: string | null
+          company_postal_code?: string | null
+          company_state?: string | null
+          company_tax_id?: string | null
+          created_at?: string
+          currency_code?: string | null
+          currency_symbol?: string | null
+          default_invoice_notes?: string | null
+          default_invoice_terms?: string | null
+          default_payment_terms?: string | null
+          id?: string
+          invoice_prefix?: string | null
+          notify_on_invoice_issued?: boolean | null
+          notify_on_overdue?: boolean | null
+          notify_on_payment_received?: boolean | null
+          overdue_reminder_days?: number[] | null
+          payment_prefix?: string | null
+          receipt_prefix?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           address_line1: string | null
