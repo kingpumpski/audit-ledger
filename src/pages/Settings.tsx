@@ -13,6 +13,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/useSettings';
+import { LogoUpload } from '@/components/settings/LogoUpload';
 import { Building2, FileText, Bell, DollarSign, Loader2, Save, X } from 'lucide-react';
 
 const companySchema = z.object({
@@ -52,6 +53,7 @@ export default function Settings() {
   const { settings, isLoading, updateSettings, isUpdating } = useSettings();
   const [reminderDays, setReminderDays] = useState<number[]>([7, 14, 30]);
   const [newReminderDay, setNewReminderDay] = useState('');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
   const companyForm = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
@@ -123,11 +125,15 @@ export default function Settings() {
       });
 
       setReminderDays(settings.overdue_reminder_days || [7, 14, 30]);
+      setCompanyLogoUrl(settings.company_logo_url || null);
     }
   }, [settings]);
 
   const onCompanySubmit = async (data: CompanyFormData) => {
-    await updateSettings(data);
+    await updateSettings({
+      ...data,
+      company_logo_url: companyLogoUrl,
+    });
   };
 
   const onInvoiceSubmit = async (data: InvoiceFormData) => {
@@ -200,6 +206,13 @@ export default function Settings() {
               <CardContent>
                 <Form {...companyForm}>
                   <form onSubmit={companyForm.handleSubmit(onCompanySubmit)} className="space-y-6">
+                    {/* Logo Upload */}
+                    <LogoUpload
+                      currentLogoUrl={companyLogoUrl}
+                      onLogoChange={setCompanyLogoUrl}
+                      isUpdating={isUpdating}
+                    />
+
                     <div className="grid gap-4 md:grid-cols-2">
                       <FormField
                         control={companyForm.control}
