@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.authorize]
 verify_jwt = false
+
+[functions.send-payment-confirmation]
+verify_jwt = false
+
+[functions.create-users]
+verify_jwt = false
