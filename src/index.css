@@ -67,12 +67,12 @@
 
     /* Sidebar */
     --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 0 0% 9%;
+    --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 161 93% 30%;
     --sidebar-primary-foreground: 151 80% 95%;
-    --sidebar-accent: 0 0% 32%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 83%;
+    --sidebar-accent: 220 20% 25%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 20% 20%;
     --sidebar-ring: 161 93% 30%;
 
     /* Gradients */
@@ -154,12 +154,12 @@
     --ring: 158 64% 51%;
 
     --sidebar-background: 222 50% 6%;
-    --sidebar-foreground: 0 0% 98%;
+    --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 158 64% 51%;
     --sidebar-primary-foreground: 165 91% 9%;
-    --sidebar-accent: 172 66% 50%;
-    --sidebar-accent-foreground: 178 84% 10%;
-    --sidebar-border: 0 0% 32%;
+    --sidebar-accent: 220 30% 20%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 20% 15%;
     --sidebar-ring: 158 64% 51%;
 
     --glass-bg: hsl(222 40% 12% / 0.8);
