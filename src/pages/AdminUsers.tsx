@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
+import { BulkUserCreation } from '@/components/admin/BulkUserCreation';
 import { 
   Users, 
   Shield, 
@@ -87,6 +88,7 @@ export default function AdminUsers() {
     <AppLayout
       title="User Management"
       subtitle="Manage user accounts and role assignments"
+      actions={<BulkUserCreation />}
     >
       <div className="space-y-6">
         {/* Stats Cards */}

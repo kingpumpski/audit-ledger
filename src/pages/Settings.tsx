@@ -428,11 +428,17 @@ export default function Settings() {
                                 <SelectItem value="USD">USD - US Dollar</SelectItem>
                                 <SelectItem value="EUR">EUR - Euro</SelectItem>
                                 <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                                <SelectItem value="GHS">GHS - Ghana Cedi</SelectItem>
+                                <SelectItem value="NGN">NGN - Nigerian Naira</SelectItem>
+                                <SelectItem value="ZAR">ZAR - South African Rand</SelectItem>
+                                <SelectItem value="KES">KES - Kenyan Shilling</SelectItem>
                                 <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
                                 <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
                                 <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
                                 <SelectItem value="CNY">CNY - Chinese Yuan</SelectItem>
                                 <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                                <SelectItem value="AED">AED - UAE Dirham</SelectItem>
+                                <SelectItem value="CHF">CHF - Swiss Franc</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />
