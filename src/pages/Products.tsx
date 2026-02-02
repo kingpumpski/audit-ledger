@@ -30,6 +30,7 @@ import {
 import { useProducts } from '@/hooks/useProducts';
 import { useSettings } from '@/hooks/useSettings';
 import { CSVImport } from '@/components/import/CSVImport';
+import { SeedProductsButton } from '@/components/admin/SeedProductsButton';
 import { productCategories, sampleProducts, currencyOptions } from '@/data/productCategories';
 import { 
   Plus, 
@@ -160,6 +161,7 @@ export default function Products() {
       subtitle="Manage your product catalog and inventory"
       actions={
         <div className="flex gap-2">
+          <SeedProductsButton />
           <CSVImport
             entityType="products"
             onImport={handleImportProducts}

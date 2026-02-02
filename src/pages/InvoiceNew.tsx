@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +22,8 @@ import {
 import { useInvoices } from '@/hooks/useInvoices';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useProducts } from '@/hooks/useProducts';
+import { useTaxes } from '@/hooks/useTaxes';
+import { useSettings } from '@/hooks/useSettings';
 import { 
   Plus, 
   Trash2, 
@@ -29,10 +31,15 @@ import {
   Loader2,
   Save,
   Eye,
-  ArrowLeft
+  ArrowLeft,
+  Send,
+  FileText,
+  Search
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface LineItem {
   id: string;
@@ -47,9 +54,12 @@ interface LineItem {
 
 export default function InvoiceNew() {
   const navigate = useNavigate();
-  const { createInvoice, isCreating } = useInvoices();
+  const { toast } = useToast();
+  const { createInvoice, issueInvoice, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading } = useCustomers();
   const { products, isLoading: productsLoading } = useProducts();
+  const { taxes } = useTaxes();
+  const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
@@ -59,6 +69,22 @@ export default function InvoiceNew() {
     { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_rate: 0 }
   ]);
   const [showPreview, setShowPreview] = useState(false);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const currencySymbol = settings?.currency_symbol || '$';
+
+  // Filter products based on search
+  const filteredProducts = useMemo(() => {
+    if (!productSearchQuery) return products.slice(0, 20);
+    return products.filter(p => 
+      p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+      p.sku.toLowerCase().includes(productSearchQuery.toLowerCase())
+    ).slice(0, 20);
+  }, [products, productSearchQuery]);
+
+  // Active taxes for dropdown
+  const activeTaxes = taxes.filter(t => t.is_active);
 
   const addItem = () => {
     setItems([
@@ -123,7 +149,25 @@ export default function InvoiceNew() {
   const selectedCustomer = customers.find(c => c.id === customerId);
 
   const handleSubmit = async (asDraft: boolean = true) => {
-    if (!customerId || items.length === 0) return;
+    if (!customerId || items.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select a customer and add at least one item.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate items
+    const invalidItems = items.filter(item => !item.description || item.quantity <= 0 || item.unit_price < 0);
+    if (invalidItems.length > 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all item details correctly.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     try {
       const invoice = await createInvoice({
@@ -142,9 +186,56 @@ export default function InvoiceNew() {
         })),
       });
 
+      if (!asDraft && invoice?.id) {
+        // Issue the invoice immediately
+        issueInvoice(invoice.id);
+      }
+
       navigate('/invoices');
     } catch (error) {
       console.error('Failed to create invoice:', error);
+    }
+  };
+
+  const handleSaveAndSend = async () => {
+    if (!customerId || items.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select a customer and add at least one item.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const invoice = await createInvoice({
+        customer_id: customerId,
+        due_date: format(dueDate, 'yyyy-MM-dd'),
+        notes,
+        terms,
+        items: items.map(item => ({
+          product_id: item.product_id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          discount_type: item.discount_type,
+          discount_value: item.discount_value,
+          tax_rate: item.tax_rate,
+        })),
+      });
+
+      if (invoice?.id) {
+        // Issue and send email
+        issueInvoice(invoice.id);
+        toast({
+          title: 'Invoice Created & Sent',
+          description: 'The invoice has been created and will be emailed to the customer.',
+        });
+      }
+
+      navigate('/invoices');
+    } catch (error) {
+      console.error('Failed to create and send invoice:', error);
     }
   };
 
@@ -160,15 +251,7 @@ export default function InvoiceNew() {
           </Button>
           <Button variant="outline" onClick={() => setShowPreview(!showPreview)}>
             <Eye className="mr-2 h-4 w-4" />
-            Preview
-          </Button>
-          <Button onClick={() => handleSubmit(true)} disabled={isCreating || !customerId}>
-            {isCreating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Save Draft
+            {showPreview ? 'Hide Preview' : 'Preview'}
           </Button>
         </div>
       }
@@ -234,7 +317,7 @@ export default function InvoiceNew() {
                 <Textarea 
                   value={notes} 
                   onChange={(e) => setNotes(e.target.value)} 
-                  placeholder="Additional notes..."
+                  placeholder="Additional notes for the customer..."
                   rows={3}
                 />
               </div>
@@ -271,16 +354,31 @@ export default function InvoiceNew() {
                     <div className="space-y-2 md:col-span-2">
                       <Label>Product (Optional)</Label>
                       <Select 
-                        value={item.product_id || ''} 
-                        onValueChange={(v) => selectProduct(item.id, v)}
+                        value={item.product_id || 'none'} 
+                        onValueChange={(v) => v !== 'none' && selectProduct(item.id, v)}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select product or enter manually" />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map(product => (
+                          <div className="p-2">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                placeholder="Search products..."
+                                value={productSearchQuery}
+                                onChange={(e) => setProductSearchQuery(e.target.value)}
+                                className="pl-8"
+                              />
+                            </div>
+                          </div>
+                          <SelectItem value="none">-- Enter manually --</SelectItem>
+                          {filteredProducts.map(product => (
                             <SelectItem key={product.id} value={product.id}>
-                              {product.name} - ${product.current_price}
+                              <div className="flex justify-between items-center gap-4">
+                                <span>{product.name}</span>
+                                <span className="text-muted-foreground">{currencySymbol}{product.current_price}</span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -307,7 +405,7 @@ export default function InvoiceNew() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Unit Price *</Label>
+                      <Label>Unit Price ({currencySymbol}) *</Label>
                       <Input 
                         type="number"
                         min="0"
@@ -332,11 +430,11 @@ export default function InvoiceNew() {
                           value={item.discount_type || 'fixed'} 
                           onValueChange={(v: 'fixed' | 'percentage') => updateItem(item.id, { discount_type: v })}
                         >
-                          <SelectTrigger className="w-[100px]">
+                          <SelectTrigger className="w-[80px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="fixed">$</SelectItem>
+                            <SelectItem value="fixed">{currencySymbol}</SelectItem>
                             <SelectItem value="percentage">%</SelectItem>
                           </SelectContent>
                         </Select>
@@ -344,35 +442,101 @@ export default function InvoiceNew() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Tax Rate (%)</Label>
-                      <Input 
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={item.tax_rate || ''}
-                        onChange={(e) => updateItem(item.id, { tax_rate: Number(e.target.value) || undefined })}
-                        placeholder="0"
-                      />
+                      <Label>Tax Rate</Label>
+                      <Select 
+                        value={item.tax_rate?.toString() || '0'} 
+                        onValueChange={(v) => updateItem(item.id, { tax_rate: Number(v) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select tax" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">No Tax (0%)</SelectItem>
+                          {activeTaxes.map(tax => (
+                            <SelectItem key={tax.id} value={tax.rate.toString()}>
+                              {tax.name} ({tax.rate}%)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
                   <div className="flex justify-end pt-2 border-t">
                     <span className="text-sm font-medium">
-                      Line Total: ${calculateLineTotal(item).toFixed(2)}
+                      Line Total: {currencySymbol}{calculateLineTotal(item).toFixed(2)}
                     </span>
                   </div>
                 </div>
               ))}
             </CardContent>
           </Card>
+
+          {/* Summary & Actions */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-2 mb-6">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>{currencySymbol}{subtotal.toFixed(2)}</span>
+                </div>
+                {totalDiscount > 0 && (
+                  <div className="flex justify-between text-sm text-success">
+                    <span>Discount</span>
+                    <span>-{currencySymbol}{totalDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+                {totalTax > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Tax</span>
+                    <span>{currencySymbol}{totalTax.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-lg pt-2 border-t">
+                  <span>Total</span>
+                  <span>{currencySymbol}{total.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => handleSubmit(true)} 
+                  disabled={isCreating || !customerId}
+                >
+                  {isCreating ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save as Draft
+                </Button>
+                <Button 
+                  className="flex-1"
+                  onClick={handleSaveAndSend} 
+                  disabled={isCreating || isIssuing || !customerId}
+                >
+                  {(isCreating || isIssuing) ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Save & Send
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Preview */}
         {showPreview && (
-          <Card className="sticky top-4 h-fit">
+          <Card className="sticky top-20 h-fit">
             <CardHeader>
-              <CardTitle>Invoice Preview</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Invoice Preview
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 bg-muted/50 rounded-lg space-y-4">
@@ -394,6 +558,9 @@ export default function InvoiceNew() {
                     <p className="text-sm text-muted-foreground">Bill To</p>
                     <p className="font-medium">{selectedCustomer.name}</p>
                     <p className="text-sm text-muted-foreground">{selectedCustomer.email}</p>
+                    {selectedCustomer.address_line1 && (
+                      <p className="text-sm text-muted-foreground">{selectedCustomer.address_line1}</p>
+                    )}
                   </div>
                 )}
 
@@ -412,8 +579,8 @@ export default function InvoiceNew() {
                         <tr key={item.id} className="border-b">
                           <td className="py-2">{item.description || '-'}</td>
                           <td className="text-right py-2">{item.quantity}</td>
-                          <td className="text-right py-2">${item.unit_price.toFixed(2)}</td>
-                          <td className="text-right py-2">${calculateLineTotal(item).toFixed(2)}</td>
+                          <td className="text-right py-2">{currencySymbol}{item.unit_price.toFixed(2)}</td>
+                          <td className="text-right py-2">{currencySymbol}{calculateLineTotal(item).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -423,25 +590,39 @@ export default function InvoiceNew() {
                 <div className="pt-4 border-t space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>{currencySymbol}{subtotal.toFixed(2)}</span>
                   </div>
                   {totalDiscount > 0 && (
                     <div className="flex justify-between text-sm text-success">
                       <span>Discount</span>
-                      <span>-${totalDiscount.toFixed(2)}</span>
+                      <span>-{currencySymbol}{totalDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   {totalTax > 0 && (
                     <div className="flex justify-between text-sm">
                       <span>Tax</span>
-                      <span>${totalTax.toFixed(2)}</span>
+                      <span>{currencySymbol}{totalTax.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-lg pt-2 border-t">
                     <span>Total</span>
-                    <span>${total.toFixed(2)}</span>
+                    <span>{currencySymbol}{total.toFixed(2)}</span>
                   </div>
                 </div>
+
+                {terms && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm text-muted-foreground">Terms</p>
+                    <p className="text-sm">{terms}</p>
+                  </div>
+                )}
+
+                {notes && (
+                  <div className="pt-2">
+                    <p className="text-sm text-muted-foreground">Notes</p>
+                    <p className="text-sm">{notes}</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

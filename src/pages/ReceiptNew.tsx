@@ -65,8 +65,9 @@ export default function ReceiptNew() {
   const selectedCustomer = customers.find(c => c.id === customerId);
 
   const handleInvoiceSelect = (invId: string) => {
-    setInvoiceId(invId);
-    const invoice = invoices.find(inv => inv.id === invId);
+    const actualId = invId === 'none' ? '' : invId;
+    setInvoiceId(actualId);
+    const invoice = invoices.find(inv => inv.id === actualId);
     if (invoice) {
       setAmount(invoice.balance_due || invoice.total_amount || 0);
     }
@@ -197,7 +198,7 @@ export default function ReceiptNew() {
                     <SelectValue placeholder="Select invoice" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No invoice</SelectItem>
+                    <SelectItem value="none">No invoice</SelectItem>
                     {customerInvoices.map(invoice => (
                       <SelectItem key={invoice.id} value={invoice.id}>
                         {invoice.invoice_number} - ${invoice.balance_due?.toFixed(2)}
