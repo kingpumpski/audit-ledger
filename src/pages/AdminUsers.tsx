@@ -30,15 +30,17 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAdminUsers } from '@/hooks/useAdminUsers';
 import { BulkUserCreation } from '@/components/admin/BulkUserCreation';
+import { EditUserDialog } from '@/components/admin/EditUserDialog';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   Users, 
   Shield, 
-  Plus, 
   Loader2, 
   Search,
   UserCog,
   Check,
-  X
+  X,
+  Pencil
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,9 +64,11 @@ const roleColors: Record<AppRole, string> = {
 
 export default function AdminUsers() {
   const { users, isLoading, assignRole, removeRole, toggleUserActive, isAssigning } = useAdminUsers();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = 
@@ -82,6 +86,15 @@ export default function AdminUsers() {
     } else {
       assignRole({ userId, role });
     }
+  };
+
+  const handleEditUser = (user: any) => {
+    setSelectedUserForEdit(user);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
   };
 
   return (
@@ -169,7 +182,7 @@ export default function AdminUsers() {
                     <TableHead>Status</TableHead>
                     <TableHead>Roles</TableHead>
                     <TableHead>Joined</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead className="w-[120px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -203,71 +216,84 @@ export default function AdminUsers() {
                         {new Date(user.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <UserCog className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Manage Roles</DialogTitle>
-                              <DialogDescription>
-                                Assign or remove roles for {user.full_name || user.email}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                              {ALL_ROLES.map(role => {
-                                const hasRole = user.roles.includes(role);
-                                return (
-                                  <div
-                                    key={role}
-                                    className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer"
-                                    onClick={() => handleRoleToggle(user.id, role, hasRole)}
-                                  >
-                                    <Checkbox
-                                      checked={hasRole}
-                                      disabled={isAssigning}
-                                    />
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium capitalize">{role}</span>
-                                        <Badge className={cn('text-xs', roleColors[role])}>
-                                          {role}
-                                        </Badge>
-                                      </div>
-                                      <p className="text-sm text-muted-foreground mt-1">
-                                        {roleDescriptions[role]}
-                                      </p>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex justify-between pt-4 border-t">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleUserActive({ 
-                                  userId: user.id, 
-                                  isActive: !user.is_active 
-                                })}
-                              >
-                                {user.is_active ? (
-                                  <>
-                                    <X className="mr-2 h-4 w-4" />
-                                    Deactivate User
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check className="mr-2 h-4 w-4" />
-                                    Activate User
-                                  </>
-                                )}
+                        <div className="flex gap-1">
+                          {/* Edit User Button */}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEditUser(user)}
+                            title="Edit user"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          
+                          {/* Manage Roles Dialog */}
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="sm" title="Manage roles">
+                                <UserCog className="h-4 w-4" />
                               </Button>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Manage Roles</DialogTitle>
+                                <DialogDescription>
+                                  Assign or remove roles for {user.full_name || user.email}
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                {ALL_ROLES.map(role => {
+                                  const hasRole = user.roles.includes(role);
+                                  return (
+                                    <div
+                                      key={role}
+                                      className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer"
+                                      onClick={() => handleRoleToggle(user.id, role, hasRole)}
+                                    >
+                                      <Checkbox
+                                        checked={hasRole}
+                                        disabled={isAssigning}
+                                      />
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium capitalize">{role}</span>
+                                          <Badge className={cn('text-xs', roleColors[role])}>
+                                            {role}
+                                          </Badge>
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mt-1">
+                                          {roleDescriptions[role]}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex justify-between pt-4 border-t">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleUserActive({ 
+                                    userId: user.id, 
+                                    isActive: !user.is_active 
+                                  })}
+                                >
+                                  {user.is_active ? (
+                                    <>
+                                      <X className="mr-2 h-4 w-4" />
+                                      Deactivate User
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check className="mr-2 h-4 w-4" />
+                                      Activate User
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -277,6 +303,19 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit User Dialog */}
+      {selectedUserForEdit && (
+        <EditUserDialog
+          user={selectedUserForEdit}
+          isOpen={isEditDialogOpen}
+          onClose={() => {
+            setIsEditDialogOpen(false);
+            setSelectedUserForEdit(null);
+          }}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </AppLayout>
   );
 }
