@@ -23,11 +23,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDiscounts } from '@/hooks/useDiscounts';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { Plus, Loader2, Percent, Pencil, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Discounts() {
   const { discounts, isLoading, createDiscount, updateDiscount, toggleDiscountStatus, isCreating, isUpdating } = useDiscounts();
+  const { currencySymbol, formatCurrency } = useCurrency();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -106,7 +108,7 @@ export default function Discounts() {
     if (discount.type === 'percentage') {
       return `${discount.value}%`;
     }
-    return `$${discount.value.toFixed(2)}`;
+    return `${currencySymbol}${discount.value.toFixed(2)}`;
   };
 
   const isExpired = (discount: any) => {
@@ -190,7 +192,7 @@ export default function Discounts() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="value">
-                    Value {formData.type === 'percentage' ? '(%)' : '($)'}
+                    Value {formData.type === 'percentage' ? '(%)' : `(${currencySymbol})`}
                   </Label>
                   <Input
                     id="value"
@@ -208,7 +210,7 @@ export default function Discounts() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="min_order">Min Order Amount ($)</Label>
+                  <Label htmlFor="min_order">Min Order Amount ({currencySymbol})</Label>
                   <Input
                     id="min_order"
                     type="number"
@@ -220,7 +222,7 @@ export default function Discounts() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="max_discount">Max Discount Amount ($)</Label>
+                  <Label htmlFor="max_discount">Max Discount Amount ({currencySymbol})</Label>
                   <Input
                     id="max_discount"
                     type="number"

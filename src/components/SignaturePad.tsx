@@ -78,6 +78,7 @@ export function SignaturePad({
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
     if (disabled) return;
+    e.preventDefault(); // Prevent scrolling on touch devices
 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -91,6 +92,7 @@ export function SignaturePad({
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDrawing || disabled) return;
+    e.preventDefault(); // Prevent scrolling on touch devices
 
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -102,7 +104,59 @@ export function SignaturePad({
     setHasSignature(true);
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.preventDefault();
+    setIsDrawing(false);
+  };
+
+  // Handle pointer events for better stylus/pen support
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (disabled) return;
+    e.preventDefault();
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+
+    // Capture pointer for smoother drawing
+    canvas.setPointerCapture(e.pointerId);
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDrawing || disabled) return;
+    e.preventDefault();
+
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
     setIsDrawing(false);
   };
 
@@ -134,16 +188,21 @@ export function SignaturePad({
           height={height}
           className={cn(
             'border-2 border-dashed rounded-lg cursor-crosshair touch-none',
-            'bg-white',
+            'bg-white w-full',
             disabled ? 'opacity-50 cursor-not-allowed' : 'border-muted-foreground/30 hover:border-primary/50'
           )}
+          style={{ touchAction: 'none' }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
           onMouseDown={startDrawing}
           onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
+          onMouseUp={() => stopDrawing()}
+          onMouseLeave={() => stopDrawing()}
           onTouchStart={startDrawing}
           onTouchMove={draw}
-          onTouchEnd={stopDrawing}
+          onTouchEnd={() => stopDrawing()}
         />
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

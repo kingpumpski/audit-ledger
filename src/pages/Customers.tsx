@@ -16,11 +16,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { Plus, Search, Loader2, Mail, Phone, Eye, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Customers() {
   const { customers, isLoading, createCustomer, deleteCustomer, isCreating } = useCustomers();
+  const { formatCurrency } = useCurrency();
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -192,7 +194,7 @@ export default function Customers() {
                         )}
                       </div>
                     </td>
-                    <td className="font-medium">${(customer.current_balance || 0).toLocaleString()}</td>
+                    <td className="font-medium">{formatCurrency(customer.current_balance || 0)}</td>
                     <td>
                       <Badge variant={customer.is_active ? 'default' : 'secondary'}>
                         {customer.is_active ? 'Active' : 'Inactive'}

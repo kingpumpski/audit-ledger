@@ -25,20 +25,24 @@ export function useProducts() {
   });
 
   const createProductMutation = useMutation({
-    mutationFn: async (productData: Omit<ProductInsert, 'sku'>) => {
+    mutationFn: async (productData: Omit<ProductInsert, 'sku'> & { sku?: string }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get next product SKU
-      const { data: sku, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'product' });
+      // Use provided SKU or generate one automatically
+      let sku = productData.sku;
+      if (!sku) {
+        const { data: generatedSku, error: seqError } = await supabase
+          .rpc('get_next_sequence', { seq_name: 'product' });
+        if (seqError) throw seqError;
+        sku = generatedSku;
+      }
 
-      if (seqError) throw seqError;
-
+      const { sku: _, ...restProductData } = productData;
       const { data, error } = await supabase
         .from('products')
         .insert({
-          ...productData,
+          ...restProductData,
           sku,
           created_by: user.id,
         })

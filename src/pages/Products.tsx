@@ -57,6 +57,7 @@ export default function Products() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
+    sku: '', // Optional SKU field
     description: '',
     category: '',
     current_price: 0,
@@ -92,6 +93,7 @@ export default function Products() {
     try {
       await createProduct({
         name: formData.name,
+        sku: formData.sku || undefined, // Pass SKU if provided, else let backend generate
         description: formData.description,
         category: formData.category,
         current_price: formData.current_price,
@@ -112,6 +114,7 @@ export default function Products() {
   const resetForm = () => {
     setFormData({
       name: '',
+      sku: '',
       description: '',
       category: '',
       current_price: 0,
@@ -183,7 +186,7 @@ export default function Products() {
                   Add a new product or service to your catalog
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Product Name *</Label>
@@ -193,6 +196,20 @@ export default function Products() {
                       placeholder="Enter product name"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>SKU (Optional)</Label>
+                    <Input
+                      value={formData.sku}
+                      onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                      placeholder="Auto-generated if left blank"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Stock Keeping Unit - unique product identifier. Leave blank to auto-generate.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Category</Label>
                     <Select
@@ -208,41 +225,6 @@ export default function Products() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Product description"
-                    rows={2}
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label>Price ({currencySymbol}) *</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.current_price || ''}
-                      onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cost Price ({currencySymbol})</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.cost_price || ''}
-                      onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Unit</Label>
@@ -269,6 +251,41 @@ export default function Products() {
                         <SelectItem value="roll">Roll</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Product description"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Price ({currencySymbol}) *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.current_price || ''}
+                      onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cost Price ({currencySymbol})</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.cost_price || ''}
+                      onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
+                      placeholder="0.00"
+                    />
                   </div>
                 </div>
 
@@ -308,25 +325,25 @@ export default function Products() {
                     <span className="text-sm">This is a service (no stock tracking)</span>
                   </label>
                 </div>
+              </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t">
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleSubmit} disabled={isCreating || !formData.name || !formData.current_price}>
-                    {isCreating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create Product
-                      </>
-                    )}
-                  </Button>
-                </div>
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={isCreating || !formData.name || !formData.current_price}>
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Product
+                    </>
+                  )}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>

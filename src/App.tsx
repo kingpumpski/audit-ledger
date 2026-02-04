@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InitialAdminSetup } from "@/components/auth/InitialAdminSetup";
 
@@ -38,7 +39,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <InitialAdminSetup />
+          <CurrencyProvider>
+            <InitialAdminSetup />
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -67,6 +69,7 @@ const App = () => (
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </CurrencyProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
