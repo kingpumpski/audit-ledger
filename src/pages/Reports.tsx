@@ -19,6 +19,7 @@ import {
 import { useInvoices } from '@/hooks/useInvoices';
 import { useReceipts } from '@/hooks/useReceipts';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useSettings } from '@/hooks/useSettings';
 import { 
   Download, 
   CalendarIcon,
@@ -57,6 +58,9 @@ export default function Reports() {
   const { invoices } = useInvoices();
   const { receipts } = useReceipts();
   const { customers } = useCustomers();
+  const { settings } = useSettings();
+
+  const currencySymbol = settings?.currency_symbol || '$';
 
   const getDateRange = () => {
     const now = new Date();
@@ -250,7 +254,7 @@ export default function Reports() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">${totalRevenue.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">{currencySymbol}{totalRevenue.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -264,7 +268,7 @@ export default function Reports() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Invoiced</p>
-                  <p className="text-2xl font-bold">${totalInvoiced.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">{currencySymbol}{totalInvoiced.toLocaleString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -339,7 +343,7 @@ export default function Reports() {
                         />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                         <Tooltip
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                          formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, 'Revenue']}
                           labelFormatter={(label) => format(new Date(label), 'MMM d, yyyy')}
                           contentStyle={{
                             backgroundColor: 'hsl(var(--card))',
@@ -408,12 +412,12 @@ export default function Reports() {
                 <div className="grid gap-4 md:grid-cols-3 mb-6">
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Total Tax Collected</p>
-                    <p className="text-3xl font-bold">${totalTax.toLocaleString()}</p>
+                    <p className="text-3xl font-bold">{currencySymbol}{totalTax.toLocaleString()}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Taxable Amount</p>
                     <p className="text-3xl font-bold">
-                      ${(totalInvoiced - totalTax).toLocaleString()}
+                      {currencySymbol}{(totalInvoiced - totalTax).toLocaleString()}
                     </p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg">
