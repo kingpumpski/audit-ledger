@@ -5,6 +5,7 @@ import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
 type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
+type ProductInsertWithOptionalSku = Omit<ProductInsert, 'sku'> & { sku?: string | null };
 
 export function useProducts() {
   const { toast } = useToast();
@@ -29,23 +30,22 @@ export function useProducts() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Use provided SKU or generate one automatically
-      let sku = productData.sku;
-      if (!sku) {
-        const { data: generatedSku, error: seqError } = await supabase
-          .rpc('get_next_sequence', { seq_name: 'product' });
-        if (seqError) throw seqError;
-        sku = generatedSku;
-      }
+      // SKU is optional: if blank, the backend auto-generates it (enforced by a DB trigger)
+      const sku = productData.sku?.trim();
 
       const { sku: _, ...restProductData } = productData;
+
+      // DB trigger enforces SKU generation when missing; our generated types still mark sku as required,
+      // so we use a local type here to allow sku to be omitted.
+      const payload: ProductInsertWithOptionalSku = {
+        ...restProductData,
+        ...(sku ? { sku } : {}),
+        created_by: user.id,
+      };
+
       const { data, error } = await supabase
         .from('products')
-        .insert({
-          ...restProductData,
-          sku,
-          created_by: user.id,
-        })
+        .insert(payload as any)
         .select()
         .single();
 
