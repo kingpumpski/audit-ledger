@@ -85,6 +85,11 @@ serve(async (req) => {
     const companyName = settings?.company_name || "InvoiceHub";
     const currencySymbol = settings?.currency_symbol || "$";
     const companyLogo = settings?.company_logo_url || null;
+    
+    // Use company email if verified domain exists, otherwise use Resend's test domain
+    const fromEmail = settings?.company_email && settings.company_email.includes("@") 
+      ? `${companyName} <${settings.company_email}>`
+      : `${companyName} <onboarding@resend.dev>`;
 
     // Generate PDF HTML for attachment
     const itemsHtml = invoice.items
@@ -316,7 +321,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `${companyName} <notifications@resend.dev>`,
+        from: fromEmail,
         to: [invoice.customer.email],
         subject: `Invoice ${invoice.invoice_number} from ${companyName}`,
         html: emailHtml,
@@ -333,6 +338,20 @@ serve(async (req) => {
 
     if (!emailResponse.ok) {
       console.error("Failed to send email:", emailResult);
+      
+      // Handle Resend's domain verification requirement gracefully
+      if (emailResult.statusCode === 403 && emailResult.name === "validation_error") {
+        console.log("Resend domain not verified - email sending limited to test addresses");
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: "Email sending requires domain verification. Invoice was issued successfully but email was not sent. Visit resend.com/domains to verify your domain.",
+            requiresDomainVerification: true
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ success: false, error: emailResult }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
