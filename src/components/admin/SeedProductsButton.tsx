@@ -30,6 +30,7 @@ export function SeedProductsButton() {
             stock_quantity: product.isService ? null : Math.floor(Math.random() * 100) + 10,
             min_stock_level: product.isService ? null : 5,
             is_active: true,
+            // SKU is NOT passed - system will auto-generate
           });
           success++;
         } catch (error) {

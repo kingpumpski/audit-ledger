@@ -16,6 +16,24 @@ import { useSettings } from '@/hooks/useSettings';
 import { LogoUpload } from '@/components/settings/LogoUpload';
 import { Building2, FileText, Bell, DollarSign, Loader2, Save, X } from 'lucide-react';
 
+// Currency code to symbol mapping
+const currencySymbolMap: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  GHS: 'GH₵',
+  NGN: '₦',
+  ZAR: 'R',
+  KES: 'KSh',
+  CAD: 'C$',
+  AUD: 'A$',
+  JPY: '¥',
+  CNY: '¥',
+  INR: '₹',
+  AED: 'د.إ',
+  CHF: 'CHF',
+};
+
 const companySchema = z.object({
   company_name: z.string().min(1, 'Company name is required'),
   company_email: z.string().email().optional().or(z.literal('')),
@@ -418,7 +436,15 @@ export default function Settings() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Currency Code</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
+                            <Select 
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                // Auto-update currency symbol when currency code changes
+                                const symbol = currencySymbolMap[value] || '$';
+                                invoiceForm.setValue('currency_symbol', symbol);
+                              }} 
+                              value={field.value}
+                            >
                               <FormControl>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select currency" />
