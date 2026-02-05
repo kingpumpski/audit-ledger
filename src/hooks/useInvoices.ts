@@ -152,7 +152,7 @@ export function useInvoices() {
   });
 
   const issueInvoiceMutation = useMutation({
-    mutationFn: async (invoiceId: string) => {
+    mutationFn: async (invoiceId: string): Promise<{ requiresDomainVerification?: boolean }> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -173,17 +173,35 @@ export function useInvoices() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          await supabase.functions.invoke('send-invoice-email', {
+          const { data } = await supabase.functions.invoke('send-invoice-email', {
             body: { invoiceId },
           });
+
+          // Backend function can return success=true + requiresDomainVerification=true
+          // when Resend is restricted to test recipients (unverified domain).
+          if ((data as any)?.requiresDomainVerification) {
+            return { requiresDomainVerification: true };
+          }
         }
       } catch (emailError) {
         console.error('Failed to send invoice email:', emailError);
         // Don't throw - invoice was issued successfully, email is secondary
       }
+
+      return { requiresDomainVerification: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      if (result?.requiresDomainVerification) {
+        toast({
+          title: 'Invoice issued (email not sent)',
+          description:
+            'Email delivery is limited until you verify a sending domain in Resend and use a From address on that domain.',
+        });
+        return;
+      }
+
       toast({ title: 'Invoice issued successfully' });
     },
     onError: (error) => {
