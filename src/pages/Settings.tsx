@@ -13,8 +13,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/useSettings';
+import { useAuth } from '@/contexts/AuthContext';
 import { LogoUpload } from '@/components/settings/LogoUpload';
-import { Building2, FileText, Bell, DollarSign, Loader2, Save, X } from 'lucide-react';
+import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings';
+import { Building2, FileText, Bell, Key, Loader2, Save, X } from 'lucide-react';
 
 // Currency code to symbol mapping
 const currencySymbolMap: Record<string, string> = {
@@ -69,7 +71,9 @@ type NotificationFormData = z.infer<typeof notificationSchema>;
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, isUpdating } = useSettings();
+  const { hasRole } = useAuth();
   const [reminderDays, setReminderDays] = useState<number[]>([7, 14, 30]);
+  const isAdmin = hasRole('admin');
   const [newReminderDay, setNewReminderDay] = useState('');
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
@@ -198,7 +202,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="company" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} lg:w-[${isAdmin ? '500' : '400'}px]`}>
             <TabsTrigger value="company" className="gap-2">
               <Building2 className="h-4 w-4" />
               Company
@@ -211,6 +215,12 @@ export default function Settings() {
               <Bell className="h-4 w-4" />
               Notifications
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="integrations" className="gap-2">
+                <Key className="h-4 w-4" />
+                Integrations
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="company">
@@ -685,6 +695,12 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="integrations">
+              <IntegrationsSettings />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </AppLayout>

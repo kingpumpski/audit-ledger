@@ -25,8 +25,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useReceipts } from '@/hooks/useReceipts';
+import { useReceipts, ReceiptWithRelations } from '@/hooks/useReceipts';
 import { useSettings } from '@/hooks/useSettings';
+import { EditReceiptDialog } from '@/components/receipts/EditReceiptDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Plus, 
@@ -38,17 +39,19 @@ import {
   Eye,
   Printer,
   Ban,
-  FileText
+  FileText,
+  Pencil
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Receipts() {
-  const { receipts, isLoading, voidReceipt, isVoiding } = useReceipts();
+  const { receipts, isLoading, updateReceipt, voidReceipt, isUpdating, isVoiding } = useReceipts();
   const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
-  const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptWithRelations | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<ReceiptWithRelations | null>(null);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
@@ -268,6 +271,12 @@ export default function Receipts() {
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
+                          {receipt.status === 'issued' && (
+                            <DropdownMenuItem onClick={() => setEditingReceipt(receipt)}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit Receipt
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => handlePrintReceipt(receipt)}>
                             <Printer className="mr-2 h-4 w-4" />
                             Print Receipt
@@ -389,6 +398,17 @@ export default function Receipts() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Receipt Dialog */}
+      <EditReceiptDialog
+        receipt={editingReceipt}
+        open={!!editingReceipt}
+        onOpenChange={(open) => !open && setEditingReceipt(null)}
+        onSave={async (id, data, notifyCustomer) => {
+          await updateReceipt({ id, data, notifyCustomer });
+        }}
+        isUpdating={isUpdating}
+      />
     </AppLayout>
   );
 }

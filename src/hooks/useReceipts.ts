@@ -148,6 +148,38 @@ export function useReceipts() {
     },
   });
 
+  const updateReceiptMutation = useMutation({
+    mutationFn: async ({ id, data, notifyCustomer }: { 
+      id: string; 
+      data: { notes?: string; payment_method?: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other' };
+      notifyCustomer?: boolean;
+    }) => {
+      const { error } = await supabase
+        .from('receipts')
+        .update({
+          notes: data.notes,
+          payment_method: data.payment_method,
+        })
+        .eq('id', id)
+        .eq('status', 'issued'); // Only allow editing issued receipts
+
+      if (error) throw error;
+
+      // If notifyCustomer is true, send notification (implementation depends on SMS/email setup)
+      if (notifyCustomer) {
+        console.log('Customer notification requested for receipt update:', id);
+        // TODO: Invoke notification edge function when SMS/email is fully configured
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      toast({ title: 'Receipt updated successfully' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to update receipt', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const voidReceiptMutation = useMutation({
     mutationFn: async (receiptId: string) => {
       const { error } = await supabase
@@ -171,8 +203,10 @@ export function useReceipts() {
     isLoading: receiptsQuery.isLoading,
     error: receiptsQuery.error,
     createReceipt: createReceiptMutation.mutateAsync,
+    updateReceipt: updateReceiptMutation.mutateAsync,
     voidReceipt: voidReceiptMutation.mutate,
     isCreating: createReceiptMutation.isPending,
+    isUpdating: updateReceiptMutation.isPending,
     isVoiding: voidReceiptMutation.isPending,
   };
 }
