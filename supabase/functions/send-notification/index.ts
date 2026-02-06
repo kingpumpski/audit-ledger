@@ -174,9 +174,47 @@ serve(async (req) => {
       results.in_app = notifError ? { error: notifError.message } : notification;
     }
 
-    // SMS would go here if configured with a provider like Twilio
-    if (channels.includes("sms")) {
-      results.sms = { status: "skipped", reason: "SMS provider not configured" };
+    // SMS via Twilio if configured
+    if (channels.includes("sms") && recipientPhone) {
+      const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
+      const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+      const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
+
+      if (twilioAccountSid && twilioAuthToken && twilioPhoneNumber) {
+        try {
+          const smsBody = template.message;
+          const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
+          
+          const smsResponse = await fetch(twilioUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": "Basic " + btoa(`${twilioAccountSid}:${twilioAuthToken}`),
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              To: recipientPhone,
+              From: twilioPhoneNumber,
+              Body: smsBody,
+            }),
+          });
+
+          const smsResult = await smsResponse.json();
+          
+          if (smsResponse.ok) {
+            results.sms = { success: true, sid: smsResult.sid };
+          } else {
+            console.error("Twilio SMS error:", smsResult);
+            results.sms = { success: false, error: smsResult.message || "SMS failed" };
+          }
+        } catch (smsError) {
+          console.error("SMS sending failed:", smsError);
+          results.sms = { success: false, error: "Failed to send SMS" };
+        }
+      } else {
+        results.sms = { status: "skipped", reason: "Twilio credentials not configured" };
+      }
+    } else if (channels.includes("sms") && !recipientPhone) {
+      results.sms = { status: "skipped", reason: "No phone number provided" };
     }
 
     return new Response(
