@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const { invoices, isLoading, issueInvoice, isIssuing } = useInvoices();
   const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,7 +148,7 @@ export default function Invoices() {
               </thead>
               <tbody>
                 {filteredInvoices.map((invoice) => (
-                  <tr key={invoice.id}>
+                  <tr key={invoice.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/invoices/${invoice.id}`)}>
                     <td>
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-muted-foreground" />

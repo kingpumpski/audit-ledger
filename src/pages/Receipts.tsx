@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,7 @@ import {
 import { format } from 'date-fns';
 
 export default function Receipts() {
+  const navigate = useNavigate();
   const { receipts, isLoading, updateReceipt, voidReceipt, isUpdating, isVoiding } = useReceipts();
   const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
@@ -229,7 +230,7 @@ export default function Receipts() {
               </thead>
               <tbody>
                 {filteredReceipts.map((receipt) => (
-                  <tr key={receipt.id}>
+                  <tr key={receipt.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/receipts/${receipt.id}`)}>
                     <td>
                       <div className="flex items-center gap-2">
                         <Receipt className="h-4 w-4 text-muted-foreground" />
