@@ -266,6 +266,62 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_transactions: {
+        Row: {
+          created_at: string
+          id: string
+          new_quantity: number | null
+          notes: string | null
+          performed_by: string | null
+          previous_quantity: number | null
+          product_id: string
+          quantity: number
+          reference_id: string | null
+          reference_type: string | null
+          total_cost: number | null
+          type: string
+          unit_cost: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          new_quantity?: number | null
+          notes?: string | null
+          performed_by?: string | null
+          previous_quantity?: number | null
+          product_id: string
+          quantity: number
+          reference_id?: string | null
+          reference_type?: string | null
+          total_cost?: number | null
+          type: string
+          unit_cost?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          new_quantity?: number | null
+          notes?: string | null
+          performed_by?: string | null
+          previous_quantity?: number | null
+          product_id?: string
+          quantity?: number
+          reference_id?: string | null
+          reference_type?: string | null
+          total_cost?: number | null
+          type?: string
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_items: {
         Row: {
           created_at: string
@@ -578,6 +634,45 @@ export type Database = {
           code?: string
           description?: string | null
           id?: string
+        }
+        Relationships: []
+      }
+      petty_cash_transactions: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          date: string
+          description: string
+          id: string
+          recorded_by: string | null
+          reference_number: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          description: string
+          id?: string
+          recorded_by?: string | null
+          reference_number?: string | null
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          date?: string
+          description?: string
+          id?: string
+          recorded_by?: string | null
+          reference_number?: string | null
+          type?: string
+          updated_at?: string
         }
         Relationships: []
       }

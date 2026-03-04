@@ -73,9 +73,10 @@ export default function ReceiptDetails() {
       });
 
       if (response.data) {
+        const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
         const printWindow = window.open('', '_blank');
         if (printWindow) {
-          printWindow.document.write(response.data);
+          printWindow.document.write(htmlContent);
           printWindow.document.close();
           printWindow.print();
         }

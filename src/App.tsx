@@ -30,6 +30,8 @@ import Reports from "./pages/Reports";
 import AdminUsers from "./pages/AdminUsers";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import Accounting from "./pages/Accounting";
+import Inventory from "./pages/Inventory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -62,6 +64,8 @@ const App = () => (
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetails /></ProtectedRoute>} />
             <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'cashier']}><Inventory /></ProtectedRoute>} />
+            <Route path="/accounting" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Accounting /></ProtectedRoute>} />
             <Route path="/taxes" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Taxes /></ProtectedRoute>} />
             <Route path="/discounts" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Discounts /></ProtectedRoute>} />
             <Route path="/audit-logs" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AuditLogs /></ProtectedRoute>} />
