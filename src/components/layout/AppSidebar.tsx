@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -45,6 +45,8 @@ const navItems: NavItem[] = [
   { label: 'Receipts', href: '/receipts', icon: Receipt },
   { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Products', href: '/products', icon: Package },
+  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'accountant', 'cashier'] },
+  { label: 'Accounting', href: '/accounting', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
   { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
@@ -59,8 +61,25 @@ const bottomNavItems: NavItem[] = [
 
 export function AppSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [userInteracted, setUserInteracted] = useState(false);
   const { profile, roles, signOut } = useAuth();
   const location = useLocation();
+
+  // Auto-collapse sidebar after 5 seconds of inactivity
+  useEffect(() => {
+    if (isCollapsed || userInteracted) return;
+    const timer = setTimeout(() => {
+      setIsCollapsed(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isCollapsed, userInteracted, location.pathname]);
+
+  const handleToggle = useCallback(() => {
+    setUserInteracted(true);
+    setIsCollapsed(prev => !prev);
+    // Reset user interaction flag after 30s so auto-collapse can work again
+    setTimeout(() => setUserInteracted(false), 30000);
+  }, []);
 
   const filteredNavItems = navItems.filter(item => {
     if (!item.roles) return true;
@@ -106,7 +125,7 @@ export function AppSidebar() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={handleToggle}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>

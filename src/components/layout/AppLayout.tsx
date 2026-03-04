@@ -28,10 +28,7 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
       <AppSidebar />
       
       {/* Main Content */}
-      <div className={cn(
-        'transition-all duration-300',
-        'ml-64' // Fixed sidebar width
-      )}>
+      <div className="transition-all duration-300 ml-16 lg:ml-16">
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-6">
           <div className="flex items-center gap-4">
