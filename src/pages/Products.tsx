@@ -90,10 +90,20 @@ export default function Products() {
   }, [products]);
 
   const handleSubmit = async () => {
+    // Auto-generate SKU from category if not provided
+    let sku = formData.sku;
+    if (!sku && formData.category) {
+      const { getSKUPrefix } = await import('@/components/settings/SKUSettings');
+      const prefix = getSKUPrefix(formData.category);
+      // Count existing products in category to determine next number
+      const categoryCount = products.filter(p => p.category === formData.category).length;
+      sku = `${prefix}-${String(categoryCount + 1).padStart(3, '0')}`;
+    }
+
     try {
       await createProduct({
         name: formData.name,
-        sku: formData.sku || undefined, // Pass SKU if provided, else let backend generate
+        sku: sku || undefined,
         description: formData.description,
         category: formData.category,
         current_price: formData.current_price,

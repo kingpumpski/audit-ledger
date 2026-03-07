@@ -16,6 +16,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogoUpload } from '@/components/settings/LogoUpload';
 import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings';
+import { SKUSettings } from '@/components/settings/SKUSettings';
 import { Building2, FileText, Bell, Key, Loader2, Save, X } from 'lucide-react';
 
 // Currency code to symbol mapping
@@ -697,8 +698,9 @@ export default function Settings() {
           </TabsContent>
 
           {isAdmin && (
-            <TabsContent value="integrations">
+            <TabsContent value="integrations" className="space-y-6">
               <IntegrationsSettings />
+              <SKUSettings />
             </TabsContent>
           )}
         </Tabs>
