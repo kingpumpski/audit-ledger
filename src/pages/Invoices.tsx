@@ -6,15 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { 
-  Plus, 
-  Search, 
-  Filter, 
-  FileText, 
-  MoreHorizontal,
-  Loader2,
-  CreditCard,
-  Eye,
-  Send
+  Plus, Search, Filter, FileText, MoreHorizontal,
+  Loader2, CreditCard, Eye, Send, Edit
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -186,7 +179,7 @@ export default function Invoices() {
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuItem asChild>
                             <Link to={`/invoices/${invoice.id}`} className="flex items-center">
                               <Eye className="mr-2 h-4 w-4" />
@@ -221,6 +214,13 @@ export default function Invoices() {
                               />
                             </DropdownMenuItem>
                           )}
+
+                          <DropdownMenuItem asChild>
+                            <Link to={`/invoices/${invoice.id}`} className="flex items-center">
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Invoice
+                            </Link>
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </td>

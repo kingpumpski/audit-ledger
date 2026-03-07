@@ -8,20 +8,24 @@ import { Separator } from '@/components/ui/separator';
 import { useInvoice, useInvoices } from '@/hooks/useInvoices';
 import { useSettings } from '@/hooks/useSettings';
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog';
+import { EditInvoiceDialog } from '@/components/invoices/EditInvoiceDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { 
-  ArrowLeft, 
-  FileText, 
-  Loader2, 
-  Send,
-  CreditCard,
-  Printer,
-  User,
-  Calendar,
-  Building,
-  Mail,
-  Phone,
-  MapPin
+  ArrowLeft, FileText, Loader2, Send, CreditCard, Printer, User,
+  Calendar, Building, Mail, Phone, MapPin, Edit, Trash2, XCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -38,10 +42,16 @@ const statusColors: Record<string, string> = {
 export default function InvoiceDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: invoice, isLoading, error } = useInvoice(id || '');
   const { issueInvoice, isIssuing } = useInvoices();
   const { settings } = useSettings();
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
@@ -52,7 +62,6 @@ export default function InvoiceDetails() {
       const response = await supabase.functions.invoke('generate-invoice-pdf', {
         body: { invoiceId: invoice.id, returnHtml: true },
       });
-
       if (response.data) {
         const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
         const printWindow = window.open('', '_blank');
@@ -66,6 +75,57 @@ export default function InvoiceDetails() {
       console.error('Failed to generate PDF:', error);
     } finally {
       setIsPrinting(false);
+    }
+  };
+
+  const handleEditSave = async (invoiceId: string, data: { notes?: string; terms?: string; due_date?: string }) => {
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('invoices').update(data).eq('id', invoiceId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({ title: 'Invoice updated successfully' });
+    } catch (err: any) {
+      toast({ title: 'Failed to update invoice', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!invoice) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from('invoices')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', invoice.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({ title: 'Invoice deleted' });
+      navigate('/invoices');
+    } catch (err: any) {
+      toast({ title: 'Failed to delete invoice', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!invoice) return;
+    setIsCanceling(true);
+    try {
+      const { error } = await supabase.from('invoices')
+        .update({ status: 'canceled' as any })
+        .eq('id', invoice.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({ title: 'Invoice canceled' });
+    } catch (err: any) {
+      toast({ title: 'Failed to cancel invoice', description: err.message, variant: 'destructive' });
+    } finally {
+      setIsCanceling(false);
     }
   };
 
@@ -86,12 +146,8 @@ export default function InvoiceDetails() {
           <CardContent className="py-12 text-center">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground/50" />
             <h3 className="mt-4 text-lg font-medium">Invoice not found</h3>
-            <p className="text-muted-foreground">
-              The invoice you're looking for doesn't exist or has been deleted.
-            </p>
             <Button className="mt-4" onClick={() => navigate('/invoices')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Invoices
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices
             </Button>
           </CardContent>
         </Card>
@@ -99,31 +155,69 @@ export default function InvoiceDetails() {
     );
   }
 
+  const canEdit = invoice.status !== 'paid' && invoice.status !== 'canceled';
+  const canDelete = invoice.status === 'draft' || invoice.status === 'canceled';
+  const canCancel = invoice.status !== 'paid' && invoice.status !== 'canceled';
+
   return (
     <AppLayout
       title={invoice.invoice_number}
       subtitle="Invoice Details"
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={() => navigate('/invoices')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Button>
           <Button variant="outline" onClick={handlePrintInvoice} disabled={isPrinting}>
-            {isPrinting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Printer className="mr-2 h-4 w-4" />
-            )}
+            {isPrinting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
             Print
           </Button>
+          {canEdit && (
+            <Button variant="outline" onClick={() => setIsEditing(true)}>
+              <Edit className="mr-2 h-4 w-4" /> Edit
+            </Button>
+          )}
+          {canCancel && invoice.status !== 'draft' && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" disabled={isCanceling}>
+                  <XCircle className="mr-2 h-4 w-4" /> Cancel Invoice
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel this invoice?</AlertDialogTitle>
+                  <AlertDialogDescription>This will mark the invoice as canceled. This action is logged.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>No</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleCancel}>Yes, Cancel</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {canDelete && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={isDeleting}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this invoice?</AlertDialogTitle>
+                  <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>No</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>Yes, Delete</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {invoice.status === 'draft' && (
             <Button onClick={() => issueInvoice(invoice.id)} disabled={isIssuing}>
-              {isIssuing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
+              {isIssuing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Issue Invoice
             </Button>
           )}
@@ -135,10 +229,7 @@ export default function InvoiceDetails() {
               balanceDue={invoice.balance_due || 0}
               currencySymbol={currencySymbol}
               trigger={
-                <Button>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Record Payment
-                </Button>
+                <Button><CreditCard className="mr-2 h-4 w-4" /> Record Payment</Button>
               }
             />
           )}
@@ -146,9 +237,7 @@ export default function InvoiceDetails() {
       }
     >
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Invoice Info */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Status Card */}
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -158,9 +247,7 @@ export default function InvoiceDetails() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">{invoice.invoice_number}</h2>
-                    <p className="text-muted-foreground">
-                      Created {format(new Date(invoice.created_at), 'PPP')}
-                    </p>
+                    <p className="text-muted-foreground">Created {format(new Date(invoice.created_at), 'PPP')}</p>
                   </div>
                 </div>
                 <Badge className={cn('text-sm px-3 py-1', statusColors[invoice.status])}>
@@ -170,11 +257,8 @@ export default function InvoiceDetails() {
             </CardContent>
           </Card>
 
-          {/* Line Items */}
           <Card>
-            <CardHeader>
-              <CardTitle>Line Items</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Line Items</CardTitle></CardHeader>
             <CardContent>
               <table className="w-full">
                 <thead>
@@ -191,23 +275,14 @@ export default function InvoiceDetails() {
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="py-3">{item.description}</td>
                       <td className="py-3 text-right">{item.quantity}</td>
-                      <td className="py-3 text-right">
-                        {currencySymbol}{item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-3 text-right text-muted-foreground">
-                        {item.tax_rate ? `${item.tax_rate}%` : '—'}
-                      </td>
-                      <td className="py-3 text-right font-medium">
-                        {currencySymbol}{item.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
+                      <td className="py-3 text-right">{currencySymbol}{item.unit_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="py-3 text-right text-muted-foreground">{item.tax_rate ? `${item.tax_rate}%` : '—'}</td>
+                      <td className="py-3 text-right font-medium">{currencySymbol}{item.line_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
               <Separator className="my-4" />
-
-              {/* Totals */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal</span>
@@ -244,7 +319,6 @@ export default function InvoiceDetails() {
             </CardContent>
           </Card>
 
-          {/* Notes & Terms */}
           {(invoice.notes || invoice.terms) && (
             <Card>
               <CardContent className="p-6 space-y-4">
@@ -265,15 +339,10 @@ export default function InvoiceDetails() {
           )}
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Customer Info */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Customer
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><User className="h-4 w-4" /> Customer</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {invoice.customer ? (
@@ -283,16 +352,10 @@ export default function InvoiceDetails() {
                     <p className="text-sm text-muted-foreground">{invoice.customer.code}</p>
                   </div>
                   {invoice.customer.email && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span>{invoice.customer.email}</span>
-                    </div>
+                    <div className="flex items-center gap-2 text-sm"><Mail className="h-4 w-4 text-muted-foreground" /><span>{invoice.customer.email}</span></div>
                   )}
                   {invoice.customer.phone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{invoice.customer.phone}</span>
-                    </div>
+                    <div className="flex items-center gap-2 text-sm"><Phone className="h-4 w-4 text-muted-foreground" /><span>{invoice.customer.phone}</span></div>
                   )}
                   {invoice.customer.address_line1 && (
                     <div className="flex items-start gap-2 text-sm">
@@ -300,19 +363,13 @@ export default function InvoiceDetails() {
                       <div>
                         <p>{invoice.customer.address_line1}</p>
                         {invoice.customer.address_line2 && <p>{invoice.customer.address_line2}</p>}
-                        <p>
-                          {[invoice.customer.city, invoice.customer.state, invoice.customer.postal_code]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </p>
+                        <p>{[invoice.customer.city, invoice.customer.state, invoice.customer.postal_code].filter(Boolean).join(', ')}</p>
                         {invoice.customer.country && <p>{invoice.customer.country}</p>}
                       </div>
                     </div>
                   )}
                   <Button variant="outline" size="sm" asChild className="w-full mt-2">
-                    <Link to={`/customers/${invoice.customer.id}`}>
-                      View Customer Profile
-                    </Link>
+                    <Link to={`/customers/${invoice.customer.id}`}>View Customer Profile</Link>
                   </Button>
                 </>
               ) : (
@@ -321,13 +378,9 @@ export default function InvoiceDetails() {
             </CardContent>
           </Card>
 
-          {/* Dates */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Dates
-              </CardTitle>
+              <CardTitle className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Dates</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
@@ -347,28 +400,30 @@ export default function InvoiceDetails() {
             </CardContent>
           </Card>
 
-          {/* Company Info */}
           {settings && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building className="h-4 w-4" />
-                  From
-                </CardTitle>
+                <CardTitle className="flex items-center gap-2"><Building className="h-4 w-4" /> From</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <p className="font-medium">{settings.company_name}</p>
                 {settings.company_email && <p>{settings.company_email}</p>}
                 {settings.company_phone && <p>{settings.company_phone}</p>}
                 {settings.company_address && <p>{settings.company_address}</p>}
-                {settings.company_tax_id && (
-                  <p className="text-muted-foreground">Tax ID: {settings.company_tax_id}</p>
-                )}
+                {settings.company_tax_id && <p className="text-muted-foreground">Tax ID: {settings.company_tax_id}</p>}
               </CardContent>
             </Card>
           )}
         </div>
       </div>
+
+      <EditInvoiceDialog
+        invoice={invoice}
+        open={isEditing}
+        onOpenChange={setIsEditing}
+        onSave={handleEditSave}
+        isSaving={isSaving}
+      />
     </AppLayout>
   );
 }
