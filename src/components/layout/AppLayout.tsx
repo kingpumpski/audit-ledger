@@ -1,5 +1,6 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { AppSidebar } from './AppSidebar';
+import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
 import { Button } from '@/components/ui/button';
 import { Bell, Search, Menu } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -20,17 +21,17 @@ interface AppLayoutProps {
   actions?: ReactNode;
 }
 
-export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
+  const { collapsed } = useSidebarState();
 
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar />
-      
+
       {/* Main Content */}
       <div className={cn(
         'transition-all duration-300',
-        'ml-64' // Fixed sidebar width
+        collapsed ? 'ml-16' : 'ml-64'
       )}>
         {/* Top Header */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-6">
@@ -98,5 +99,13 @@ export function AppLayout({ children, title, subtitle, actions }: AppLayoutProps
         </main>
       </div>
     </div>
+  );
+}
+
+export function AppLayout(props: AppLayoutProps) {
+  return (
+    <SidebarProvider>
+      <AppLayoutInner {...props} />
+    </SidebarProvider>
   );
 }

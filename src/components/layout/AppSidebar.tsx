@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import {
   Shield,
   ClipboardList,
   User,
+  BookOpen,
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { label: 'Receipts', href: '/receipts', icon: Receipt },
   { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Products', href: '/products', icon: Package },
+  { label: 'Accounting', href: '/accounting', icon: BookOpen, roles: ['admin', 'accountant', 'auditor'] },
   { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
   { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
@@ -56,7 +58,7 @@ const bottomNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { collapsed: isCollapsed, toggle } = useSidebarState();
   const { profile, roles, signOut } = useAuth();
   const location = useLocation();
 
@@ -104,7 +106,7 @@ export function AppSidebar() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggle}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>

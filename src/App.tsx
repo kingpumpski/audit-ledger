@@ -14,6 +14,7 @@ import Invoices from "./pages/Invoices";
 import Receipts from "./pages/Receipts";
 import Customers from "./pages/Customers";
 import Products from "./pages/Products";
+import Accounting from "./pages/Accounting";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/receipts/*" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
             <Route path="/customers/*" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/products/*" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+            <Route path="/accounting/*" element={<ProtectedRoute requiredRoles={['admin','accountant','auditor']}><Accounting /></ProtectedRoute>} />
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
