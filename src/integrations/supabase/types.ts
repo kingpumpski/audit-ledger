@@ -59,6 +59,72 @@ export type Database = {
         }
         Relationships: []
       }
+      chart_of_accounts: {
+        Row: {
+          account_subtype: Database["public"]["Enums"]["account_subtype"] | null
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          current_balance: number
+          description: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          name: string
+          opening_balance: number
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_subtype?:
+            | Database["public"]["Enums"]["account_subtype"]
+            | null
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          current_balance?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name: string
+          opening_balance?: number
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_subtype?:
+            | Database["public"]["Enums"]["account_subtype"]
+            | null
+          account_type?: Database["public"]["Enums"]["account_type"]
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          current_balance?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name?: string
+          opening_balance?: number
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_of_accounts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_settings: {
         Row: {
           company_address: string | null
@@ -1073,6 +1139,19 @@ export type Database = {
       is_first_user: { Args: never; Returns: boolean }
     }
     Enums: {
+      account_subtype:
+        | "current_asset"
+        | "fixed_asset"
+        | "other_asset"
+        | "current_liability"
+        | "long_term_liability"
+        | "equity"
+        | "operating_revenue"
+        | "other_revenue"
+        | "cost_of_sales"
+        | "operating_expense"
+        | "other_expense"
+      account_type: "asset" | "liability" | "equity" | "revenue" | "expense"
       app_role: "admin" | "accountant" | "cashier" | "auditor"
       audit_action:
         | "create"
@@ -1231,6 +1310,20 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_subtype: [
+        "current_asset",
+        "fixed_asset",
+        "other_asset",
+        "current_liability",
+        "long_term_liability",
+        "equity",
+        "operating_revenue",
+        "other_revenue",
+        "cost_of_sales",
+        "operating_expense",
+        "other_expense",
+      ],
+      account_type: ["asset", "liability", "equity", "revenue", "expense"],
       app_role: ["admin", "accountant", "cashier", "auditor"],
       audit_action: [
         "create",
