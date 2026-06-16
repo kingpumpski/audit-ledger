@@ -15,6 +15,13 @@ import Receipts from "./pages/Receipts";
 import Customers from "./pages/Customers";
 import Products from "./pages/Products";
 import Accounting from "./pages/Accounting";
+import Taxes from "./pages/Taxes";
+import Discounts from "./pages/Discounts";
+import AuditLogs from "./pages/AuditLogs";
+import Reports from "./pages/Reports";
+import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
+import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +46,13 @@ const App = () => (
             <Route path="/customers/*" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/products/*" element={<ProtectedRoute><Products /></ProtectedRoute>} />
             <Route path="/accounting/*" element={<ProtectedRoute requiredRoles={['admin','accountant','auditor']}><Accounting /></ProtectedRoute>} />
+            <Route path="/taxes" element={<ProtectedRoute requiredRoles={['admin','accountant']}><Taxes /></ProtectedRoute>} />
+            <Route path="/discounts" element={<ProtectedRoute requiredRoles={['admin','accountant']}><Discounts /></ProtectedRoute>} />
+            <Route path="/audit-logs" element={<ProtectedRoute requiredRoles={['admin','auditor']}><AuditLogs /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute requiredRoles={['admin','accountant','auditor']}><Reports /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
