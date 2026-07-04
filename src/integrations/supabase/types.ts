@@ -625,6 +625,153 @@ export type Database = {
         }
         Relationships: []
       }
+      password_history: {
+        Row: {
+          created_at: string
+          id: string
+          password_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          password_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          password_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      password_policy: {
+        Row: {
+          disallow_spaces: boolean
+          history_count: number
+          id: number
+          max_requests_per_hour: number
+          min_length: number
+          otp_ttl_minutes: number
+          require_lowercase: boolean
+          require_mfa: boolean
+          require_number: boolean
+          require_special: boolean
+          require_uppercase: boolean
+          security_questions_enabled: boolean
+          token_ttl_minutes: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          disallow_spaces?: boolean
+          history_count?: number
+          id?: number
+          max_requests_per_hour?: number
+          min_length?: number
+          otp_ttl_minutes?: number
+          require_lowercase?: boolean
+          require_mfa?: boolean
+          require_number?: boolean
+          require_special?: boolean
+          require_uppercase?: boolean
+          security_questions_enabled?: boolean
+          token_ttl_minutes?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          disallow_spaces?: boolean
+          history_count?: number
+          id?: number
+          max_requests_per_hour?: number
+          min_length?: number
+          otp_ttl_minutes?: number
+          require_lowercase?: boolean
+          require_mfa?: boolean
+          require_number?: boolean
+          require_special?: boolean
+          require_uppercase?: boolean
+          security_questions_enabled?: boolean
+          token_ttl_minutes?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      password_reset_attempts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          ip_address: string | null
+          reason: string | null
+          result: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          reason?: string | null
+          result: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          reason?: string | null
+          result?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      password_reset_tokens: {
+        Row: {
+          channel: string
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          otp_attempts: number
+          otp_hash: string | null
+          token_hash: string
+          used_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          otp_attempts?: number
+          otp_hash?: string | null
+          token_hash: string
+          used_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          otp_attempts?: number
+          otp_hash?: string | null
+          token_hash?: string
+          used_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -1103,6 +1250,10 @@ export type Database = {
         Returns: undefined
       }
       claim_initial_admin: { Args: never; Returns: boolean }
+      count_recent_reset_requests: {
+        Args: { _email: string; _ip: string; _minutes?: number }
+        Returns: number
+      }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
