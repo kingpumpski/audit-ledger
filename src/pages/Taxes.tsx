@@ -9,19 +9,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
 
 type Tax = { id: string; name: string; rate: number; is_active: boolean; is_inclusive?: boolean; description?: string | null };
 
 export default function Taxes() {
   const [items, setItems] = useState<Tax[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<QueryError>(null);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Tax> | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase.from('taxes').select('*').order('created_at', { ascending: false });
-    if (error) toast.error(error.message); else setItems((data as any) || []);
+    console.debug('[Taxes] fetch', { count: data?.length ?? 0, error });
+    if (error) { setLoadError(error as any); toast.error(error.message); }
+    else setItems((data as any) || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -63,6 +68,7 @@ export default function Taxes() {
       </Dialog>
     }>
       <Card><CardContent className="p-0">
+        <div className="p-4 pb-0"><QueryDiagnostics label="taxes" error={loadError} count={items.length} /></div>
         <table className="data-table">
           <thead><tr><th>Name</th><th>Rate</th><th>Status</th><th>Description</th><th className="w-24"></th></tr></thead>
           <tbody>

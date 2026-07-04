@@ -23,6 +23,12 @@ import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import ResetSuccess from "./pages/ResetSuccess";
+import ResetExpired from "./pages/ResetExpired";
+import ResetInvalid from "./pages/ResetInvalid";
+import HelpPasswordReset from "./pages/HelpPasswordReset";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +44,12 @@ const App = () => (
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/reset-success" element={<ResetSuccess />} />
+            <Route path="/reset-expired" element={<ResetExpired />} />
+            <Route path="/reset-invalid" element={<ResetInvalid />} />
+            <Route path="/help/password-reset" element={<HelpPasswordReset />} />
 
             {/* Protected Routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

@@ -5,20 +5,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { format, subMonths, startOfMonth } from 'date-fns';
+import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
+import { Loader2 } from 'lucide-react';
 
 export default function Reports() {
   const [revenue, setRevenue] = useState<{ month: string; total: number }[]>([]);
   const [statusBreakdown, setStatusBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [stats, setStats] = useState({ invoices: 0, paid: 0, outstanding: 0, customers: 0 });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<QueryError>(null);
 
   useEffect(() => {
     (async () => {
+      setLoading(true); setLoadError(null);
       const since = subMonths(startOfMonth(new Date()), 5).toISOString();
       const [{ data: inv, error: e1 }, { data: cust }] = await Promise.all([
         supabase.from('invoices').select('total,status,issue_date,balance_due').gte('issue_date', since),
         supabase.from('customers').select('id', { count: 'exact', head: true }),
       ]);
-      if (e1) { toast.error(e1.message); return; }
+      console.debug('[Reports] fetch', { invoices: inv?.length ?? 0, error: e1 });
+      if (e1) { setLoadError(e1 as any); toast.error(e1.message); setLoading(false); return; }
       const map = new Map<string, number>();
       (inv || []).forEach((r: any) => {
         const k = format(new Date(r.issue_date), 'MMM yy');
@@ -33,6 +39,7 @@ export default function Reports() {
       const paid = (inv || []).filter((i: any) => i.status === 'paid').reduce((s: number, i: any) => s + Number(i.total || 0), 0);
       const outstanding = (inv || []).reduce((s: number, i: any) => s + Number(i.balance_due || 0), 0);
       setStats({ invoices: inv?.length || 0, paid, outstanding, customers: (cust as any)?.length ?? 0 });
+      setLoading(false);
     })();
   }, []);
 
@@ -40,6 +47,13 @@ export default function Reports() {
 
   return (
     <AppLayout title="Reports" subtitle="Performance & financial overview">
+      <QueryDiagnostics label="reports data" error={loadError} count={stats.invoices} />
+      {loading && (
+        <div className="flex items-center gap-2 text-muted-foreground mb-4"><Loader2 className="h-4 w-4 animate-spin" />Loading reports…</div>
+      )}
+      {!loading && !loadError && stats.invoices === 0 && (
+        <Card className="mb-4"><CardContent className="p-6 text-sm text-muted-foreground text-center">No invoices in the last 6 months — create an invoice to see reports populate.</CardContent></Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         {[
           { label: 'Invoices (6m)', value: stats.invoices },
