@@ -10,19 +10,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
 
 type Discount = { id: string; code: string; name: string; type: 'percentage' | 'fixed'; value: number; is_active: boolean; valid_from?: string | null; valid_to?: string | null; usage_limit?: number | null; times_used?: number };
 
 export default function Discounts() {
   const [items, setItems] = useState<Discount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<QueryError>(null);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Discount> | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase.from('discounts').select('*').order('created_at', { ascending: false });
-    if (error) toast.error(error.message); else setItems((data as any) || []);
+    console.debug('[Discounts] fetch', { count: data?.length ?? 0, error });
+    if (error) { setLoadError(error as any); toast.error(error.message); }
+    else setItems((data as any) || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -77,6 +82,7 @@ export default function Discounts() {
       </Dialog>
     }>
       <Card><CardContent className="p-0">
+        <div className="p-4 pb-0"><QueryDiagnostics label="discounts" error={loadError} count={items.length} /></div>
         <table className="data-table">
           <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Value</th><th>Used</th><th>Status</th><th className="w-24"></th></tr></thead>
           <tbody>
