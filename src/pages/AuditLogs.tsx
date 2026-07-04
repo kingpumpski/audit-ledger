@@ -6,18 +6,22 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
 
 type Log = { id: string; user_email: string | null; action: string; entity_type: string; entity_id: string | null; created_at: string; new_data: any; old_data: any };
 
 export default function AuditLogs() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<QueryError>(null);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(500);
-      if (error) toast.error(error.message); else setLogs((data as any) || []);
+      console.debug('[AuditLogs] fetch', { count: data?.length ?? 0, error });
+      if (error) { setLoadError(error as any); toast.error(error.message); }
+      else setLogs((data as any) || []);
       setLoading(false);
     })();
   }, []);
@@ -33,6 +37,7 @@ export default function AuditLogs() {
   return (
     <AppLayout title="Audit Logs" subtitle="Append-only record of all system changes">
       <Card><CardContent className="p-0">
+        <div className="p-4 pb-0"><QueryDiagnostics label="audit logs" error={loadError} count={logs.length} /></div>
         <div className="p-4 border-b">
           <Input placeholder="Filter by user, action, or entity..." value={filter} onChange={e => setFilter(e.target.value)} className="max-w-md" />
         </div>
