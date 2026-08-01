@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { KeyRound, Loader2, Eye, EyeOff, Check, X, ArrowLeft } from 'lucide-react';
+import { KeyRound, Loader2, Eye, EyeOff, Check, X, ArrowLeft, ShieldCheck, Smartphone, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 type Policy = {
@@ -34,11 +34,39 @@ export default function ResetPassword() {
   const [params] = useSearchParams();
   const token = params.get('token') || '';
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'checking'|'valid'|'expired'|'invalid'|'used'>('checking');
+  const [status, setStatus] = useState<'checking'|'valid'|'expired'|'invalid'|'used'|'locked'>('checking');
+  const [step, setStep] = useState<'mfa'|'password'>('password');
+  const [mfaMethod, setMfaMethod] = useState<'email'|'sms'|'totp'>('email');
+  const [mfaDestination, setMfaDestination] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
   const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [pw, setPw] = useState(''); const [pw2, setPw2] = useState('');
   const [show, setShow] = useState(false); const [show2, setShow2] = useState(false);
   const [error, setError] = useState(''); const [submitting, setSubmitting] = useState(false);
+
+  const requestOtp = async (t: string) => {
+    setOtpSending(true); setOtpError('');
+    try {
+      const { data, error } = await supabase.functions.invoke('send-reset-otp', { body: { token: t } });
+      if (error) throw error;
+      const d = data as any;
+      console.debug('[ResetPassword] send-reset-otp', d);
+      if (d?.error) throw new Error(d.error);
+      if (!d?.mfa_required) { setStep('password'); return; }
+      setMfaMethod(d.method || 'email');
+      setMfaDestination(d.destination ?? null);
+      setStep('mfa');
+      if (d.method !== 'totp' && d.delivered === false) {
+        setOtpError('We could not deliver your code right now. Try resending, or contact your administrator.');
+      }
+    } catch (err: any) {
+      console.error('[ResetPassword] send-reset-otp', err);
+      setOtpError('Could not send your verification code. Please try again.');
+    } finally { setOtpSending(false); }
+  };
 
   useEffect(() => {
     if (!token) { setStatus('invalid'); return; }
@@ -48,13 +76,48 @@ export default function ResetPassword() {
         supabase.functions.invoke('verify-reset-token', { body: { token } }),
       ]);
       if (pol) setPolicy({ ...defaultPolicy, ...pol });
-      const s = (v as any)?.status;
-      if (s === 'valid') setStatus('valid');
+      const res = (v as any) || {};
+      const s = res.status;
+      if (s === 'valid') {
+        setStatus('valid');
+        if (res.mfa_required && !res.mfa_verified) {
+          setMfaMethod(res.mfa_method || 'email');
+          setStep('mfa');
+          await requestOtp(token);
+        } else {
+          setStep('password');
+        }
+      }
+      else if (s === 'locked') setStatus('locked');
       else if (s === 'expired') { setStatus('expired'); navigate('/reset-expired', { replace: true }); }
       else if (s === 'used') { setStatus('invalid'); navigate('/reset-invalid', { replace: true }); }
       else { setStatus('invalid'); navigate('/reset-invalid', { replace: true }); }
     })();
   }, [token, navigate]);
+
+  const verifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOtpError('');
+    if (!/^\d{6}$/.test(otp)) { setOtpError('Enter the 6-digit code.'); return; }
+    setOtpVerifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-otp', { body: { token, otp } });
+      if (error) throw error;
+      const d = data as any;
+      if (d?.error) throw new Error(d.error);
+      setStep('password');
+      setOtp('');
+    } catch (err: any) {
+      console.error('[ResetPassword] verify-otp', err);
+      const msg = err?.message || String(err);
+      if (msg.includes('locked')) { setStatus('locked'); return; }
+      setOtpError(
+        msg.includes('otp_mismatch') ? 'That code is incorrect. Please try again.' :
+        msg.includes('token_expired') ? 'This reset link has expired. Request a new one.' :
+        'Could not verify that code. Please try again.'
+      );
+    } finally { setOtpVerifying(false); }
+  };
 
   const checks = useMemo(() => ([
     { ok: pw.length >= policy.min_length, label: `At least ${policy.min_length} characters` },
@@ -98,7 +161,83 @@ export default function ResetPassword() {
   if (status === 'checking') {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
   }
+  if (status === 'locked') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <Card className="w-full max-w-md shadow-xl">
+          <CardHeader>
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-destructive/10 mb-2">
+              <Lock className="h-6 w-6 text-destructive" />
+            </div>
+            <CardTitle>Temporarily locked</CardTitle>
+            <CardDescription>
+              Too many failed password reset attempts. For your security, this option is locked for 30 minutes.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-col gap-2">
+            <Button className="w-full" onClick={() => navigate('/login')}>Back to Login</Button>
+            <Link to="/help/password-reset" className="text-xs text-primary hover:underline">Need help?</Link>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
   if (status !== 'valid') return null;
+
+  if (step === 'mfa') {
+    const MethodIcon = mfaMethod === 'sms' ? Smartphone : mfaMethod === 'totp' ? ShieldCheck : Mail;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
+              <ShieldCheck className="h-7 w-7 text-primary-foreground" />
+            </div>
+            <h1 className="text-2xl font-display font-bold">Verify it's you</h1>
+          </div>
+          <Card className="shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MethodIcon className="h-4 w-4" />
+                {mfaMethod === 'totp' ? 'Authenticator app' : mfaMethod === 'sms' ? 'SMS verification' : 'Email verification'}
+              </CardTitle>
+              <CardDescription>
+                {mfaMethod === 'totp'
+                  ? 'Enter the current 6-digit code from your authenticator app.'
+                  : `Enter the 6-digit code we sent to ${mfaDestination || 'your registered contact'}.`}
+              </CardDescription>
+            </CardHeader>
+            <form onSubmit={verifyOtp}>
+              <CardContent className="space-y-4">
+                {otpError && <Alert variant="destructive"><AlertDescription>{otpError}</AlertDescription></Alert>}
+                <div className="space-y-2">
+                  <Label htmlFor="otp">Verification code</Label>
+                  <Input id="otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                    className="text-center text-2xl tracking-[0.5em] font-mono"
+                    value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    autoFocus required />
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-2">
+                <Button type="submit" className="w-full" size="lg" disabled={otpVerifying || otp.length !== 6}>
+                  {otpVerifying ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>) : 'Verify & continue'}
+                </Button>
+                {mfaMethod !== 'totp' && (
+                  <Button type="button" variant="outline" className="w-full"
+                    onClick={() => requestOtp(token)} disabled={otpSending}>
+                    {otpSending ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending...</>) : 'Resend code'}
+                  </Button>
+                )}
+                <Link to="/login" className="text-xs text-primary hover:underline flex items-center gap-1">
+                  <ArrowLeft className="h-3 w-3" />Back to Login
+                </Link>
+              </CardFooter>
+            </form>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
