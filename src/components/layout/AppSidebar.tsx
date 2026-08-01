@@ -16,6 +16,7 @@ import {
 import {
   LayoutDashboard,
   FileText,
+  KeyRound,
   Receipt,
   Users,
   Package,
