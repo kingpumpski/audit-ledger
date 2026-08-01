@@ -23,10 +23,25 @@ Deno.serve(async (req) => {
   const admin = createClient(SUPABASE_URL, SERVICE_KEY)
   const tokenHash = await sha256(token)
   const { data: row } = await admin.from('password_reset_tokens')
-    .select('id, user_id, expires_at, used_at')
+    .select('id, user_id, expires_at, used_at, mfa_required, mfa_method, mfa_verified_at')
     .eq('token_hash', tokenHash).maybeSingle()
   if (!row) return json({ status: 'invalid' })
   if (row.used_at) return json({ status: 'used' })
   if (new Date(row.expires_at).getTime() < Date.now()) return json({ status: 'expired' })
-  return json({ status: 'valid' })
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+  const { data: profile } = await admin.from('profiles').select('email').eq('id', row.user_id).maybeSingle()
+  const { data: locked } = await admin.rpc('is_reset_locked', { _email: profile?.email ?? null, _ip: ip })
+  if (locked === true) return json({ status: 'locked' })
+
+  const { data: policy } = await admin.from('password_policy').select('require_mfa').eq('id', 1).maybeSingle()
+  const { data: mfa } = await admin.from('user_mfa').select('enabled, method, totp_confirmed').eq('user_id', row.user_id).maybeSingle()
+  const mfaRequired = Boolean(row.mfa_required) || Boolean(mfa?.enabled) || Boolean(policy?.require_mfa)
+
+  return json({
+    status: 'valid',
+    mfa_required: mfaRequired,
+    mfa_method: row.mfa_method || (mfa?.method === 'totp' && mfa?.totp_confirmed ? 'totp' : mfa?.method) || 'email',
+    mfa_verified: Boolean(row.mfa_verified_at),
+  })
 })
