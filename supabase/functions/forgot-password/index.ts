@@ -48,6 +48,13 @@ Deno.serve(async (req) => {
     return json({ ok: true, throttled: true }) // don't reveal
   }
 
+  // Temporary lockout after repeated failures
+  const { data: locked } = await admin.rpc('is_reset_locked', { _email: identifier, _ip: ip })
+  if (locked === true) {
+    await logAttempt(admin, { email: identifier, ip_address: ip, user_agent: ua, result: 'blocked', reason: 'locked_out' })
+    return json({ ok: true, locked: true })
+  }
+
   // Look up user by email or profile.username-like (we use email in profiles)
   const { data: profile } = await admin
     .from('profiles')
