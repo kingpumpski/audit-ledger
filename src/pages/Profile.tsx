@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { MfaSettingsCard } from '@/components/auth/MfaSettingsCard';
 
 export default function Profile() {
   const { user, profile } = useAuth();
@@ -25,6 +26,7 @@ export default function Profile() {
 
   return (
     <AppLayout title="My Profile" subtitle="Personal information and preferences" actions={<Button onClick={save}>Save</Button>}>
+      <div className="space-y-6">
       <Card><CardHeader><CardTitle>Personal information</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><Label>Full name</Label><Input value={p.full_name || ''} onChange={e => setP({ ...p, full_name: e.target.value })} /></div>
@@ -34,6 +36,8 @@ export default function Profile() {
           <div><Label>Department</Label><Input value={p.department || ''} onChange={e => setP({ ...p, department: e.target.value })} /></div>
         </CardContent>
       </Card>
+      <MfaSettingsCard />
+      </div>
     </AppLayout>
   );
 }

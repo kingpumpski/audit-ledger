@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
   const ua = req.headers.get('user-agent') || null
 
   const { data: row } = await admin.from('password_reset_tokens')
-    .select('id, user_id, expires_at, used_at').eq('token_hash', tokenHash).maybeSingle()
+    .select('id, user_id, expires_at, used_at, mfa_required, mfa_method, mfa_verified_at')
+    .eq('token_hash', tokenHash).maybeSingle()
   if (!row) return json({ error: 'invalid_token' }, 400)
   if (row.used_at) return json({ error: 'token_used' }, 400)
   if (new Date(row.expires_at).getTime() < Date.now()) return json({ error: 'token_expired' }, 400)
@@ -51,6 +52,17 @@ Deno.serve(async (req) => {
   // Get user email
   const { data: userRes } = await admin.auth.admin.getUserById(row.user_id)
   const email = userRes?.user?.email
+
+  // Temporary lockout gate
+  const { data: lockedNow } = await admin.rpc('is_reset_locked', { _email: email ?? null, _ip: ip })
+  if (lockedNow === true) return json({ error: 'locked_out' }, 429)
+
+  // MFA step-up gate
+  const { data: mfaSettings } = await admin.from('user_mfa').select('enabled').eq('user_id', row.user_id).maybeSingle()
+  const mfaRequired = Boolean(row.mfa_required) || Boolean(mfaSettings?.enabled) || Boolean(policy?.require_mfa)
+  if (mfaRequired && !row.mfa_verified_at) {
+    return json({ error: 'mfa_required', method: row.mfa_method || 'email' }, 403)
+  }
 
   const errs = validate(password, policy, email)
   if (errs.length) return json({ error: 'policy_violation', reasons: errs }, 400)
@@ -80,6 +92,22 @@ Deno.serve(async (req) => {
 
   // Global sign out
   try { await admin.auth.admin.signOut(row.user_id, 'global') } catch (_) {}
+
+  // Clear any lockout counters for this identity
+  try { await admin.rpc('clear_reset_lockout', { _email: email ?? null, _ip: ip }) } catch (_) {}
+  // Invalidate any other outstanding reset tokens for this user
+  try {
+    await admin.from('password_reset_tokens')
+      .update({ used_at: new Date().toISOString() })
+      .eq('user_id', row.user_id).is('used_at', null)
+  } catch (_) {}
+
+  try {
+    await admin.from('password_reset_attempts').insert({
+      email: email ?? null, ip_address: ip, user_agent: ua,
+      result: 'completed', reason: mfaRequired ? `mfa_${row.mfa_method || 'email'}` : null,
+    })
+  } catch (_) {}
 
   // Audit + notification
   try {

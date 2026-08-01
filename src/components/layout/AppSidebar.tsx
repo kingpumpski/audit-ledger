@@ -16,6 +16,7 @@ import {
 import {
   LayoutDashboard,
   FileText,
+  KeyRound,
   Receipt,
   Users,
   Package,
@@ -51,6 +52,7 @@ const navItems: NavItem[] = [
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
   { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
   { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Password Resets', href: '/admin/password-resets', icon: KeyRound, roles: ['admin', 'auditor'] },
 ];
 
 const bottomNavItems: NavItem[] = [

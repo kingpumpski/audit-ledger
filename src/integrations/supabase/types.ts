@@ -730,6 +730,39 @@ export type Database = {
         }
         Relationships: []
       }
+      password_reset_lockouts: {
+        Row: {
+          created_at: string
+          email: string | null
+          failure_count: number
+          id: string
+          ip_address: string | null
+          last_failure_at: string
+          locked_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          failure_count?: number
+          id?: string
+          ip_address?: string | null
+          last_failure_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          failure_count?: number
+          id?: string
+          ip_address?: string | null
+          last_failure_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       password_reset_tokens: {
         Row: {
           channel: string
@@ -737,6 +770,10 @@ export type Database = {
           expires_at: string
           id: string
           ip_address: string | null
+          mfa_attempts: number
+          mfa_method: string | null
+          mfa_required: boolean
+          mfa_verified_at: string | null
           otp_attempts: number
           otp_hash: string | null
           token_hash: string
@@ -750,6 +787,10 @@ export type Database = {
           expires_at: string
           id?: string
           ip_address?: string | null
+          mfa_attempts?: number
+          mfa_method?: string | null
+          mfa_required?: boolean
+          mfa_verified_at?: string | null
           otp_attempts?: number
           otp_hash?: string | null
           token_hash: string
@@ -763,6 +804,10 @@ export type Database = {
           expires_at?: string
           id?: string
           ip_address?: string | null
+          mfa_attempts?: number
+          mfa_method?: string | null
+          mfa_required?: boolean
+          mfa_verified_at?: string | null
           otp_attempts?: number
           otp_hash?: string | null
           token_hash?: string
@@ -1212,6 +1257,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_mfa: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          method: string
+          phone: string | null
+          totp_confirmed: boolean
+          totp_secret: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          method?: string
+          phone?: string | null
+          totp_confirmed?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          method?: string
+          phone?: string | null
+          totp_confirmed?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           granted_at: string
@@ -1250,6 +1328,10 @@ export type Database = {
         Returns: undefined
       }
       claim_initial_admin: { Args: never; Returns: boolean }
+      clear_reset_lockout: {
+        Args: { _email: string; _ip: string }
+        Returns: undefined
+      }
       count_recent_reset_requests: {
         Args: { _email: string; _ip: string; _minutes?: number }
         Returns: number
@@ -1288,6 +1370,19 @@ export type Database = {
           }
         | { Args: { role_name: string }; Returns: boolean }
       is_first_user: { Args: never; Returns: boolean }
+      is_reset_locked: {
+        Args: { _email: string; _ip: string }
+        Returns: boolean
+      }
+      register_reset_failure: {
+        Args: {
+          _email: string
+          _ip: string
+          _lock_minutes?: number
+          _threshold?: number
+        }
+        Returns: Json
+      }
     }
     Enums: {
       account_subtype:

@@ -29,6 +29,7 @@ import ResetSuccess from "./pages/ResetSuccess";
 import ResetExpired from "./pages/ResetExpired";
 import ResetInvalid from "./pages/ResetInvalid";
 import HelpPasswordReset from "./pages/HelpPasswordReset";
+import AdminPasswordResets from "./pages/AdminPasswordResets";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/discounts" element={<ProtectedRoute requiredRoles={['admin','accountant']}><Discounts /></ProtectedRoute>} />
             <Route path="/audit-logs" element={<ProtectedRoute requiredRoles={['admin','auditor']}><AuditLogs /></ProtectedRoute>} />
             <Route path="/reports" element={<ProtectedRoute requiredRoles={['admin','accountant','auditor']}><Reports /></ProtectedRoute>} />
+            <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin','auditor']}><AdminPasswordResets /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
