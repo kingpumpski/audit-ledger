@@ -184,7 +184,7 @@ export default function AdminPasswordResets() {
           </div>
         </div>
 
-        {error && <QueryDiagnostics label="Password resets" error={error} />}
+        {error && <QueryDiagnostics label="password resets" error={error} count={null} />}
 
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-6">
           {cards.map(c => (
