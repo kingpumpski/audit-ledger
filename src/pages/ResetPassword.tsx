@@ -152,9 +152,13 @@ export default function ResetPassword() {
         msg === 'password_reused' ? 'You cannot reuse a recent password.' :
         msg === 'policy_violation' ? 'Password does not meet policy requirements.' :
         msg === 'token_expired' ? 'This reset link has expired.' :
+        msg.includes('mfa_required') ? 'Additional verification is required before changing your password.' :
+        msg.includes('locked_out') ? 'Too many attempts. Password reset is temporarily locked.' :
         msg === 'token_used' || msg === 'invalid_token' ? 'This reset link is invalid.' :
         'Could not reset password. Please try again.'
       );
+      if (msg.includes('mfa_required')) { setStep('mfa'); await requestOtp(token); }
+      if (msg.includes('locked_out')) setStatus('locked');
     } finally { setSubmitting(false); }
   };
 
