@@ -1,94 +1,289 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
-import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useTaxes } from '@/hooks/useTaxes';
+import { Plus, Loader2, Calculator, Pencil } from 'lucide-react';
 
-type Tax = { id: string; name: string; rate: number; is_active: boolean; is_inclusive?: boolean; description?: string | null };
+const TAX_TYPES = [
+  { value: 'vat', label: 'VAT' },
+  { value: 'sales_tax', label: 'Sales Tax' },
+  { value: 'service_tax', label: 'Service Tax' },
+  { value: 'excise_tax', label: 'Excise Tax' },
+  { value: 'custom', label: 'Custom' },
+];
 
 export default function Taxes() {
-  const [items, setItems] = useState<Tax[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<QueryError>(null);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Partial<Tax> | null>(null);
+  const { taxes, isLoading, createTax, updateTax, toggleTaxStatus, isCreating, isUpdating } = useTaxes();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingTax, setEditingTax] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    code: '',
+    rate: '',
+    type: 'vat' as const,
+    is_compound: false,
+    applies_to_category: '',
+  });
 
-  const load = async () => {
-    setLoading(true);
-    setLoadError(null);
-    const { data, error } = await supabase.from('taxes').select('*').order('created_at', { ascending: false });
-    console.debug('[Taxes] fetch', { count: data?.length ?? 0, error });
-    if (error) { setLoadError(error as any); toast.error(error.message); }
-    else setItems((data as any) || []);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
-
-  const save = async () => {
-    if (!editing?.name || editing.rate === undefined) { toast.error('Name and rate required'); return; }
-    const payload: any = { name: editing.name, rate: Number(editing.rate), is_active: editing.is_active ?? true, is_inclusive: editing.is_inclusive ?? false, description: editing.description || null };
-    const { error } = editing.id
-      ? await supabase.from('taxes').update(payload).eq('id', editing.id)
-      : await supabase.from('taxes').insert(payload);
-    if (error) return toast.error(error.message);
-    toast.success('Saved'); setOpen(false); setEditing(null); load();
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      code: '',
+      rate: '',
+      type: 'vat',
+      is_compound: false,
+      applies_to_category: '',
+    });
+    setEditingTax(null);
   };
 
-  const remove = async (id: string) => {
-    if (!confirm('Delete this tax?')) return;
-    const { error } = await supabase.from('taxes').delete().eq('id', id);
-    if (error) return toast.error(error.message);
-    toast.success('Deleted'); load();
+  const handleOpenDialog = (tax?: any) => {
+    if (tax) {
+      setEditingTax(tax);
+      setFormData({
+        name: tax.name,
+        code: tax.code,
+        rate: tax.rate.toString(),
+        type: tax.type,
+        is_compound: tax.is_compound || false,
+        applies_to_category: tax.applies_to_category || '',
+      });
+    } else {
+      resetForm();
+    }
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const taxData = {
+      name: formData.name,
+      code: formData.code.toUpperCase(),
+      rate: parseFloat(formData.rate),
+      type: formData.type,
+      is_compound: formData.is_compound,
+      applies_to_category: formData.applies_to_category || null,
+    };
+
+    if (editingTax) {
+      await updateTax({ id: editingTax.id, ...taxData });
+    } else {
+      await createTax(taxData);
+    }
+    
+    setIsDialogOpen(false);
+    resetForm();
+  };
+
+  const getTypeBadgeColor = (type: string) => {
+    switch (type) {
+      case 'vat': return 'bg-primary/10 text-primary';
+      case 'sales_tax': return 'bg-accent/10 text-accent';
+      case 'service_tax': return 'bg-success/10 text-success';
+      case 'excise_tax': return 'bg-warning/10 text-warning';
+      default: return 'bg-muted text-muted-foreground';
+    }
   };
 
   return (
-    <AppLayout title="Taxes" subtitle="Manage tax rates applied to invoices" actions={
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
-        <DialogTrigger asChild>
-          <Button onClick={() => setEditing({ is_active: true, rate: 0 })}><Plus className="mr-2 h-4 w-4" />Add Tax</Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing?.id ? 'Edit' : 'New'} Tax</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Name</Label><Input value={editing?.name || ''} onChange={e => setEditing({ ...editing, name: e.target.value })} /></div>
-            <div><Label>Rate (%)</Label><Input type="number" step="0.01" value={editing?.rate ?? ''} onChange={e => setEditing({ ...editing, rate: parseFloat(e.target.value) })} /></div>
-            <div><Label>Description</Label><Input value={editing?.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} /></div>
-            <div className="flex items-center justify-between"><Label>Active</Label><Switch checked={editing?.is_active ?? true} onCheckedChange={v => setEditing({ ...editing, is_active: v })} /></div>
-            <div className="flex items-center justify-between"><Label>Inclusive</Label><Switch checked={editing?.is_inclusive ?? false} onCheckedChange={v => setEditing({ ...editing, is_inclusive: v })} /></div>
-          </div>
-          <DialogFooter><Button onClick={save}>Save</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-    }>
-      <Card><CardContent className="p-0">
-        <div className="p-4 pb-0"><QueryDiagnostics label="taxes" error={loadError} count={items.length} /></div>
-        <table className="data-table">
-          <thead><tr><th>Name</th><th>Rate</th><th>Status</th><th>Description</th><th className="w-24"></th></tr></thead>
-          <tbody>
-            {loading ? <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Loading…</td></tr> :
-             items.length === 0 ? <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No taxes yet</td></tr> :
-             items.map(t => (
-              <tr key={t.id}>
-                <td className="font-medium">{t.name}</td>
-                <td>{Number(t.rate).toFixed(2)}%</td>
-                <td>{t.is_active ? <span className="text-success">Active</span> : <span className="text-muted-foreground">Inactive</span>}</td>
-                <td className="text-muted-foreground">{t.description || '—'}</td>
-                <td className="flex gap-1 justify-end p-2">
-                  <Button variant="ghost" size="icon" onClick={() => { setEditing(t); setOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => remove(t.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent></Card>
+    <AppLayout
+      title="Tax Management"
+      subtitle="Configure tax rates and rules"
+      actions={
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => handleOpenDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Tax
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingTax ? 'Edit Tax' : 'Add New Tax'}</DialogTitle>
+              <DialogDescription>
+                {editingTax ? 'Update the tax configuration.' : 'Create a new tax rate for your invoices.'}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Tax Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g. Standard VAT"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="code">Tax Code</Label>
+                  <Input
+                    id="code"
+                    value={formData.code}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    placeholder="e.g. VAT20"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="rate">Rate (%)</Label>
+                  <Input
+                    id="rate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={formData.rate}
+                    onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+                    placeholder="20"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Tax Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(value: any) => setFormData({ ...formData, type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TAX_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="category">Applies to Category (Optional)</Label>
+                <Input
+                  id="category"
+                  value={formData.applies_to_category}
+                  onChange={(e) => setFormData({ ...formData, applies_to_category: e.target.value })}
+                  placeholder="e.g. Electronics, Services"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="compound"
+                  checked={formData.is_compound}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_compound: checked })}
+                />
+                <Label htmlFor="compound">Compound Tax (applied on top of other taxes)</Label>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isCreating || isUpdating}>
+                  {(isCreating || isUpdating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingTax ? 'Update Tax' : 'Create Tax'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      }
+    >
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : taxes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <Calculator className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium">No taxes configured</h3>
+              <p className="text-muted-foreground mb-4">Add tax rates to apply them to your invoices.</p>
+              <Button onClick={() => handleOpenDialog()}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add First Tax
+              </Button>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Tax Name</th>
+                  <th>Code</th>
+                  <th>Rate</th>
+                  <th>Type</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th className="w-20">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {taxes.map((tax) => (
+                  <tr key={tax.id}>
+                    <td className="font-medium">{tax.name}</td>
+                    <td>
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-sm">{tax.code}</code>
+                    </td>
+                    <td className="font-semibold">{tax.rate}%</td>
+                    <td>
+                      <Badge className={getTypeBadgeColor(tax.type)}>
+                        {tax.type.replace('_', ' ')}
+                      </Badge>
+                      {tax.is_compound && (
+                        <Badge variant="outline" className="ml-1">Compound</Badge>
+                      )}
+                    </td>
+                    <td className="text-muted-foreground">
+                      {tax.applies_to_category || 'All'}
+                    </td>
+                    <td>
+                      <Switch
+                        checked={tax.is_active || false}
+                        onCheckedChange={(checked) => toggleTaxStatus({ id: tax.id, isActive: checked })}
+                      />
+                    </td>
+                    <td>
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenDialog(tax)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
     </AppLayout>
   );
 }

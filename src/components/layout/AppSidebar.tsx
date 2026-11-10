@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
@@ -48,25 +49,44 @@ const navItems: NavItem[] = [
   { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Products', href: '/products', icon: Package },
   { label: 'Accounting', href: '/accounting', icon: BookOpen, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'accountant', 'cashier'] },
   { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
-  { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
   { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
   { label: 'Password Resets', href: '/admin/password-resets', icon: KeyRound, roles: ['admin', 'auditor'] },
+  { label: 'User Management', href: '/admin/users', icon: Users, roles: ['admin'] },
 ];
 
 const bottomNavItems: NavItem[] = [
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Settings', href: '/settings', icon: Settings, roles: ['admin'] },
+  { label: 'Profile', href: '/profile', icon: User },
 ];
 
 export function AppSidebar() {
-  const { collapsed: isCollapsed, toggle } = useSidebarState();
+  const { collapsed: isCollapsed, setCollapsed: setIsCollapsed } = useSidebarState();
+  const [userInteracted, setUserInteracted] = useState(false);
   const { profile, roles, signOut } = useAuth();
   const location = useLocation();
 
+  // Auto-collapse sidebar after 5 seconds of inactivity
+  useEffect(() => {
+    if (isCollapsed || userInteracted) return;
+    const timer = setTimeout(() => {
+      setIsCollapsed(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isCollapsed, userInteracted, location.pathname]);
+
+  const handleToggle = () => {
+    setUserInteracted(true);
+    setIsCollapsed(!isCollapsed);
+    setTimeout(() => setUserInteracted(false), 30000);
+  };
+
   const filteredNavItems = navItems.filter(item => {
     if (!item.roles) return true;
-    return item.roles.some(role => roles.includes(role as any));
+    return roles.some(role => item.roles?.includes(role));
   });
 
   const getInitials = (name: string | null | undefined) => {
@@ -108,7 +128,7 @@ export function AppSidebar() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
-            onClick={toggle}
+            onClick={handleToggle}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
