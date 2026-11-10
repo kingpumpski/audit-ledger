@@ -55,10 +55,10 @@ export async function createDocumentPdf(d: BusinessDocument) {
     const lines = pdf.splitTextToSize(line, 174); pdf.text(lines, 18, y); y += lines.length * 5;
   }
   y += 7; pdf.setTextColor(...accent); pdf.setFontSize(17); pdf.text(d.kind === 'invoice' ? 'INVOICE' : 'PAYMENT RECEIPT', 18, y);
-  y += 7; pdf.setTextColor(...ink); pdf.setFontSize(10); pdf.text(`${d.number}  ·  ${d.status.replaceAll('_', ' ').toUpperCase()}`, 18, y);
+  y += 7; pdf.setTextColor(...ink); pdf.setFontSize(10); pdf.text(`${d.number}  ·  ${d.status.replace(/_/g, ' ').toUpperCase()}`, 18, y);
   y += 12;
   const left = [d.kind === 'invoice' ? 'BILL TO' : 'RECEIVED FROM', d.customer?.name || 'Customer unavailable', d.customer?.phone, d.customer?.email, [d.customer?.address_line1, d.customer?.city].filter(Boolean).join(', ')].filter(Boolean).join('\n');
-  const right = [`Issued: ${documentDate(d.date)}`, d.dueDate ? `Due: ${documentDate(d.dueDate)}` : '', d.invoiceNumber ? `Invoice: ${d.invoiceNumber}` : '', d.paymentMethod ? `Method: ${d.paymentMethod.replaceAll('_', ' ')}` : ''].filter(Boolean).join('\n');
+  const right = [`Issued: ${documentDate(d.date)}`, d.dueDate ? `Due: ${documentDate(d.dueDate)}` : '', d.invoiceNumber ? `Invoice: ${d.invoiceNumber}` : '', d.paymentMethod ? `Method: ${d.paymentMethod.replace(/_/g, ' ')}` : ''].filter(Boolean).join('\n');
   autoTable(pdf, { startY: y, body: [[left, right]], theme: 'plain', styles: { font: 'Document', fontSize: 9, cellPadding: 3, textColor: ink }, margin: { left: 18, right: 18, bottom: 24 }, columnStyles: { 0: { cellWidth: 99 } } });
   y = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
   autoTable(pdf, { startY: y, head: [['Description', 'Qty', 'Unit price', 'Amount']], body: d.items.map(item => [item.description, String(item.quantity), money(item.unit_price, d.company), money(item.line_total, d.company)]), theme: 'plain', margin: { left: 18, right: 18, top: 15, bottom: 24 }, styles: { font: 'Document', fontSize: 9, cellPadding: 4, textColor: ink, overflow: 'linebreak' }, headStyles: { fillColor: pale, textColor: ink }, columnStyles: { 0: { cellWidth: 78 }, 1: { halign: 'right', cellWidth: 14 }, 2: { halign: 'right', cellWidth: 41 }, 3: { halign: 'right', cellWidth: 41 } } });
