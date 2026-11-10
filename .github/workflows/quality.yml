@@ -2,7 +2,9 @@ name: Audit Ledger Quality Gates
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - integration/reconcile-six-lovable-branches
   push:
     branches:
       - integration/reconcile-six-lovable-branches
