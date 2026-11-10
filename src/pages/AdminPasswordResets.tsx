@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { QueryDiagnostics } from '@/components/diagnostics/QueryDiagnostics';
 import { Download, RefreshCw, ShieldAlert, ShieldCheck, Clock, Lock, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { tokenStatus, suspiciousAttempts, csvCell } from '@/lib/reset-monitoring';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -60,6 +61,9 @@ export default function AdminPasswordResets() {
   const [range, setRange] = useState('30');
   const [resultFilter, setResultFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [view, setView] = useState('all');
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
 
   const load = async () => {
     setLoading(true);
@@ -84,21 +88,21 @@ export default function AdminPasswordResets() {
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range]);
 
-  const now = Date.now();
+  const suspicious = useMemo(() => suspiciousAttempts(attempts), [attempts]);
+  const tokenRows = useMemo(() => tokens.filter(t => {
+    const state = tokenStatus(t, now);
+    const q = search.trim().toLowerCase();
+    return (view === 'all' || state === view) && (!q || `${t.user_id} ${t.ip_address || ''} ${t.channel}`.toLowerCase().includes(q));
+  }), [tokens, view, search, now]);
   const stats = useMemo(() => {
     const pending = tokens.filter(t => !t.used_at && new Date(t.expires_at).getTime() > now).length;
     const expired = tokens.filter(t => !t.used_at && new Date(t.expires_at).getTime() <= now).length;
     const completed = tokens.filter(t => t.used_at).length;
     const failed = attempts.filter(a => a.result === 'failed' || a.result === 'locked').length;
     const lockedNow = lockouts.filter(l => l.locked_until && new Date(l.locked_until).getTime() > now).length;
-    const suspiciousIps = Object.entries(
-      attempts.reduce<Record<string, number>>((acc, a) => {
-        if (a.ip_address) acc[a.ip_address] = (acc[a.ip_address] || 0) + 1;
-        return acc;
-      }, {}),
-    ).filter(([, c]) => c >= 5).length;
+    const suspiciousIps = new Set(attempts.filter(a => suspicious.has(a.id) && a.ip_address).map(a => a.ip_address)).size;
     return { pending, expired, completed, failed, lockedNow, suspiciousIps };
-  }, [tokens, attempts, lockouts, now]);
+  }, [tokens, attempts, lockouts, now, suspicious]);
 
   const dailySeries = useMemo(() => {
     const days = Number(range);
@@ -129,22 +133,25 @@ export default function AdminPasswordResets() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return attempts.filter(a => {
+      if (view === 'suspicious' && !suspicious.has(a.id)) return false;
       if (resultFilter !== 'all' && a.result !== resultFilter) return false;
       if (!q) return true;
       return (a.email || '').toLowerCase().includes(q)
         || (a.ip_address || '').toLowerCase().includes(q)
         || (a.reason || '').toLowerCase().includes(q);
     });
-  }, [attempts, resultFilter, search]);
+  }, [attempts, resultFilter, search, view, suspicious]);
 
   const exportCsv = () => {
-    const head = ['created_at', 'email', 'ip_address', 'result', 'reason', 'user_agent'];
-    const rows = filtered.map(a => head.map(k => `"${String((a as any)[k] ?? '').replace(/"/g, '""')}"`).join(','));
-    const blob = new Blob([[head.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const tokenView = view === 'pending' || view === 'completed';
+    const head = tokenView ? ['created_at', 'user_id', 'ip_address', 'status', 'channel', 'expires_at', 'used_at'] : ['created_at', 'email', 'ip_address', 'result', 'reason', 'user_agent'];
+    const records = tokenView ? tokenRows.map(t => ({ ...t, status: tokenStatus(t, now) })) : filtered;
+    const rows = records.map(a => head.map(k => csvCell((a as unknown as Record<string, unknown>)[k])).join(','));
+    const blob = new Blob(['\uFEFF' + [head.join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `password-resets-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `password-resets-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -168,7 +175,11 @@ export default function AdminPasswordResets() {
               Track pending, completed, failed and suspicious password reset activity.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={view} onValueChange={v => { setView(v); setSearch(''); setResultFilter('all'); }}>
+              <SelectTrigger className="w-[160px]" aria-label="Reset category"><SelectValue /></SelectTrigger>
+              <SelectContent>{['all', 'pending', 'completed', 'suspicious'].map(v => <SelectItem key={v} value={v}>{v === 'all' ? 'All activity' : v.charAt(0).toUpperCase() + v.slice(1)}</SelectItem>)}</SelectContent>
+            </Select>
             <Select value={range} onValueChange={setRange}>
               <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -178,7 +189,7 @@ export default function AdminPasswordResets() {
             <Button variant="outline" onClick={load} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Refresh
             </Button>
-            <Button onClick={exportCsv} disabled={!filtered.length}>
+            <Button onClick={exportCsv} disabled={!!error || loading || !(view === 'pending' || view === 'completed' ? tokenRows.length : filtered.length)}>
               <Download className="mr-2 h-4 w-4" />Export CSV
             </Button>
           </div>
@@ -271,7 +282,7 @@ export default function AdminPasswordResets() {
                       <TableCell>{l.email || '—'}</TableCell>
                       <TableCell className="font-mono text-xs">{l.ip_address || '—'}</TableCell>
                       <TableCell>{l.failure_count}</TableCell>
-                      <TableCell>{new Date(l.locked_until!).toLocaleString()}</TableCell>
+                      <TableCell>{l.locked_until ? new Date(l.locked_until).toLocaleString() : '—'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -280,11 +291,11 @@ export default function AdminPasswordResets() {
           </Card>
         )}
 
-        <Card>
+        {(view === 'pending' || view === 'completed') ? <Card><CardHeader><CardTitle className="text-base capitalize">{view} resets</CardTitle><CardDescription>{tokenRows.length} record(s)</CardDescription><Input aria-label="Search resets" placeholder="Search user ID, IP or channel" value={search} onChange={e => setSearch(e.target.value)} /></CardHeader><CardContent><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Created</TableHead><TableHead>User ID</TableHead><TableHead>Status</TableHead><TableHead>Channel</TableHead><TableHead>Expires / Completed</TableHead><TableHead>IP</TableHead></TableRow></TableHeader><TableBody>{tokenRows.map(t => <TableRow key={t.id}><TableCell className="whitespace-nowrap">{new Date(t.created_at).toLocaleString()}</TableCell><TableCell className="font-mono text-xs">{t.user_id}</TableCell><TableCell><Badge variant="outline">{tokenStatus(t, now)}</Badge></TableCell><TableCell>{t.channel}</TableCell><TableCell className="whitespace-nowrap">{new Date(t.used_at || t.expires_at).toLocaleString()}</TableCell><TableCell>{t.ip_address || '—'}</TableCell></TableRow>)}</TableBody></Table>{!tokenRows.length && <p className="py-8 text-center text-muted-foreground">{loading ? 'Loading resets…' : 'No resets match these filters.'}</p>}</div></CardContent></Card> : <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Reset attempts</CardTitle>
+                <CardTitle className="text-base">{view === 'suspicious' ? 'Suspicious reset attempts' : 'Reset attempts'}</CardTitle>
                 <CardDescription>{filtered.length} record(s)</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -321,7 +332,7 @@ export default function AdminPasswordResets() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.slice(0, 200).map(a => (
+                    {filtered.map(a => (
                       <TableRow key={a.id}>
                         <TableCell className="whitespace-nowrap text-xs">{new Date(a.created_at).toLocaleString()}</TableCell>
                         <TableCell>{a.email || '—'}</TableCell>
@@ -336,7 +347,7 @@ export default function AdminPasswordResets() {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card>}
       </div>
     </AppLayout>
   );
