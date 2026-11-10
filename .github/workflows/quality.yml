@@ -33,16 +33,42 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Lint
+        id: lint
+        continue-on-error: true
         run: npm run lint
 
       - name: TypeScript
+        id: typecheck
+        continue-on-error: true
         run: npm run typecheck
 
       - name: Tests
+        id: tests
+        continue-on-error: true
         run: npm test -- --reporter=dot
 
       - name: Production build
+        id: build
+        continue-on-error: true
         run: npm run build
 
       - name: Verify committed lockfile is synchronized
+        id: lockfile
+        continue-on-error: true
         run: git diff --exit-code -- package-lock.json
+
+      - name: Enforce all quality gates
+        if: always()
+        env:
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          LOCKFILE_OUTCOME: ${{ steps.lockfile.outcome }}
+        run: |
+          printf 'lint=%s\\ntypecheck=%s\\ntests=%s\\nbuild=%s\\nlockfile=%s\\n' "$LINT_OUTCOME" "$TYPECHECK_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$LOCKFILE_OUTCOME"
+          test "$LINT_OUTCOME" = success
+          test "$TYPECHECK_OUTCOME" = success
+          test "$TEST_OUTCOME" = success
+          test "$BUILD_OUTCOME" = success
+          test "$LOCKFILE_OUTCOME" = success
