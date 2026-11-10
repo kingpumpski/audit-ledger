@@ -1,0 +1,48 @@
+name: Audit Ledger Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - integration/reconcile-six-lovable-branches
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Install, lint, typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test -- --reporter=dot
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify committed lockfile is synchronized
+        run: git diff --exit-code -- package-lock.json
