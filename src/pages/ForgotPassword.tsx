@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { KeyRound, Loader2, Mail, ArrowLeft, HelpCircle, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
+import { getErrorMessage } from '@/lib/error-message';
 
 const schema = z.object({
   identifier: z.string().trim().min(3, 'Enter your email or username').max(320),
@@ -32,9 +33,9 @@ export default function ForgotPassword() {
       });
       if (error) throw error;
       setSent(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Never disclose — show neutral message anyway
-      console.error('[ForgotPassword]', err);
+      console.error('[ForgotPassword]', getErrorMessage(err, 'Password reset request failed.'));
       setSent(true);
     } finally {
       setLoading(false);

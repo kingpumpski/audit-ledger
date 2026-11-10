@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InitialAdminSetup } from "@/components/auth/InitialAdminSetup";
+import { DocumentsPage } from "./components/documents/DocumentsPage";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -63,9 +64,11 @@ const App = () => (
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
               <Route path="/invoices/new" element={<ProtectedRoute><InvoiceNew /></ProtectedRoute>} />
+              <Route path="/invoices/documents/*" element={<ProtectedRoute><DocumentsPage kind="invoice" /></ProtectedRoute>} />
               <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
               <Route path="/receipts" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
               <Route path="/receipts/new" element={<ProtectedRoute><ReceiptNew /></ProtectedRoute>} />
+              <Route path="/receipts/documents/*" element={<ProtectedRoute><DocumentsPage kind="receipt" /></ProtectedRoute>} />
               <Route path="/receipts/:id" element={<ProtectedRoute><ReceiptDetails /></ProtectedRoute>} />
               <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
               <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetails /></ProtectedRoute>} />

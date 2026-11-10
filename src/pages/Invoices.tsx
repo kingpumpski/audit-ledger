@@ -66,12 +66,20 @@ export default function Invoices() {
       title="Invoices"
       subtitle="Manage and track all your invoices"
       actions={
-        <Button asChild>
-          <Link to="/invoices/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Invoice
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/invoices/documents">
+              <FileText className="mr-2 h-4 w-4" />
+              PDF documents
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/invoices/new">
+              <Plus className="mr-2 h-4 w-4" />
+              New Invoice
+            </Link>
+          </Button>
+        </div>
       }
     >
       <Card>

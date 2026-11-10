@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 
 type AppRole = 'admin' | 'accountant' | 'cashier' | 'auditor';
 
-interface UserWithRoles {
+export interface UserWithRoles {
   id: string;
   email: string;
   full_name: string | null;

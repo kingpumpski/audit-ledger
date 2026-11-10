@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Eye, Download, Search, RefreshCw, FileText, Receipt, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,7 +25,7 @@ export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
   const [selected, setSelected] = useState<DocumentData | null>(null);
   const [busy, setBusy] = useState(false);
   const params = useParams();
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError('');
     const [records, settings] = await Promise.all([
       kind === 'invoice' ? supabase.from('invoices').select('*, customers(*)').is('deleted_at', null).order('created_at', { ascending: false }) : supabase.from('receipts').select('*, customers(*)').is('deleted_at', null).order('created_at', { ascending: false }),
@@ -34,8 +34,8 @@ export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
     if (records.error || settings.error) setError(records.error?.message || settings.error?.message || 'Unable to load documents');
     else { setRows(records.data || []); setCompany(settings.data); }
     setLoading(false);
-  };
-  useEffect(() => { void load(); }, [kind]);
+  }, [kind]);
+  useEffect(() => { void load(); }, [load]);
   const open = async (row: Invoice | ReceiptRow) => {
     setBusy(true);
     try {

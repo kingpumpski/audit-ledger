@@ -45,7 +45,7 @@ export function useNotifications() {
       if (response.error) throw response.error;
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Notification error:', error);
       // Don't throw - notifications should not block main operations
       toast({

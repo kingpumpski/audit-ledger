@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,8 +90,8 @@ const emptyForm = {
 export function ChartOfAccounts() {
   const { roles } = useAuth();
   const { toast } = useToast();
-  const canEdit = roles.includes('admin' as any) || roles.includes('accountant' as any);
-  const canDelete = roles.includes('admin' as any);
+  const canEdit = roles.includes('admin') || roles.includes('accountant');
+  const canDelete = roles.includes('admin');
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +103,7 @@ export function ChartOfAccounts() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('chart_of_accounts')
@@ -115,9 +115,9 @@ export function ChartOfAccounts() {
       setAccounts((data as Account[]) || []);
     }
     setLoading(false);
-  };
+  }, [toast]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => {
     return accounts.filter(a => {

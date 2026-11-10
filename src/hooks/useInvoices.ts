@@ -179,7 +179,12 @@ export function useInvoices() {
 
           // Backend function can return success=true + requiresDomainVerification=true
           // when Resend is restricted to test recipients (unverified domain).
-          if ((data as any)?.requiresDomainVerification) {
+          if (
+            typeof data === 'object' &&
+            data !== null &&
+            'requiresDomainVerification' in data &&
+            data.requiresDomainVerification === true
+          ) {
             return { requiresDomainVerification: true };
           }
         }

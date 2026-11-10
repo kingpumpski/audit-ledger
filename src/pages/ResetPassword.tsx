@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { KeyRound, Loader2, Eye, EyeOff, Check, X, ArrowLeft, ShieldCheck, Smartphone, Mail, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { getErrorMessage } from '@/lib/error-message';
 
 type Policy = {
   min_length: number; require_uppercase: boolean; require_lowercase: boolean;
@@ -17,6 +18,28 @@ const defaultPolicy: Policy = {
   min_length: 12, require_uppercase: true, require_lowercase: true,
   require_number: true, require_special: true, disallow_spaces: true,
 };
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function getMethod(value: unknown): 'email' | 'sms' | 'totp' {
+  return value === 'sms' || value === 'totp' ? value : 'email';
+}
+
+function parsePolicy(value: unknown): Policy {
+  const policy = asRecord(value);
+  return {
+    min_length: typeof policy.min_length === 'number' ? policy.min_length : defaultPolicy.min_length,
+    require_uppercase: typeof policy.require_uppercase === 'boolean' ? policy.require_uppercase : defaultPolicy.require_uppercase,
+    require_lowercase: typeof policy.require_lowercase === 'boolean' ? policy.require_lowercase : defaultPolicy.require_lowercase,
+    require_number: typeof policy.require_number === 'boolean' ? policy.require_number : defaultPolicy.require_number,
+    require_special: typeof policy.require_special === 'boolean' ? policy.require_special : defaultPolicy.require_special,
+    disallow_spaces: typeof policy.disallow_spaces === 'boolean' ? policy.disallow_spaces : defaultPolicy.disallow_spaces,
+  };
+}
 
 function strength(pw: string) {
   let s = 0;
@@ -52,17 +75,18 @@ export default function ResetPassword() {
     try {
       const { data, error } = await supabase.functions.invoke('send-reset-otp', { body: { token: t } });
       if (error) throw error;
-      const d = data as any;
+      const d = asRecord(data);
       console.debug('[ResetPassword] send-reset-otp', d);
-      if (d?.error) throw new Error(d.error);
-      if (!d?.mfa_required) { setStep('password'); return; }
-      setMfaMethod(d.method || 'email');
-      setMfaDestination(d.destination ?? null);
+      if (typeof d.error === 'string') throw new Error(d.error);
+      if (d.mfa_required !== true) { setStep('password'); return; }
+      const method = getMethod(d.method);
+      setMfaMethod(method);
+      setMfaDestination(typeof d.destination === 'string' ? d.destination : null);
       setStep('mfa');
-      if (d.method !== 'totp' && d.delivered === false) {
+      if (method !== 'totp' && d.delivered === false) {
         setOtpError('We could not deliver your code right now. Try resending, or contact your administrator.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[ResetPassword] send-reset-otp', err);
       setOtpError('Could not send your verification code. Please try again.');
     } finally { setOtpSending(false); }
@@ -75,13 +99,13 @@ export default function ResetPassword() {
         supabase.functions.invoke('password-policy'),
         supabase.functions.invoke('verify-reset-token', { body: { token } }),
       ]);
-      if (pol) setPolicy({ ...defaultPolicy, ...pol });
-      const res = (v as any) || {};
+      if (pol) setPolicy(parsePolicy(pol));
+      const res = asRecord(v);
       const s = res.status;
       if (s === 'valid') {
         setStatus('valid');
-        if (res.mfa_required && !res.mfa_verified) {
-          setMfaMethod(res.mfa_method || 'email');
+        if (res.mfa_required === true && res.mfa_verified !== true) {
+          setMfaMethod(getMethod(res.mfa_method));
           setStep('mfa');
           await requestOtp(token);
         } else {
@@ -103,13 +127,13 @@ export default function ResetPassword() {
     try {
       const { data, error } = await supabase.functions.invoke('verify-otp', { body: { token, otp } });
       if (error) throw error;
-      const d = data as any;
-      if (d?.error) throw new Error(d.error);
+      const d = asRecord(data);
+      if (typeof d.error === 'string') throw new Error(d.error);
       setStep('password');
       setOtp('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[ResetPassword] verify-otp', err);
-      const msg = err?.message || String(err);
+      const msg = getErrorMessage(err, String(err));
       if (msg.includes('locked')) { setStatus('locked'); return; }
       setOtpError(
         msg.includes('otp_mismatch') ? 'That code is incorrect. Please try again.' :
@@ -142,12 +166,17 @@ export default function ResetPassword() {
     try {
       const { data, error } = await supabase.functions.invoke('reset-password', { body: { token, password: pw } });
       if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      try { await supabase.auth.signOut(); } catch {}
+      const result = asRecord(data);
+      if (typeof result.error === 'string') throw new Error(result.error);
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.error('[ResetPassword] sign out after password reset failed', signOutError);
+      }
       navigate('/reset-success', { replace: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[ResetPassword]', err);
-      const msg = err?.message || String(err);
+      const msg = getErrorMessage(err, String(err));
       setError(
         msg === 'password_reused' ? 'You cannot reuse a recent password.' :
         msg === 'policy_violation' ? 'Password does not meet policy requirements.' :

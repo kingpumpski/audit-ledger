@@ -76,7 +76,7 @@ export function AppSidebar() {
       setIsCollapsed(true);
     }, 5000);
     return () => clearTimeout(timer);
-  }, [isCollapsed, userInteracted, location.pathname]);
+  }, [isCollapsed, userInteracted, location.pathname, setIsCollapsed]);
 
   const handleToggle = () => {
     setUserInteracted(true);

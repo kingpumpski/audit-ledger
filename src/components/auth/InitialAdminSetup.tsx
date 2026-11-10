@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-message';
 
 export function InitialAdminSetup() {
   const { user, roles, isLoading: authLoading } = useAuth();
@@ -16,11 +17,7 @@ export function InitialAdminSetup() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  useEffect(() => {
-    checkFirstUser();
-  }, [user]);
-
-  const checkFirstUser = async () => {
+  const checkFirstUser = useCallback(async () => {
     if (!user) {
       setIsChecking(false);
       return;
@@ -36,7 +33,11 @@ export function InitialAdminSetup() {
     } finally {
       setIsChecking(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void checkFirstUser();
+  }, [checkFirstUser]);
 
   const claimAdminRole = async () => {
     setIsClaiming(true);
@@ -62,11 +63,11 @@ export function InitialAdminSetup() {
           variant: 'destructive',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error claiming admin:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive',
       });
     } finally {

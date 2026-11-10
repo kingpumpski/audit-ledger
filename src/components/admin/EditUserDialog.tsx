@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-message';
 import { Loader2, User, Lock } from 'lucide-react';
 
 interface EditUserDialogProps {
@@ -78,10 +79,10 @@ export function EditUserDialog({ user, isOpen, onClose, onSuccess }: EditUserDia
       });
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Failed to update profile',
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive',
       });
     } finally {
@@ -118,10 +119,10 @@ export function EditUserDialog({ user, isOpen, onClose, onSuccess }: EditUserDia
       });
       setNewPassword('');
       setShowPasswordSection(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Failed to reset password',
-        description: error.message || 'An error occurred while resetting the password.',
+        description: getErrorMessage(error, 'An error occurred while resetting the password.'),
         variant: 'destructive',
       });
     } finally {

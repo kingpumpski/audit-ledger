@@ -4,6 +4,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { sampleProducts } from '@/data/productCategories';
 import { Loader2, Database, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-message';
 
 export function SeedProductsButton() {
   const [isSeeding, setIsSeeding] = useState(false);
@@ -34,6 +35,7 @@ export function SeedProductsButton() {
           });
           success++;
         } catch (error) {
+          console.error(`Failed to seed product ${product.name}:`, error);
           failed++;
         }
       }
@@ -43,10 +45,10 @@ export function SeedProductsButton() {
         description: `Added ${success} products. ${failed > 0 ? `${failed} failed.` : ''}`,
       });
       setSeeded(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Seeding Failed',
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive',
       });
     } finally {

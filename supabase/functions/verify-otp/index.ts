@@ -49,15 +49,24 @@ Deno.serve(async (req) => {
       .update({ otp_attempts: (row.otp_attempts ?? 0) + 1, mfa_attempts: (row.mfa_attempts ?? 0) + 1 })
       .eq('id', row.id)
     const { data: lock } = await admin.rpc('register_reset_failure', { _email: email, _ip: ip })
+    const lockInfo = typeof lock === 'object' && lock !== null
+      ? lock as Record<string, unknown>
+      : {};
+    const isLocked = lockInfo.locked === true;
     try {
       await admin.from('password_reset_attempts').insert({
         email, ip_address: ip, user_agent: req.headers.get('user-agent') || null,
-        result: (lock as any)?.locked ? 'locked' : 'failed',
-        reason: (lock as any)?.locked ? 'lockout_after_failed_mfa' : 'mfa_mismatch',
+        result: isLocked ? 'locked' : 'failed',
+        reason: isLocked ? 'lockout_after_failed_mfa' : 'mfa_mismatch',
       })
-    } catch (_) { /* noop */ }
-    if ((lock as any)?.locked) {
-      return json({ error: 'locked_out', locked_until: (lock as any)?.locked_until }, 429)
+    } catch (error) {
+      console.error('Failed to record OTP verification attempt:', error)
+    }
+    if (isLocked) {
+      return json({
+        error: 'locked_out',
+        locked_until: typeof lockInfo.locked_until === 'string' ? lockInfo.locked_until : null,
+      }, 429)
     }
     return json({ error: 'otp_mismatch', attempts_remaining: Math.max(0, 5 - ((row.otp_attempts ?? 0) + 1)) }, 400)
   }

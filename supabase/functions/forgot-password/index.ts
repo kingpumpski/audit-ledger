@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -12,8 +12,13 @@ function json(body: unknown, status = 200) {
   })
 }
 
-async function logAttempt(admin: any, row: Record<string, unknown>) {
-  try { await admin.from('password_reset_attempts').insert(row) } catch (_) { /* noop */ }
+async function logAttempt(admin: SupabaseClient, row: Record<string, unknown>) {
+  try {
+    const { error } = await admin.from('password_reset_attempts').insert(row)
+    if (error) console.error('Failed to record password reset attempt:', error.message)
+  } catch (error) {
+    console.error('Failed to record password reset attempt:', error)
+  }
 }
 
 Deno.serve(async (req) => {

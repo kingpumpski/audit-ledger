@@ -3,9 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
-type Product = Tables<'products'>;
+export type Product = Tables<'products'>;
 type ProductInsert = TablesInsert<'products'>;
-type ProductInsertWithOptionalSku = Omit<ProductInsert, 'sku'> & { sku?: string | null };
 
 export function useProducts() {
   const { toast } = useToast();
@@ -37,15 +36,15 @@ export function useProducts() {
 
       // DB trigger enforces SKU generation when missing; our generated types still mark sku as required,
       // so we use a local type here to allow sku to be omitted.
-      const payload: ProductInsertWithOptionalSku = {
+      const payload: ProductInsert = {
         ...restProductData,
-        ...(sku ? { sku } : {}),
+        sku: sku || '',
         created_by: user.id,
       };
 
       const { data, error } = await supabase
         .from('products')
-        .insert(payload as any)
+        .insert(payload)
         .select()
         .single();
 

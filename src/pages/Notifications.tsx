@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,19 +8,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { CheckCheck } from 'lucide-react';
+import { Tables } from '@/integrations/supabase/types';
+import { getErrorMessage } from '@/lib/error-message';
 
 export default function Notifications() {
   const { user } = useAuth();
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Tables<'notifications'>[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    if (!user) return;
+  const load = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     const { data, error } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(200);
-    if (error) toast.error(error.message); else setItems(data || []);
+    if (error) toast.error(getErrorMessage(error, 'Could not load notifications.'));
+    else setItems(data || []);
     setLoading(false);
-  };
-  useEffect(() => { load(); }, [user]);
+  }, [user]);
+  useEffect(() => { void load(); }, [load]);
 
   const markAllRead = async () => {
     if (!user) return;

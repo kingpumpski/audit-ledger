@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { type Product } from '@/hooks/useProducts';
 
 export default function Inventory() {
   const { products, updateProduct, isUpdating } = useProducts();
@@ -30,7 +31,7 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustForm, setAdjustForm] = useState({
     type: 'adjustment' as string,
     quantity: 0,
@@ -270,7 +271,7 @@ export default function Inventory() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{(tx as any).product?.name || 'Unknown'}</p>
+                  <p className="text-sm font-medium truncate">{tx.product?.name || 'Unknown'}</p>
                   <p className="text-xs text-muted-foreground capitalize">{tx.type}: {tx.quantity} units</p>
                   <p className="text-xs text-muted-foreground">{format(new Date(tx.created_at), 'MMM d, h:mm a')}</p>
                 </div>

@@ -24,16 +24,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Upload, FileSpreadsheet, Loader2, CheckCircle, AlertCircle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/error-message';
 
 interface CSVImportProps {
   entityType: 'products' | 'customers';
-  onImport: (data: any[]) => Promise<{ success: number; failed: number }>;
+  onImport: (data: Record<string, string>[]) => Promise<{ success: number; failed: number }>;
   sampleData: Record<string, string>[];
   requiredFields: string[];
   optionalFields?: string[];
 }
 
-export function CSVImport({ 
+export function CSVImport({
   entityType, 
   onImport, 
   sampleData, 
@@ -44,12 +45,12 @@ export function CSVImport({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [parsedData, setParsedData] = useState<any[]>([]);
+  const [parsedData, setParsedData] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [step, setStep] = useState<'upload' | 'preview' | 'complete'>('upload');
 
-  const parseCSV = (text: string): { headers: string[]; rows: any[] } => {
+  const parseCSV = (text: string): { headers: string[]; rows: Record<string, string>[] } => {
     const lines = text.trim().split('\n');
     if (lines.length < 2) {
       throw new Error('CSV must have headers and at least one data row');
@@ -101,10 +102,10 @@ export function CSVImport({
       setHeaders(parsedHeaders);
       setParsedData(rows);
       setStep('preview');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Failed to parse file',
-        description: error.message,
+        description: getErrorMessage(error, 'Unable to read the selected file.'),
         variant: 'destructive'
       });
     }
@@ -132,10 +133,10 @@ export function CSVImport({
       });
 
       setStep('complete');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Import failed',
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive'
       });
     } finally {

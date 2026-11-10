@@ -138,7 +138,7 @@ export default function Reports() {
   const totalTax = filteredInvoices.reduce((sum, inv) => sum + Number(inv.tax_amount || 0), 0);
 
   const exportReport = (type: string) => {
-    let data: any[] = [];
+    let data: Record<string, string | number | null | undefined>[] = [];
     let filename = '';
 
     switch (type) {

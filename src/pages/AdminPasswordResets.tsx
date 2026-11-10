@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { QueryDiagnostics } from '@/components/diagnostics/QueryDiagnostics';
+import { QueryDiagnostics, type QueryError } from '@/components/diagnostics/QueryDiagnostics';
 import { Download, RefreshCw, ShieldAlert, ShieldCheck, Clock, Lock, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { tokenStatus, suspiciousAttempts, csvCell } from '@/lib/reset-monitoring';
@@ -45,7 +45,9 @@ const RESULT_COLORS: Record<string, string> = {
   locked: 'hsl(var(--destructive))',
 };
 
-function statusVariant(result: string) {
+type BadgeVariant = ComponentProps<typeof Badge>['variant'];
+
+function statusVariant(result: string): BadgeVariant {
   if (result === 'completed') return 'default';
   if (result === 'failed' || result === 'locked') return 'destructive';
   if (result === 'blocked') return 'secondary';
@@ -54,7 +56,7 @@ function statusVariant(result: string) {
 
 export default function AdminPasswordResets() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<any>(null);
+  const [error, setError] = useState<QueryError>(null);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [tokens, setTokens] = useState<TokenRow[]>([]);
   const [lockouts, setLockouts] = useState<Lockout[]>([]);
@@ -65,7 +67,7 @@ export default function AdminPasswordResets() {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     const since = new Date(Date.now() - Number(range) * 86_400_000).toISOString();
@@ -84,9 +86,9 @@ export default function AdminPasswordResets() {
     setTokens((t.data as TokenRow[]) || []);
     setLockouts((l.data as Lockout[]) || []);
     setLoading(false);
-  };
+  }, [range]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range]);
+  useEffect(() => { void load(); }, [load]);
 
   const suspicious = useMemo(() => suspiciousAttempts(attempts), [attempts]);
   const tokenRows = useMemo(() => tokens.filter(t => {
@@ -336,7 +338,7 @@ export default function AdminPasswordResets() {
                       <TableRow key={a.id}>
                         <TableCell className="whitespace-nowrap text-xs">{new Date(a.created_at).toLocaleString()}</TableCell>
                         <TableCell>{a.email || '—'}</TableCell>
-                        <TableCell><Badge variant={statusVariant(a.result) as any}>{a.result}</Badge></TableCell>
+                        <TableCell><Badge variant={statusVariant(a.result)}>{a.result}</Badge></TableCell>
                         <TableCell className="text-xs">{a.reason || '—'}</TableCell>
                         <TableCell className="font-mono text-xs">{a.ip_address || '—'}</TableCell>
                         <TableCell className="text-xs max-w-[220px] truncate">{a.user_agent || '—'}</TableCell>

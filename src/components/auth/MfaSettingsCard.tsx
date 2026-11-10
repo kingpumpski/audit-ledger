@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,9 +11,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/error-message';
 
 type Method = 'email' | 'sms' | 'totp';
 type Settings = { method: Method; phone: string | null; enabled: boolean; totp_confirmed: boolean } | null;
+type MfaResponse = {
+  error?: string;
+  settings?: Exclude<Settings, null>;
+  secret?: string;
+  otpauth_url?: string;
+};
 
 export function MfaSettingsCard() {
   const [loading, setLoading] = useState(true);
@@ -26,19 +33,23 @@ export function MfaSettingsCard() {
   const [secret, setSecret] = useState<string | null>(null);
   const [code, setCode] = useState('');
 
-  const call = async (body: Record<string, unknown>) => {
+  const call = useCallback(async (body: Record<string, unknown>): Promise<MfaResponse> => {
     const { data, error } = await supabase.functions.invoke('mfa-setup', { body });
     if (error) throw error;
-    if ((data as any)?.error) throw new Error((data as any).error);
-    return data as any;
-  };
+    if (typeof data !== 'object' || data === null) {
+      throw new Error('Invalid response from verification service.');
+    }
+    const response = data as MfaResponse;
+    if (response.error) throw new Error(response.error);
+    return response;
+  }, []);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const d = await call({ action: 'status' });
       console.debug('[MfaSettingsCard] status', d);
-      setSettings(d.settings);
+      setSettings(d.settings ?? null);
       if (d.settings) {
         setMethod(d.settings.method);
         setPhone(d.settings.phone || '');
@@ -47,9 +58,9 @@ export function MfaSettingsCard() {
     } catch (e) {
       console.error('[MfaSettingsCard] status', e);
     } finally { setLoading(false); }
-  };
+  }, [call]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   const save = async () => {
     setSaving(true);
@@ -57,8 +68,8 @@ export function MfaSettingsCard() {
       await call({ action: 'save', method, phone, enabled });
       toast.success('Verification settings saved');
       await load();
-    } catch (e: any) {
-      const msg = e?.message || '';
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e, '');
       toast.error(
         msg.includes('invalid_phone') ? 'Enter your phone in international format, e.g. +233201234567.' :
         msg.includes('totp_not_confirmed') ? 'Confirm your authenticator app first.' :
@@ -71,10 +82,11 @@ export function MfaSettingsCard() {
     setSaving(true);
     try {
       const d = await call({ action: 'totp_start' });
-      setSecret(d.secret);
-      setOtpauth(d.otpauth_url);
+      setSecret(d.secret ?? null);
+      setOtpauth(d.otpauth_url ?? null);
       setMethod('totp');
     } catch (e) {
+      console.error('[MfaSettingsCard] authenticator setup', e);
       toast.error('Could not start authenticator setup.');
     } finally { setSaving(false); }
   };
@@ -86,8 +98,9 @@ export function MfaSettingsCard() {
       toast.success('Authenticator app enabled');
       setOtpauth(null); setSecret(null); setCode('');
       await load();
-    } catch (e: any) {
-      toast.error(e?.message?.includes('invalid_code') ? 'That code is incorrect — try the current one.' : 'Could not confirm the code.');
+    } catch (e: unknown) {
+      const message = getErrorMessage(e, '');
+      toast.error(message.includes('invalid_code') ? 'That code is incorrect — try the current one.' : 'Could not confirm the code.');
     } finally { setSaving(false); }
   };
 

@@ -12,7 +12,18 @@ async function sha256(t: string) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function validate(pw: string, policy: any, email?: string) {
+type PasswordPolicy = {
+  min_length?: number | null;
+  require_uppercase?: boolean | null;
+  require_lowercase?: boolean | null;
+  require_number?: boolean | null;
+  require_special?: boolean | null;
+  disallow_spaces?: boolean | null;
+  require_mfa?: boolean | null;
+  history_count?: number | null;
+};
+
+function validate(pw: string, policy: PasswordPolicy | null, email?: string) {
   const errs: string[] = []
   if (pw.length < (policy?.min_length ?? 12)) errs.push(`min_length_${policy?.min_length ?? 12}`)
   if (policy?.require_uppercase && !/[A-Z]/.test(pw)) errs.push('uppercase')
@@ -91,23 +102,37 @@ Deno.serve(async (req) => {
   if (extra?.length) await admin.from('password_history').delete().in('id', extra.map(e => e.id))
 
   // Global sign out
-  try { await admin.auth.admin.signOut(row.user_id, 'global') } catch (_) {}
+  try {
+    const { error } = await admin.auth.admin.signOut(row.user_id, 'global');
+    if (error) console.error('Could not invalidate reset user sessions:', error.message);
+  } catch (error) {
+    console.error('Could not invalidate reset user sessions:', error);
+  }
 
   // Clear any lockout counters for this identity
-  try { await admin.rpc('clear_reset_lockout', { _email: email ?? null, _ip: ip }) } catch (_) {}
+  try {
+    const { error } = await admin.rpc('clear_reset_lockout', { _email: email ?? null, _ip: ip });
+    if (error) console.error('Could not clear password reset lockout:', error.message);
+  } catch (error) {
+    console.error('Could not clear password reset lockout:', error);
+  }
   // Invalidate any other outstanding reset tokens for this user
   try {
     await admin.from('password_reset_tokens')
       .update({ used_at: new Date().toISOString() })
       .eq('user_id', row.user_id).is('used_at', null)
-  } catch (_) {}
+  } catch (error) {
+    console.error('Could not invalidate existing password reset tokens:', error);
+  }
 
   try {
     await admin.from('password_reset_attempts').insert({
       email: email ?? null, ip_address: ip, user_agent: ua,
       result: 'completed', reason: mfaRequired ? `mfa_${row.mfa_method || 'email'}` : null,
     })
-  } catch (_) {}
+  } catch (error) {
+    console.error('Could not record completed password reset:', error);
+  }
 
   // Audit + notification
   try {
@@ -116,14 +141,18 @@ Deno.serve(async (req) => {
       entity_type: 'auth.password', entity_id: row.user_id,
       new_data: { via: 'password-reset', ip, ua },
     })
-  } catch (_) {}
+  } catch (error) {
+    console.error('Could not audit password reset:', error);
+  }
   try {
     await admin.from('notifications').insert({
       user_id: row.user_id, type: 'security',
       title: 'Password changed',
       message: `Your password was changed from ${ip || 'unknown IP'}. If this wasn't you, contact your administrator immediately.`,
     })
-  } catch (_) {}
+  } catch (error) {
+    console.error('Could not notify user about password reset:', error);
+  }
 
   return json({ ok: true })
 })
