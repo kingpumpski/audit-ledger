@@ -25,7 +25,7 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError('');
     const p = schema.safeParse({ identifier });
-    if (!p.success) { setError(p.error.errors[0].message); return; }
+    if (!p.success) { setError(p.error.issues[0]?.message ?? 'Please check the information entered'); return; }
     setLoading(true);
     try {
       const { error } = await supabase.functions.invoke('forgot-password', {
