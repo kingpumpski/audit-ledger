@@ -17,6 +17,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  migration-validation:
+    name: Replay Supabase migrations in an isolated local database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start isolated local Supabase stack
+        run: supabase start --exclude studio,mailpit,storage-api,imgproxy,edge-runtime,logflare,vector
+
+      - name: Replay every migration from a clean database
+        run: supabase db reset
+
+      - name: Stop isolated local Supabase stack
+        if: always()
+        run: supabase stop --no-backup
+
   quality:
     name: Install, lint, typecheck, test and build
     runs-on: ubuntu-latest
