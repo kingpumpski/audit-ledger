@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,20 +18,6 @@ import {
   Package,
   Loader2,
 } from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-} from 'recharts';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useInvoices } from '@/hooks/useInvoices';
@@ -41,7 +27,11 @@ import { useProducts } from '@/hooks/useProducts';
 import { useSettings } from '@/hooks/useSettings';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 
+const DashboardCharts = lazy(() => import('@/components/dashboard/DashboardCharts'));
+
 export default function Dashboard() {
+  const [chartsVisible, setChartsVisible] = useState(false);
+  const chartsRef = useRef<HTMLDivElement>(null);
   const { invoices, isLoading: invoicesLoading } = useInvoices();
   const { receipts, isLoading: receiptsLoading } = useReceipts();
   const { customers, isLoading: customersLoading } = useCustomers();
@@ -50,6 +40,28 @@ export default function Dashboard() {
 
   const currencySymbol = settings?.currency_symbol || '$';
   const isLoading = invoicesLoading || receiptsLoading || customersLoading || productsLoading;
+
+  useEffect(() => {
+    if (isLoading) return;
+    const element = chartsRef.current;
+    if (!element) return;
+    if (!('IntersectionObserver' in window)) {
+      setChartsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setChartsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isLoading]);
 
   // Calculate real statistics
   const stats = useMemo(() => {
@@ -107,36 +119,31 @@ export default function Dashboard() {
 
   // Revenue chart data (last 6 months)
   const revenueChartData = useMemo(() => {
+    const now = new Date();
     const months = [];
     for (let i = 5; i >= 0; i--) {
-      const month = subMonths(new Date(), i);
-      const monthStart = startOfMonth(month);
-      const monthEnd = endOfMonth(month);
-      
-      const revenue = invoices
-        .filter(inv => {
-          if (!inv.created_at) return false;
-          const date = parseISO(inv.created_at);
-          return isWithinInterval(date, { start: monthStart, end: monthEnd }) &&
-                 ['paid', 'issued', 'partially_paid'].includes(inv.status);
-        })
-        .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-      const received = receipts
-        .filter(r => {
-          if (!r.created_at) return false;
-          const date = parseISO(r.created_at);
-          return isWithinInterval(date, { start: monthStart, end: monthEnd });
-        })
-        .reduce((sum, r) => sum + (r.amount || 0), 0);
-
+      const month = subMonths(now, i);
       months.push({
+        key: format(month, 'yyyy-MM'),
         month: format(month, 'MMM'),
-        invoiced: revenue,
-        received: received,
+        invoiced: 0,
+        received: 0,
       });
     }
-    return months;
+
+    const monthByKey = new Map(months.map((month) => [month.key, month]));
+    for (const invoice of invoices) {
+      if (!invoice.created_at || !['paid', 'issued', 'partially_paid'].includes(invoice.status)) continue;
+      const month = monthByKey.get(format(parseISO(invoice.created_at), 'yyyy-MM'));
+      if (month) month.invoiced += invoice.total_amount || 0;
+    }
+    for (const receipt of receipts) {
+      if (!receipt.created_at) continue;
+      const month = monthByKey.get(format(parseISO(receipt.created_at), 'yyyy-MM'));
+      if (month) month.received += receipt.amount || 0;
+    }
+
+    return months.map(({ month, invoiced, received }) => ({ month, invoiced, received }));
   }, [invoices, receipts]);
 
   // Invoice status distribution
@@ -313,163 +320,34 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Revenue Chart */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Revenue Overview</CardTitle>
-              <CardDescription>Monthly invoiced vs received comparison</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={revenueChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorInvoiced" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorReceived" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                    <XAxis 
-                      dataKey="month" 
-                      className="text-xs fill-muted-foreground"
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      className="text-xs fill-muted-foreground"
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(value) => `${currencySymbol}${value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value}`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: 'var(--radius)',
-                      }}
-                      formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, '']}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="invoiced"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorInvoiced)"
-                      name="Invoiced"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="received"
-                      stroke="hsl(var(--success))"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#colorReceived)"
-                      name="Received"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Invoice Status Pie Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Invoice Status</CardTitle>
-              <CardDescription>Distribution by status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {invoiceStatusData.length > 0 ? (
-                <>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={invoiceStatusData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          paddingAngle={4}
-                          dataKey="value"
-                        >
-                          {invoiceStatusData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: 'var(--radius)',
-                          }}
-                          formatter={(value: number) => [value, 'Count']}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-3 mt-2">
-                    {invoiceStatusData.map((item) => (
-                      <div key={item.name} className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="text-xs text-muted-foreground">{item.name} ({item.value})</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-muted-foreground">
-                  No invoices yet
+        <div ref={chartsRef} className="space-y-6">
+          {chartsVisible ? (
+            <Suspense fallback={
+              <div className="space-y-6" aria-hidden="true">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div className="h-[400px] rounded-lg bg-muted/30 lg:col-span-2" />
+                  <div className="h-[400px] rounded-lg bg-muted/30" />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Products by Category */}
-        {categoryData.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-display">Products by Category</CardTitle>
-              <CardDescription>Top 5 categories by product count</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryData} layout="vertical" margin={{ left: 80 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
-                    <XAxis type="number" className="text-xs fill-muted-foreground" />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
-                      className="text-xs fill-muted-foreground"
-                      width={80}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: 'var(--radius)',
-                      }}
-                    />
-                    <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} name="Products" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {categoryData.length > 0 && <div className="h-72 rounded-lg bg-muted/30" />}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            }>
+              <DashboardCharts
+                revenueData={revenueChartData}
+                invoiceStatusData={invoiceStatusData}
+                categoryData={categoryData}
+                currencySymbol={currencySymbol}
+              />
+            </Suspense>
+          ) : (
+            <div className="space-y-6" aria-hidden="true">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <div className="h-[400px] rounded-lg bg-muted/30 lg:col-span-2" />
+                <div className="h-[400px] rounded-lg bg-muted/30" />
+              </div>
+              {categoryData.length > 0 && <div className="h-72 rounded-lg bg-muted/30" />}
+            </div>
+          )}
+        </div>
 
         {/* Recent Invoices & Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
