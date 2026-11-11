@@ -69,7 +69,7 @@ export default function Receipts() {
     });
   }, [receipts, searchQuery, statusFilter, methodFilter]);
 
-  const handlePrintReceipt = async (receipt: any) => {
+  const handlePrintReceipt = async (receipt: ReceiptWithRelations) => {
     try {
       const response = await supabase.functions.invoke('generate-receipt-pdf', {
         body: { receiptId: receipt.id },
@@ -107,12 +107,20 @@ export default function Receipts() {
       title="Receipts"
       subtitle="View and issue payment receipts"
       actions={
-        <Button asChild>
-          <Link to="/receipts/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Issue Receipt
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/receipts/documents">
+              <FileText className="mr-2 h-4 w-4" />
+              PDF documents
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/receipts/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Issue Receipt
+            </Link>
+          </Button>
+        </div>
       }
     >
       {/* Stats */}
