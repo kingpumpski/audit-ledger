@@ -40,13 +40,11 @@ export function useReceiptPrint() {
         throw new Error('The receipt PDF service returned an invalid document.');
       }
 
-      printWindow.addEventListener('load', () => {
-        printWindow.focus();
-        printWindow.print();
-      }, { once: true });
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     } catch (error) {
       printWindow.close();
       const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
