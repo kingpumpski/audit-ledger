@@ -47,7 +47,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
   const isAdmin = roles.includes('admin');
   const canAudit = roles.includes('admin') || roles.includes('auditor');
   const initials = (profile?.full_name || profile?.email || 'U')
-    .split(/[\\s@]+/)
+    .split(/[\s@]+/)
     .filter(Boolean)
     .map((part) => part[0])
     .join('')
