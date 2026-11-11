@@ -59,25 +59,8 @@ jobs:
       - name: Build production site
         run: npm run build
 
-      - name: Add GitHub Pages deep-link redirect fallback
-        run: |
-          cp dist/index.html dist/404.html
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from 'node:fs';
-          const file = 'dist/404.html';
-          const html = readFileSync(file, 'utf8');
-          const redirect = `<script>
-          (function () {
-            var base = '/audit-ledger/';
-            var path = window.location.pathname;
-            if (!path.startsWith(base)) return;
-            var route = path.slice(base.length).replace(/^\/+/, '');
-            if (!route || /^(assets|favicon\.ico)(\/|$)/.test(route)) return;
-            window.location.replace(base + '#/' + route + window.location.search + window.location.hash);
-          })();
-          </script>`;
-          writeFileSync(file, html.replace('<head>', '<head>' + redirect));
-          NODE
+      - name: Add SPA route fallback
+        run: cp dist/index.html dist/404.html
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
