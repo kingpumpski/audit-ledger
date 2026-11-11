@@ -45,6 +45,7 @@ import {
   Boxes
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { type Product } from '@/hooks/useProducts';
 
 export default function Products() {
   const { products, isLoading, createProduct, updateProduct, deleteProduct, isCreating } = useProducts();
@@ -52,7 +53,7 @@ export default function Products() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -137,7 +138,7 @@ export default function Products() {
     });
   };
 
-  const handleImportProducts = async (data: any[]): Promise<{ success: number; failed: number }> => {
+  const handleImportProducts = async (data: Record<string, string>[]): Promise<{ success: number; failed: number }> => {
     let success = 0;
     let failed = 0;
 
@@ -151,7 +152,7 @@ export default function Products() {
           cost_price: parseFloat(item.cost_price) || 0,
           stock_quantity: parseInt(item.stock_quantity) || null,
           unit: item.unit || 'piece',
-          is_service: item.is_service === 'true' || item.is_service === true,
+          is_service: item.is_service === 'true',
           is_active: true,
         });
         success++;

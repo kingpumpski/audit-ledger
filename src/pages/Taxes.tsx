@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useTaxes } from '@/hooks/useTaxes';
+import { useTaxes, type Tax } from '@/hooks/useTaxes';
 import { Plus, Loader2, Calculator, Pencil } from 'lucide-react';
 
 const TAX_TYPES = [
@@ -31,17 +31,31 @@ const TAX_TYPES = [
   { value: 'service_tax', label: 'Service Tax' },
   { value: 'excise_tax', label: 'Excise Tax' },
   { value: 'custom', label: 'Custom' },
-];
+] as const;
+type TaxType = (typeof TAX_TYPES)[number]['value'];
+
+type TaxFormData = {
+  name: string;
+  code: string;
+  rate: string;
+  type: TaxType;
+  is_compound: boolean;
+  applies_to_category: string;
+};
+
+function isTaxType(value: string): value is TaxType {
+  return TAX_TYPES.some(type => type.value === value);
+}
 
 export default function Taxes() {
   const { taxes, isLoading, createTax, updateTax, toggleTaxStatus, isCreating, isUpdating } = useTaxes();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTax, setEditingTax] = useState<any>(null);
-  const [formData, setFormData] = useState({
+  const [editingTax, setEditingTax] = useState<Tax | null>(null);
+  const [formData, setFormData] = useState<TaxFormData>({
     name: '',
     code: '',
     rate: '',
-    type: 'vat' as const,
+    type: 'vat' as TaxType,
     is_compound: false,
     applies_to_category: '',
   });
@@ -58,7 +72,7 @@ export default function Taxes() {
     setEditingTax(null);
   };
 
-  const handleOpenDialog = (tax?: any) => {
+  const handleOpenDialog = (tax?: Tax) => {
     if (tax) {
       setEditingTax(tax);
       setFormData({
@@ -169,7 +183,9 @@ export default function Taxes() {
                   <Label htmlFor="type">Tax Type</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value: any) => setFormData({ ...formData, type: value })}
+                    onValueChange={(value) => {
+                      if (isTaxType(value)) setFormData({ ...formData, type: value });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />

@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useDiscounts } from '@/hooks/useDiscounts';
+import { useDiscounts, type Discount } from '@/hooks/useDiscounts';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { Plus, Loader2, Percent, Pencil, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
@@ -31,7 +31,7 @@ export default function Discounts() {
   const { discounts, isLoading, createDiscount, updateDiscount, toggleDiscountStatus, isCreating, isUpdating } = useDiscounts();
   const { currencySymbol, formatCurrency } = useCurrency();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingDiscount, setEditingDiscount] = useState<any>(null);
+  const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -59,7 +59,7 @@ export default function Discounts() {
     setEditingDiscount(null);
   };
 
-  const handleOpenDialog = (discount?: any) => {
+  const handleOpenDialog = (discount?: Discount) => {
     if (discount) {
       setEditingDiscount(discount);
       setFormData({
@@ -104,19 +104,19 @@ export default function Discounts() {
     resetForm();
   };
 
-  const formatDiscountValue = (discount: any) => {
+  const formatDiscountValue = (discount: Discount) => {
     if (discount.type === 'percentage') {
       return `${discount.value}%`;
     }
     return `${currencySymbol}${discount.value.toFixed(2)}`;
   };
 
-  const isExpired = (discount: any) => {
+  const isExpired = (discount: Discount) => {
     if (!discount.valid_to) return false;
     return new Date(discount.valid_to) < new Date();
   };
 
-  const isUpcoming = (discount: any) => {
+  const isUpcoming = (discount: Discount) => {
     if (!discount.valid_from) return false;
     return new Date(discount.valid_from) > new Date();
   };

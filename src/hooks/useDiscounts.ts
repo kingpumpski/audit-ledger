@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
-type Discount = Tables<'discounts'>;
+export type Discount = Tables<'discounts'>;
 type DiscountInsert = TablesInsert<'discounts'>;
 
 export function useDiscounts() {

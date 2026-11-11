@@ -38,7 +38,7 @@ export default function Signup() {
     // Validate input
     const result = signupSchema.safeParse({ fullName, email, password, confirmPassword });
     if (!result.success) {
-      setError(result.error.errors[0].message);
+      setError(result.error.issues[0]?.message ?? 'Please check the information entered');
       return;
     }
 

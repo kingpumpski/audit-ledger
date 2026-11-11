@@ -5,13 +5,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { productCategories } from '@/data/productCategories';
 import { Loader2, Save, Tag } from 'lucide-react';
+import { getErrorMessage } from '@/lib/error-message';
 
 interface SKUTemplate {
   category: string;
   prefix: string;
+}
+
+function isSKUTemplate(value: unknown): value is SKUTemplate {
+  return typeof value === 'object' && value !== null &&
+    'category' in value && typeof value.category === 'string' &&
+    'prefix' in value && typeof value.prefix === 'string';
 }
 
 // Default category prefixes
@@ -35,35 +41,31 @@ const defaultPrefixes: Record<string, string> = {
 
 export function SKUSettings() {
   const { toast } = useToast();
-  const [templates, setTemplates] = useState<SKUTemplate[]>([]);
+  const [templates, setTemplates] = useState<SKUTemplate[]>(() =>
+    productCategories.map(category => ({
+      category,
+      prefix: defaultPrefixes[category] || category.substring(0, 3).toUpperCase(),
+    }))
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // Initialize templates from defaults
-    const initial = productCategories.map(cat => ({
-      category: cat,
-      prefix: defaultPrefixes[cat] || cat.substring(0, 3).toUpperCase(),
-    }));
-    setTemplates(initial);
-
-    // Load saved settings from company_settings
-    loadSavedTemplates();
-  }, []);
-
-  const loadSavedTemplates = async () => {
     try {
-      const { data } = await supabase.from('company_settings').select('*').limit(1).single();
-      if (data && (data as any).sku_templates) {
-        const saved = (data as any).sku_templates as SKUTemplate[];
-        setTemplates(prev => prev.map(t => {
-          const match = saved.find((s: SKUTemplate) => s.category === t.category);
-          return match ? { ...t, prefix: match.prefix } : t;
-        }));
+      const raw = localStorage.getItem('sku_templates');
+      if (!raw) return;
+      const saved: unknown = JSON.parse(raw);
+      if (!Array.isArray(saved) || !saved.every(isSKUTemplate)) {
+        throw new Error('Saved SKU templates have an invalid format.');
       }
-    } catch {
-      // Use defaults
+      setTemplates(current => current.map(template => {
+        const match = saved.find(item => item.category === template.category);
+        return match ? { ...template, prefix: match.prefix } : template;
+      }));
+    } catch (error) {
+      console.error('Failed to load SKU templates:', error);
+      toast({ title: 'Failed to load SKU templates', description: getErrorMessage(error, 'An unexpected error occurred.'), variant: 'destructive' });
     }
-  };
+  }, [toast]);
 
   const updatePrefix = (category: string, prefix: string) => {
     setTemplates(prev => prev.map(t => 
@@ -78,8 +80,8 @@ export function SKUSettings() {
       // For now, save to localStorage as company_settings may not have the column
       localStorage.setItem('sku_templates', JSON.stringify(templates));
       toast({ title: 'SKU templates saved successfully' });
-    } catch (err: any) {
-      toast({ title: 'Failed to save', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Failed to save', description: getErrorMessage(err, 'An unexpected error occurred.'), variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -136,6 +138,8 @@ export function getSKUPrefix(category: string): string {
       const match = templates.find(t => t.category === category);
       if (match) return match.prefix;
     }
-  } catch {}
+  } catch (error) {
+    console.error('Failed to read saved SKU templates:', error);
+  }
   return defaultPrefixes[category] || category.substring(0, 3).toUpperCase();
 }

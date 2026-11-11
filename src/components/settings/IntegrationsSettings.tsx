@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-message';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Key, Mail, MessageSquare, Shield, ExternalLink, CheckCircle, XCircle, Loader2, Save, Eye, EyeOff } from 'lucide-react';
@@ -60,10 +61,10 @@ export function IntegrationsSettings() {
 
       toast({ title: 'Resend API key updated successfully' });
       setResendApiKey('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ 
         title: 'Failed to save API key', 
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive' 
       });
     } finally {
@@ -101,10 +102,10 @@ export function IntegrationsSettings() {
       setTwilioAccountSid('');
       setTwilioAuthToken('');
       setTwilioPhoneNumber('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({ 
         title: 'Failed to save Twilio credentials', 
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive' 
       });
     } finally {

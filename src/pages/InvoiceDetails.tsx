@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/error-message';
 
 const statusColors: Record<string, string> = {
   paid: 'bg-success/10 text-success border-success/20',
@@ -86,8 +87,8 @@ export default function InvoiceDetails() {
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({ title: 'Invoice updated successfully' });
-    } catch (err: any) {
-      toast({ title: 'Failed to update invoice', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Failed to update invoice', description: getErrorMessage(err, 'An unexpected error occurred.'), variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -104,8 +105,8 @@ export default function InvoiceDetails() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({ title: 'Invoice deleted' });
       navigate('/invoices');
-    } catch (err: any) {
-      toast({ title: 'Failed to delete invoice', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Failed to delete invoice', description: getErrorMessage(err, 'An unexpected error occurred.'), variant: 'destructive' });
     } finally {
       setIsDeleting(false);
     }
@@ -116,14 +117,14 @@ export default function InvoiceDetails() {
     setIsCanceling(true);
     try {
       const { error } = await supabase.from('invoices')
-        .update({ status: 'canceled' as any })
+        .update({ status: 'canceled' })
         .eq('id', invoice.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({ title: 'Invoice canceled' });
-    } catch (err: any) {
-      toast({ title: 'Failed to cancel invoice', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      toast({ title: 'Failed to cancel invoice', description: getErrorMessage(err, 'An unexpected error occurred.'), variant: 'destructive' });
     } finally {
       setIsCanceling(false);
     }

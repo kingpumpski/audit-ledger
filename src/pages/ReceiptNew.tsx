@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
 import { useReceipts } from '@/hooks/useReceipts';
+import { type ReceiptWithRelations } from '@/hooks/useReceipts';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useProfile } from '@/hooks/useProfile';
@@ -29,6 +30,11 @@ const paymentMethods = [
   { value: 'mobile_payment', label: 'Mobile Payment' },
   { value: 'other', label: 'Other' },
 ] as const;
+type PaymentMethod = (typeof paymentMethods)[number]['value'];
+
+function isPaymentMethod(value: string): value is PaymentMethod {
+  return paymentMethods.some(method => method.value === value);
+}
 
 export default function ReceiptNew() {
   const navigate = useNavigate();
@@ -41,11 +47,11 @@ export default function ReceiptNew() {
   const [customerId, setCustomerId] = useState('');
   const [invoiceId, setInvoiceId] = useState('');
   const [amount, setAmount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<typeof paymentMethods[number]['value']>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [notes, setNotes] = useState('');
   const [signatureData, setSignatureData] = useState('');
   const [isIssued, setIsIssued] = useState(false);
-  const [issuedReceipt, setIssuedReceipt] = useState<any>(null);
+  const [issuedReceipt, setIssuedReceipt] = useState<ReceiptWithRelations | null>(null);
   const [showManualSign, setShowManualSign] = useState(false);
 
   // Auto-load profile signature
@@ -53,7 +59,7 @@ export default function ReceiptNew() {
     if (profile?.signature_data && !signatureData) {
       setSignatureData(profile.signature_data);
     }
-  }, [profile]);
+  }, [profile, signatureData]);
 
   const hasProfileSignature = !!profile?.signature_data;
   const hasSignature = !!signatureData;
@@ -148,7 +154,7 @@ export default function ReceiptNew() {
         </Button>
       }
     >
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto w-full max-w-2xl space-y-6 pb-10">
         <Card>
           <CardHeader><CardTitle>Payment Details</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -187,7 +193,9 @@ export default function ReceiptNew() {
               </div>
               <div className="space-y-2">
                 <Label>Payment Method *</Label>
-                <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                <Select value={paymentMethod} onValueChange={(value) => {
+                  if (isPaymentMethod(value)) setPaymentMethod(value);
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {paymentMethods.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
