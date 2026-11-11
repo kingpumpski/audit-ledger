@@ -5,6 +5,8 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // GitHub Pages serves this project from /audit-ledger/; keep local dev at /. 
+  base: mode === "production" ? "/audit-ledger/" : "/",
   server: {
     host: "::",
     port: 8080,
