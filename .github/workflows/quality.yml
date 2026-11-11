@@ -30,6 +30,16 @@ jobs:
         with:
           version: latest
 
+      - name: Assign isolated database ports
+        run: |
+          # Avoid collisions with services prebound on GitHub-hosted runners.
+          cat >> supabase/config.toml <<'EOF'
+
+          [db]
+          port = 55432
+          shadow_port = 55430
+          EOF
+
       - name: Start isolated local Supabase stack
         run: supabase start --exclude studio,mailpit,storage-api,imgproxy,edge-runtime,logflare,vector
 
