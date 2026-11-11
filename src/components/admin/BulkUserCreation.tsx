@@ -21,6 +21,16 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/error-message';
+
+type CreateUserResult = { email: string; success: boolean; error?: string };
+
+function isCreateUserResult(value: unknown): value is CreateUserResult {
+  return typeof value === 'object' && value !== null &&
+    'email' in value && typeof value.email === 'string' &&
+    'success' in value && typeof value.success === 'boolean' &&
+    (!('error' in value) || typeof value.error === 'string');
+}
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Loader2, UserPlus, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -112,14 +122,16 @@ export function BulkUserCreation() {
 
       if (error) throw error;
 
-      const results = data.results || [];
-      const successCount = results.filter((r: any) => r.success).length;
-      const failCount = results.filter((r: any) => !r.success).length;
+      const results: CreateUserResult[] = Array.isArray(data?.results)
+        ? data.results.filter(isCreateUserResult)
+        : [];
+      const successCount = results.filter((result) => result.success).length;
+      const failCount = results.filter((result) => !result.success).length;
 
       if (failCount > 0) {
         const failedEmails = results
-          .filter((r: any) => !r.success)
-          .map((r: any) => `${r.email}: ${r.error}`)
+          .filter((result) => !result.success)
+          .map((result) => `${result.email}: ${result.error || 'Unknown error'}`)
           .join('\n');
         
         toast({
@@ -135,11 +147,11 @@ export function BulkUserCreation() {
         setIsOpen(false);
         setUsers([{ email: '', fullName: '', roles: ['cashier'], password: defaultPassword }]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create users:', error);
       toast({
         title: 'Failed to create users',
-        description: error.message,
+        description: getErrorMessage(error, 'An unexpected error occurred.'),
         variant: 'destructive',
       });
     } finally {
