@@ -12,7 +12,7 @@ function color(token: string): [number, number, number] {
   probe.remove();
   return rgb && rgb.length >= 3 ? [rgb[0], rgb[1], rgb[2]] : [0, 0, 0];
 }
-let fontData: Promise<string> | undefined;
+let fontData: Promise<string | null> | undefined;
 async function imageData(url: string) {
   const response = await fetch(url);
   if (!response.ok) throw new Error('Document image could not be loaded');
@@ -31,20 +31,32 @@ export async function createDocumentPdf(d: BusinessDocument) {
     let binary = '';
     for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
     return btoa(binary);
-  }).catch(error => { fontData = undefined; throw error; });
+  }).catch(error => {
+    fontData = undefined;
+    console.warn('Using built-in PDF font because the custom document font could not be loaded:', error);
+    return null;
+  });
   const pdf = new jsPDF({ format: 'a4', unit: 'mm' });
-  pdf.addFileToVFS('Document.ttf', await fontData);
-  pdf.addFont('Document.ttf', 'Document', 'normal');
-  pdf.setFont('Document');
+  const customFont = await fontData;
+  const fontName = customFont ? 'Document' : 'helvetica';
+  if (customFont) {
+    pdf.addFileToVFS('Document.ttf', customFont);
+    pdf.addFont('Document.ttf', 'Document', 'normal');
+  }
+  pdf.setFont(fontName);
   pdf.setProperties({ title: `${d.kind} ${d.number}`, author: d.company?.company_name || '' });
   const ink = color('--document-ink'), accent = color('--document-accent'), pale = color('--document-tint'), paper = color('--document-paper');
   pdf.setFillColor(...accent); pdf.rect(0, 0, 210, 4, 'F');
   pdf.setTextColor(...ink); pdf.setFontSize(18);
   let brandX = 18;
   if (d.company?.company_logo_url) {
-    const image = await imageData(d.company.company_logo_url);
-    const props = pdf.getImageProperties(image); const ratio = Math.min(18 / props.width, 18 / props.height);
-    pdf.addImage(image, 18, 15, props.width * ratio, props.height * ratio); brandX = 41;
+    try {
+      const image = await imageData(d.company.company_logo_url);
+      const props = pdf.getImageProperties(image); const ratio = Math.min(18 / props.width, 18 / props.height);
+      pdf.addImage(image, 18, 15, props.width * ratio, props.height * ratio); brandX = 41;
+    } catch (error) {
+      console.warn('Omitting the company logo because it could not be loaded:', error);
+    }
   }
   const brand = pdf.splitTextToSize(d.company?.company_name || 'Company', 192 - brandX);
   pdf.text(brand, brandX, 22);
@@ -59,9 +71,9 @@ export async function createDocumentPdf(d: BusinessDocument) {
   y += 12;
   const left = [d.kind === 'invoice' ? 'BILL TO' : 'RECEIVED FROM', d.customer?.name || 'Customer unavailable', d.customer?.phone, d.customer?.email, [d.customer?.address_line1, d.customer?.city].filter(Boolean).join(', ')].filter(Boolean).join('\n');
   const right = [`Issued: ${documentDate(d.date)}`, d.dueDate ? `Due: ${documentDate(d.dueDate)}` : '', d.invoiceNumber ? `Invoice: ${d.invoiceNumber}` : '', d.paymentMethod ? `Method: ${d.paymentMethod.replace(/_/g, ' ')}` : ''].filter(Boolean).join('\n');
-  autoTable(pdf, { startY: y, body: [[left, right]], theme: 'plain', styles: { font: 'Document', fontSize: 9, cellPadding: 3, textColor: ink }, margin: { left: 18, right: 18, bottom: 24 }, columnStyles: { 0: { cellWidth: 99 } } });
+  autoTable(pdf, { startY: y, body: [[left, right]], theme: 'plain', styles: { font: fontName, fontSize: 9, cellPadding: 3, textColor: ink }, margin: { left: 18, right: 18, bottom: 24 }, columnStyles: { 0: { cellWidth: 99 } } });
   y = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
-  autoTable(pdf, { startY: y, head: [['Description', 'Qty', 'Unit price', 'Amount']], body: d.items.map(item => [item.description, String(item.quantity), money(item.unit_price, d.company), money(item.line_total, d.company)]), theme: 'plain', margin: { left: 18, right: 18, top: 15, bottom: 24 }, styles: { font: 'Document', fontSize: 9, cellPadding: 4, textColor: ink, overflow: 'linebreak' }, headStyles: { fillColor: pale, textColor: ink }, columnStyles: { 0: { cellWidth: 78 }, 1: { halign: 'right', cellWidth: 14 }, 2: { halign: 'right', cellWidth: 41 }, 3: { halign: 'right', cellWidth: 41 } } });
+  autoTable(pdf, { startY: y, head: [['Description', 'Qty', 'Unit price', 'Amount']], body: d.items.map(item => [item.description, String(item.quantity), money(item.unit_price, d.company), money(item.line_total, d.company)]), theme: 'plain', margin: { left: 18, right: 18, top: 15, bottom: 24 }, styles: { font: fontName, fontSize: 9, cellPadding: 4, textColor: ink, overflow: 'linebreak' }, headStyles: { fillColor: pale, textColor: ink }, columnStyles: { 0: { cellWidth: 78 }, 1: { halign: 'right', cellWidth: 14 }, 2: { halign: 'right', cellWidth: 41 }, 3: { halign: 'right', cellWidth: 41 } } });
   y = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
   const summary: string[][] = [];
   if (d.kind === 'invoice') {
@@ -71,10 +83,10 @@ export async function createDocumentPdf(d: BusinessDocument) {
     summary.push(['Total', money(d.total, d.company)], ['Amount paid', money(d.paid, d.company)]);
   }
   summary.push([d.kind === 'receipt' ? 'Payment received' : 'Balance due', money(d.kind === 'receipt' ? d.total : d.balance, d.company)]);
-  autoTable(pdf, { startY: y, body: summary, theme: 'plain', margin: { left: 102, right: 18, bottom: 24, top: 15 }, styles: { font: 'Document', fontSize: 10, textColor: ink, cellPadding: 3 }, columnStyles: { 1: { halign: 'right' } }, didParseCell: cell => { if (cell.row.index === summary.length - 1) { cell.cell.styles.fillColor = accent; cell.cell.styles.textColor = paper; } } });
+  autoTable(pdf, { startY: y, body: summary, theme: 'plain', margin: { left: 102, right: 18, bottom: 24, top: 15 }, styles: { font: fontName, fontSize: 10, textColor: ink, cellPadding: 3 }, columnStyles: { 1: { halign: 'right' } }, didParseCell: cell => { if (cell.row.index === summary.length - 1) { cell.cell.styles.fillColor = accent; cell.cell.styles.textColor = paper; } } });
   y = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   if (d.notes || d.terms) {
-    autoTable(pdf, { startY: y, body: [[d.notes ? `Notes\n${d.notes}` : '', d.terms ? `Terms\n${d.terms}` : '']], theme: 'plain', margin: { left: 18, right: 18, top: 15, bottom: 24 }, styles: { font: 'Document', fontSize: 9, textColor: ink, cellPadding: 3 } });
+    autoTable(pdf, { startY: y, body: [[d.notes ? `Notes\n${d.notes}` : '', d.terms ? `Terms\n${d.terms}` : '']], theme: 'plain', margin: { left: 18, right: 18, top: 15, bottom: 24 }, styles: { font: fontName, fontSize: 9, textColor: ink, cellPadding: 3 } });
     y = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
   }
   if (d.issuer) {

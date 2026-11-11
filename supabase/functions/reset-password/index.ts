@@ -60,15 +60,12 @@ Deno.serve(async (req) => {
 
   const { data: policy } = await admin.from('password_policy').select('*').eq('id', 1).single()
 
-  // Get user email
   const { data: userRes } = await admin.auth.admin.getUserById(row.user_id)
   const email = userRes?.user?.email
 
-  // Temporary lockout gate
   const { data: lockedNow } = await admin.rpc('is_reset_locked', { _email: email ?? null, _ip: ip })
   if (lockedNow === true) return json({ error: 'locked_out' }, 429)
 
-  // MFA step-up gate
   const { data: mfaSettings } = await admin.from('user_mfa').select('enabled').eq('user_id', row.user_id).maybeSingle()
   const mfaRequired = Boolean(row.mfa_required) || Boolean(mfaSettings?.enabled) || Boolean(policy?.require_mfa)
   if (mfaRequired && !row.mfa_verified_at) {
@@ -78,9 +75,8 @@ Deno.serve(async (req) => {
   const errs = validate(password, policy, email)
   if (errs.length) return json({ error: 'policy_violation', reasons: errs }, 400)
 
-  // Password history check
   const historyCount = policy?.history_count ?? 10
-  const pwHash = await sha256(password + ':' + row.user_id) // deterministic per user for history compare
+  const pwHash = await sha256(password + ':' + row.user_id)
   const { data: history } = await admin.from('password_history')
     .select('password_hash').eq('user_id', row.user_id)
     .order('created_at', { ascending: false }).limit(historyCount)
@@ -88,70 +84,65 @@ Deno.serve(async (req) => {
     return json({ error: 'password_reused' }, 400)
   }
 
-  // Update password via admin API
   const { error: updErr } = await admin.auth.admin.updateUserById(row.user_id, { password })
   if (updErr) return json({ error: 'update_failed', detail: updErr.message }, 500)
 
-  // Mark token used, insert history, invalidate sessions
   await admin.from('password_reset_tokens').update({ used_at: new Date().toISOString() }).eq('id', row.id)
   await admin.from('password_history').insert({ user_id: row.user_id, password_hash: pwHash })
-  // Trim history to policy count
   const { data: extra } = await admin.from('password_history')
     .select('id').eq('user_id', row.user_id)
     .order('created_at', { ascending: false }).range(historyCount, historyCount + 100)
   if (extra?.length) await admin.from('password_history').delete().in('id', extra.map(e => e.id))
 
-  // Global sign out
   try {
-    const { error } = await admin.auth.admin.signOut(row.user_id, 'global');
-    if (error) console.error('Could not invalidate reset user sessions:', error.message);
+    const { error } = await admin.auth.admin.signOut(row.user_id, 'global')
+    if (error) console.error('Could not invalidate reset user sessions:', error.message)
   } catch (error) {
-    console.error('Could not invalidate reset user sessions:', error);
+    console.error('Could not invalidate reset user sessions:', error)
   }
 
-  // Clear any lockout counters for this identity
   try {
-    const { error } = await admin.rpc('clear_reset_lockout', { _email: email ?? null, _ip: ip });
-    if (error) console.error('Could not clear password reset lockout:', error.message);
+    const { error } = await admin.rpc('clear_reset_lockout', { _email: email ?? null, _ip: ip })
+    if (error) console.error('Could not clear password reset lockout:', error.message)
   } catch (error) {
-    console.error('Could not clear password reset lockout:', error);
+    console.error('Could not clear password reset lockout:', error)
   }
-  // Invalidate any other outstanding reset tokens for this user
+
   try {
-    await admin.from('password_reset_tokens')
+    const { error } = await admin.from('password_reset_tokens')
       .update({ used_at: new Date().toISOString() })
       .eq('user_id', row.user_id).is('used_at', null)
+    if (error) console.error('Could not invalidate outstanding reset tokens:', error.message)
   } catch (error) {
-    console.error('Could not invalidate existing password reset tokens:', error);
+    console.error('Could not invalidate outstanding reset tokens:', error)
   }
 
-  try {
-    await admin.from('password_reset_attempts').insert({
-      email: email ?? null, ip_address: ip, user_agent: ua,
-      result: 'completed', reason: mfaRequired ? `mfa_${row.mfa_method || 'email'}` : null,
-    })
-  } catch (error) {
-    console.error('Could not record completed password reset:', error);
-  }
+  const { error: attemptError } = await admin.from('password_reset_attempts').insert({
+    email: email ?? null, ip_address: ip, user_agent: ua,
+    result: 'completed', reason: mfaRequired ? `mfa_${row.mfa_method || 'email'}` : null,
+  })
+  if (attemptError) console.error('Could not record completed password reset:', attemptError.message)
 
-  // Audit + notification
   try {
-    await admin.from('audit_logs').insert({
+    const { error } = await admin.from('audit_logs').insert({
       user_id: row.user_id, user_email: email, action: 'UPDATE',
       entity_type: 'auth.password', entity_id: row.user_id,
       new_data: { via: 'password-reset', ip, ua },
     })
+    if (error) console.error('Could not audit password reset:', error.message)
   } catch (error) {
-    console.error('Could not audit password reset:', error);
+    console.error('Could not audit password reset:', error)
   }
+
   try {
-    await admin.from('notifications').insert({
+    const { error } = await admin.from('notifications').insert({
       user_id: row.user_id, type: 'security',
       title: 'Password changed',
       message: `Your password was changed from ${ip || 'unknown IP'}. If this wasn't you, contact your administrator immediately.`,
     })
+    if (error) console.error('Could not notify user about password reset:', error.message)
   } catch (error) {
-    console.error('Could not notify user about password reset:', error);
+    console.error('Could not notify user about password reset:', error)
   }
 
   return json({ ok: true })
