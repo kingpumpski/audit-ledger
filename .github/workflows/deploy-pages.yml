@@ -66,17 +66,17 @@ jobs:
           import { resolve } from 'node:path';
 
           const html = readFileSync('dist/index.html', 'utf8');
-          if (/src\\/main\\.tsx|src\\/main\\.ts/.test(html)) {
+          if (html.includes('src/main.tsx') || html.includes('src/main.ts')) {
             throw new Error('Production HTML still references the raw TypeScript entry point.');
           }
 
-          const scripts = [...html.matchAll(/<script\\b[^>]*type=["']module["'][^>]*src=["']([^"']+\\.js)["'][^>]*>/g)];
+          const scripts = [...html.matchAll(/<script[^>]+src="([^"]+\.js)"/g)];
           if (scripts.length === 0) {
             throw new Error('No compiled JavaScript module entry was found in dist/index.html.');
           }
 
           for (const [, src] of scripts) {
-            const relativePath = src.replace(/^\\/audit-ledger\\//, '');
+            const relativePath = src.replace(/^\/audit-ledger\//, '');
             if (!existsSync(resolve('dist', relativePath))) {
               throw new Error(`Compiled module referenced by HTML is missing: ${src}`);
             }
