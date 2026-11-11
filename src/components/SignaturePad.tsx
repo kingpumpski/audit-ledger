@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -29,207 +30,126 @@ export function SignaturePad({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = '#1a1a2e';
+    context.fillStyle = '#1a1a2e';
+    context.lineWidth = 2;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
 
-    // Set up canvas
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Fill with white background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Load initial data if provided
     if (initialData) {
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0);
+      const image = new Image();
+      image.onload = () => {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
         setHasSignature(true);
       };
-      img.src = initialData;
+      image.src = initialData;
+    } else {
+      setHasSignature(false);
     }
-  }, [initialData]);
+  }, [initialData, width, height]);
 
-  const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
+  const getPoint = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
-    if ('touches' in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top) * scaleY,
-      };
-    }
-
+    const bounds = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: (event.clientX - bounds.left) * (canvas.width / bounds.width),
+      y: (event.clientY - bounds.top) * (canvas.height / bounds.height),
     };
   };
 
-  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    if (disabled) return;
-    e.preventDefault(); // Prevent scrolling on touch devices
-
+  const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (disabled || event.button !== 0) return;
+    event.preventDefault();
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
 
-    const { x, y } = getCoordinates(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    canvas.setPointerCapture(event.pointerId);
+    const { x, y } = getPoint(event);
+    context.beginPath();
+    context.arc(x, y, 1.25, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.moveTo(x, y);
     setIsDrawing(true);
-  };
-
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing || disabled) return;
-    e.preventDefault(); // Prevent scrolling on touch devices
-
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
-
-    const { x, y } = getCoordinates(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    // A tap is a valid mark too; don't require a drag before enabling Confirm.
     setHasSignature(true);
   };
 
-  const stopDrawing = (e?: React.MouseEvent | React.TouchEvent) => {
-    if (e) e.preventDefault();
-    setIsDrawing(false);
-  };
-
-  // Handle pointer events for better stylus/pen support
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (disabled) return;
-    e.preventDefault();
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) return;
-
-    // Capture pointer for smoother drawing
-    canvas.setPointerCapture(e.pointerId);
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || disabled) return;
-    e.preventDefault();
-
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    setHasSignature(true);
+    event.preventDefault();
+    const context = canvasRef.current?.getContext('2d');
+    if (!context) return;
+    const { x, y } = getPoint(event);
+    context.lineTo(x, y);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x, y);
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    e.preventDefault();
+  const finishDrawing = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.releasePointerCapture(e.pointerId);
+    if (canvas?.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
     }
     setIsDrawing(false);
   };
 
   const clearSignature = () => {
     const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) return;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
     setHasSignature(false);
     onClear?.();
   };
 
   const saveSignature = () => {
     const canvas = canvasRef.current;
-    if (!canvas || !hasSignature) return;
-
-    const signatureData = canvas.toDataURL('image/png');
-    onSave(signatureData);
+    if (!canvas || !hasSignature || disabled) return;
+    onSave(canvas.toDataURL('image/png'));
   };
 
   return (
-    <div className={cn('space-y-3', className)}>
-      <div className="relative">
+    <div className={cn('w-full space-y-3', className)}>
+      <div className="relative w-full">
         <canvas
           ref={canvasRef}
           width={width}
           height={height}
+          aria-label="Draw your signature"
           className={cn(
-            'border-2 border-dashed rounded-lg cursor-crosshair touch-none',
-            'bg-white w-full',
-            disabled ? 'opacity-50 cursor-not-allowed' : 'border-muted-foreground/30 hover:border-primary/50'
+            'block h-auto w-full rounded-lg border-2 border-dashed bg-white touch-none',
+            disabled ? 'cursor-not-allowed opacity-50' : 'cursor-crosshair border-muted-foreground/30 hover:border-primary/50'
           )}
-          style={{ touchAction: 'none' }}
+          style={{ aspectRatio: `${width} / ${height}`, touchAction: 'none' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={() => stopDrawing()}
-          onMouseLeave={() => stopDrawing()}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={() => stopDrawing()}
+          onPointerUp={finishDrawing}
+          onPointerCancel={finishDrawing}
         />
         {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-muted-foreground text-sm">Sign here</span>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="text-sm text-muted-foreground">Sign here</span>
           </div>
         )}
-      {signerName && (
-        <p className="text-center text-sm text-muted-foreground mt-1">{signerName}</p>
-      )}
+        {signerName && <p className="mt-1 text-center text-sm text-muted-foreground">{signerName}</p>}
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={clearSignature}
-          disabled={disabled || !hasSignature}
-        >
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={clearSignature} disabled={disabled || !hasSignature}>
           Clear
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={saveSignature}
-          disabled={disabled || !hasSignature}
-        >
+        <Button type="button" size="sm" onClick={saveSignature} disabled={disabled || !hasSignature}>
           Confirm Signature
         </Button>
       </div>
