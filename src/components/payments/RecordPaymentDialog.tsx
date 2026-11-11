@@ -42,7 +42,20 @@ const PAYMENT_METHODS = [
   { value: 'check', label: 'Check' },
   { value: 'mobile_payment', label: 'Mobile Payment' },
   { value: 'other', label: 'Other' },
-];
+] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value'];
+
+function isPaymentMethod(value: string): value is PaymentMethod {
+  return PAYMENT_METHODS.some((method) => method.value === value);
+}
+
+type PaymentFormData = {
+  amount: string;
+  payment_method: PaymentMethod;
+  reference_number: string;
+  notes: string;
+  generate_receipt: boolean;
+};
 
 export function RecordPaymentDialog({
   invoiceId,
@@ -57,9 +70,9 @@ export function RecordPaymentDialog({
   const { createPayment, isCreating } = usePayments();
   const { createReceipt, isCreating: isCreatingReceipt } = useReceipts();
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PaymentFormData>({
     amount: balanceDue.toString(),
-    payment_method: 'cash' as const,
+    payment_method: 'cash',
     reference_number: '',
     notes: '',
     generate_receipt: true,
@@ -167,7 +180,11 @@ export function RecordPaymentDialog({
             <Label htmlFor="payment_method">Payment Method *</Label>
             <Select
               value={formData.payment_method}
-              onValueChange={(v: any) => setFormData({ ...formData, payment_method: v })}
+              onValueChange={(value) => {
+                if (isPaymentMethod(value)) {
+                  setFormData({ ...formData, payment_method: value });
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select method" />
