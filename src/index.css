@@ -479,3 +479,50 @@
   .document-table { font-size: 10px; }
   .document-table td, .document-table th { padding-left: 5px; padding-right: 5px; }
 }
+
+
+/* Small-screen form and data-layout safeguards */
+@media (max-width: 640px) {
+  main form [class*="grid-cols-"],
+  [role="dialog"] form [class*="grid-cols-"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  main form input,
+  main form select,
+  main form textarea,
+  [role="dialog"] form input,
+  [role="dialog"] form select,
+  [role="dialog"] form textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  main form button,
+  [role="dialog"] form button {
+    max-width: 100%;
+  }
+
+  main .data-table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  .business-document {
+    overflow-wrap: anywhere;
+  }
+}
+
+main,
+main > *,
+main form,
+[role="dialog"] form {
+  min-width: 0;
+}
+
+[role="dialog"] form > * {
+  max-width: 100%;
+}
