@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { SignaturePad } from '@/components/SignaturePad';
+import { MfaSettingsCard } from '@/components/auth/MfaSettingsCard';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, User, Pen, Save } from 'lucide-react';
@@ -219,6 +220,7 @@ export default function Profile() {
             )}
           </CardContent>
         </Card>
+        <MfaSettingsCard />
       </div>
     </AppLayout>
   );

@@ -59,6 +59,72 @@ export type Database = {
         }
         Relationships: []
       }
+      chart_of_accounts: {
+        Row: {
+          account_subtype: Database["public"]["Enums"]["account_subtype"] | null
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          current_balance: number
+          description: string | null
+          id: string
+          is_active: boolean
+          is_system: boolean
+          name: string
+          opening_balance: number
+          parent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_subtype?:
+            | Database["public"]["Enums"]["account_subtype"]
+            | null
+          account_type: Database["public"]["Enums"]["account_type"]
+          code: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          current_balance?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name: string
+          opening_balance?: number
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_subtype?:
+            | Database["public"]["Enums"]["account_subtype"]
+            | null
+          account_type?: Database["public"]["Enums"]["account_type"]
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          current_balance?: number
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_system?: boolean
+          name?: string
+          opening_balance?: number
+          parent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chart_of_accounts_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_settings: {
         Row: {
           company_address: string | null
@@ -559,6 +625,198 @@ export type Database = {
         }
         Relationships: []
       }
+      password_history: {
+        Row: {
+          created_at: string
+          id: string
+          password_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          password_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          password_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      password_policy: {
+        Row: {
+          disallow_spaces: boolean
+          history_count: number
+          id: number
+          max_requests_per_hour: number
+          min_length: number
+          otp_ttl_minutes: number
+          require_lowercase: boolean
+          require_mfa: boolean
+          require_number: boolean
+          require_special: boolean
+          require_uppercase: boolean
+          security_questions_enabled: boolean
+          token_ttl_minutes: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          disallow_spaces?: boolean
+          history_count?: number
+          id?: number
+          max_requests_per_hour?: number
+          min_length?: number
+          otp_ttl_minutes?: number
+          require_lowercase?: boolean
+          require_mfa?: boolean
+          require_number?: boolean
+          require_special?: boolean
+          require_uppercase?: boolean
+          security_questions_enabled?: boolean
+          token_ttl_minutes?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          disallow_spaces?: boolean
+          history_count?: number
+          id?: number
+          max_requests_per_hour?: number
+          min_length?: number
+          otp_ttl_minutes?: number
+          require_lowercase?: boolean
+          require_mfa?: boolean
+          require_number?: boolean
+          require_special?: boolean
+          require_uppercase?: boolean
+          security_questions_enabled?: boolean
+          token_ttl_minutes?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      password_reset_attempts: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          ip_address: string | null
+          reason: string | null
+          result: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          reason?: string | null
+          result: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          ip_address?: string | null
+          reason?: string | null
+          result?: string
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      password_reset_lockouts: {
+        Row: {
+          created_at: string
+          email: string | null
+          failure_count: number
+          id: string
+          ip_address: string | null
+          last_failure_at: string
+          locked_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          failure_count?: number
+          id?: string
+          ip_address?: string | null
+          last_failure_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          failure_count?: number
+          id?: string
+          ip_address?: string | null
+          last_failure_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      password_reset_tokens: {
+        Row: {
+          channel: string
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          mfa_attempts: number
+          mfa_method: string | null
+          mfa_required: boolean
+          mfa_verified_at: string | null
+          otp_attempts: number
+          otp_hash: string | null
+          token_hash: string
+          used_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          mfa_attempts?: number
+          mfa_method?: string | null
+          mfa_required?: boolean
+          mfa_verified_at?: string | null
+          otp_attempts?: number
+          otp_hash?: string | null
+          token_hash: string
+          used_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          mfa_attempts?: number
+          mfa_method?: string | null
+          mfa_required?: boolean
+          mfa_verified_at?: string | null
+          otp_attempts?: number
+          otp_hash?: string | null
+          token_hash?: string
+          used_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -999,6 +1257,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_mfa: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          method: string
+          phone: string | null
+          totp_confirmed: boolean
+          totp_secret: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          method?: string
+          phone?: string | null
+          totp_confirmed?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          method?: string
+          phone?: string | null
+          totp_confirmed?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           granted_at: string
@@ -1037,6 +1328,14 @@ export type Database = {
         Returns: undefined
       }
       claim_initial_admin: { Args: never; Returns: boolean }
+      clear_reset_lockout: {
+        Args: { _email: string; _ip: string }
+        Returns: undefined
+      }
+      count_recent_reset_requests: {
+        Args: { _email: string; _ip: string; _minutes?: number }
+        Returns: number
+      }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
@@ -1060,7 +1359,9 @@ export type Database = {
       has_any_role:
         | { Args: { _user_id: string }; Returns: boolean }
         | { Args: { roles: string[] }; Returns: boolean }
-      has_permission: { Args: { permission_code: string }; Returns: boolean }
+      has_permission:
+        | { Args: { permission_code: string }; Returns: boolean }
+        | { Args: { permission_code: string; target_user_id: string }; Returns: boolean }
       has_role:
         | {
             Args: {
@@ -1071,8 +1372,34 @@ export type Database = {
           }
         | { Args: { role_name: string }; Returns: boolean }
       is_first_user: { Args: never; Returns: boolean }
+      is_reset_locked: {
+        Args: { _email: string; _ip: string }
+        Returns: boolean
+      }
+      register_reset_failure: {
+        Args: {
+          _email: string
+          _ip: string
+          _lock_minutes?: number
+          _threshold?: number
+        }
+        Returns: Json
+      }
     }
     Enums: {
+      account_subtype:
+        | "current_asset"
+        | "fixed_asset"
+        | "other_asset"
+        | "current_liability"
+        | "long_term_liability"
+        | "equity"
+        | "operating_revenue"
+        | "other_revenue"
+        | "cost_of_sales"
+        | "operating_expense"
+        | "other_expense"
+      account_type: "asset" | "liability" | "equity" | "revenue" | "expense"
       app_role: "admin" | "accountant" | "cashier" | "auditor"
       audit_action:
         | "create"
@@ -1119,12 +1446,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1148,11 +1475,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1173,11 +1500,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1198,11 +1525,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1215,11 +1542,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1231,6 +1558,20 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      account_subtype: [
+        "current_asset",
+        "fixed_asset",
+        "other_asset",
+        "current_liability",
+        "long_term_liability",
+        "equity",
+        "operating_revenue",
+        "other_revenue",
+        "cost_of_sales",
+        "operating_expense",
+        "other_expense",
+      ],
+      account_type: ["asset", "liability", "equity", "revenue", "expense"],
       app_role: ["admin", "accountant", "cashier", "auditor"],
       audit_action: [
         "create",

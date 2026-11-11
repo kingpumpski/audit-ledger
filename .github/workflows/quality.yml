@@ -1,0 +1,109 @@
+name: Audit Ledger Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - integration/reconcile-six-lovable-branches
+  push:
+    branches:
+      - integration/reconcile-six-lovable-branches
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migration-validation:
+    name: Replay Supabase migrations in an isolated local database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Assign isolated database ports
+        run: |
+          # Avoid collisions with services prebound on GitHub-hosted runners.
+          cat >> supabase/config.toml <<'EOF'
+
+          [db]
+          port = 55432
+          shadow_port = 55430
+          EOF
+
+      - name: Start isolated local Supabase stack
+        run: supabase start --exclude studio,mailpit,storage-api,imgproxy,edge-runtime,logflare,vector
+
+      - name: Replay every migration from a clean database
+        run: supabase db reset
+
+      - name: Stop isolated local Supabase stack
+        if: always()
+        run: supabase stop --no-backup
+
+  quality:
+    name: Install, lint, typecheck, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: TypeScript
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Tests
+        id: tests
+        continue-on-error: true
+        run: npm test -- --reporter=dot
+
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build
+
+      - name: Verify committed lockfile is synchronized
+        id: lockfile
+        continue-on-error: true
+        run: git diff --exit-code -- package-lock.json
+
+      - name: Enforce all quality gates
+        if: always()
+        env:
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          LOCKFILE_OUTCOME: ${{ steps.lockfile.outcome }}
+        run: |
+          printf 'lint=%s\\ntypecheck=%s\\ntests=%s\\nbuild=%s\\nlockfile=%s\\n' "$LINT_OUTCOME" "$TYPECHECK_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$LOCKFILE_OUTCOME"
+          test "$LINT_OUTCOME" = success
+          test "$TYPECHECK_OUTCOME" = success
+          test "$TEST_OUTCOME" = success
+          test "$BUILD_OUTCOME" = success
+          test "$LOCKFILE_OUTCOME" = success

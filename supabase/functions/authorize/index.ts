@@ -90,8 +90,19 @@ serve(async (req) => {
 
     // Check required permission
     if (requiredPermission) {
-      const { data: hasPermission } = await supabase
-        .rpc("has_permission", { permission_code: requiredPermission });
+      const { data: hasPermission, error: permissionError } = await supabase
+        .rpc("has_permission", {
+          permission_code: requiredPermission,
+          target_user_id: user.id,
+        });
+
+      if (permissionError) {
+        console.error("Failed to verify permission:", permissionError.message);
+        return new Response(
+          JSON.stringify({ authorized: false, error: "Failed to verify permission" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       if (!hasPermission) {
         return new Response(

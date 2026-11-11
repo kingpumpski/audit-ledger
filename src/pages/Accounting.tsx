@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { format, subDays, subMonths, subWeeks, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { ChartOfAccounts } from '@/components/accounting/ChartOfAccounts';
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
 
@@ -229,6 +230,7 @@ export default function Accounting() {
 
       <Tabs defaultValue="pl" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
+          <TabsTrigger value="coa">Chart of Accounts</TabsTrigger>
           <TabsTrigger value="pl">P&L / Income Statement</TabsTrigger>
           <TabsTrigger value="balance">Balance Sheet</TabsTrigger>
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
@@ -236,6 +238,9 @@ export default function Accounting() {
           <TabsTrigger value="income-exp">Income & Expenditure</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="coa">
+          <ChartOfAccounts />
+        </TabsContent>
         {/* P&L / Income Statement */}
         <TabsContent value="pl">
           <div className="grid gap-6 lg:grid-cols-2">
