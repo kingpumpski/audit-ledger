@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useReceipts, ReceiptWithRelations } from '@/hooks/useReceipts';
 import { useSettings } from '@/hooks/useSettings';
 import { EditReceiptDialog } from '@/components/receipts/EditReceiptDialog';
-import { supabase } from '@/integrations/supabase/client';
+import { useReceiptPrint } from '@/hooks/useReceiptPrint';
 import { useQuery } from '@tanstack/react-query';
 import { 
   ArrowLeft, 
@@ -40,7 +40,7 @@ export default function ReceiptDetails() {
   const navigate = useNavigate();
   const { updateReceipt, voidReceipt, isUpdating, isVoiding } = useReceipts();
   const { settings } = useSettings();
-  const [isPrinting, setIsPrinting] = useState(false);
+  const { printReceipt, isPrinting } = useReceiptPrint();
   const [isEditing, setIsEditing] = useState(false);
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -64,29 +64,7 @@ export default function ReceiptDetails() {
     enabled: !!id,
   });
 
-  const handlePrintReceipt = async () => {
-    if (!receipt) return;
-    setIsPrinting(true);
-    try {
-      const response = await supabase.functions.invoke('generate-receipt-pdf', {
-        body: { receiptId: receipt.id },
-      });
-
-      if (response.data) {
-        const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to generate PDF:', error);
-    } finally {
-      setIsPrinting(false);
-    }
-  };
+  const handlePrintReceipt = () => printReceipt(receipt!.id);
 
   if (isLoading) {
     return (
