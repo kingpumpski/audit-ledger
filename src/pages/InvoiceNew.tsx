@@ -256,7 +256,7 @@ export default function InvoiceNew() {
         </div>
       }
     >
-      <div className={cn('grid gap-6', showPreview && 'lg:grid-cols-2')}>
+      <div className={cn('mx-auto grid w-full max-w-6xl gap-6', showPreview && 'xl:grid-cols-2')}>
         {/* Form */}
         <div className="space-y-6">
           {/* Customer & Details */}
