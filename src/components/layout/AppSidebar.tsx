@@ -64,19 +64,19 @@ const bottomNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-  const { collapsed: isCollapsed, setCollapsed: setIsCollapsed } = useSidebarState();
+  const { collapsed: isCollapsed, setCollapsed: setIsCollapsed, mobileOpen, setMobileOpen } = useSidebarState();
   const [userInteracted, setUserInteracted] = useState(false);
   const { profile, roles, signOut } = useAuth();
   const location = useLocation();
 
   // Auto-collapse sidebar after 5 seconds of inactivity
   useEffect(() => {
-    if (isCollapsed || userInteracted) return;
+    if (isCollapsed || userInteracted || mobileOpen) return;
     const timer = setTimeout(() => {
       setIsCollapsed(true);
     }, 5000);
     return () => clearTimeout(timer);
-  }, [isCollapsed, userInteracted, location.pathname, setIsCollapsed]);
+  }, [isCollapsed, userInteracted, mobileOpen, location.pathname, setIsCollapsed]);
 
   const handleToggle = () => {
     setUserInteracted(true);
@@ -107,8 +107,9 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300',
-        isCollapsed ? 'w-16' : 'w-64'
+        'fixed left-0 top-0 z-50 h-[100dvh] w-64 bg-sidebar border-r border-sidebar-border transition-all duration-300 md:z-40 md:translate-x-0',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        isCollapsed ? 'md:w-16' : 'md:w-64'
       )}
     >
       <div className="flex h-full flex-col">
@@ -127,7 +128,7 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+            className="hidden h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent md:inline-flex"
             onClick={handleToggle}
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -140,6 +141,7 @@ export function AppSidebar() {
             <NavLink
               key={item.href}
               to={item.href}
+              onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
                   'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
@@ -169,6 +171,7 @@ export function AppSidebar() {
             <NavLink
               key={item.href}
               to={item.href}
+              onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
                   'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
