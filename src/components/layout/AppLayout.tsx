@@ -22,51 +22,62 @@ interface AppLayoutProps {
 }
 
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
-  const { collapsed } = useSidebarState();
+  const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen w-full overflow-x-hidden bg-background">
       <AppSidebar />
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
-      {/* Main Content */}
       <div className={cn(
-        'transition-all duration-300',
-        collapsed ? 'ml-16' : 'ml-64'
+        'min-h-screen min-w-0 transition-[margin] duration-300',
+        'ml-0',
+        collapsed ? 'md:ml-16' : 'md:ml-64'
       )}>
-        {/* Top Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/80 backdrop-blur-sm px-6">
-          <div className="flex items-center gap-4">
+        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Open navigation menu"
+              className="shrink-0 md:hidden"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
             {title && (
-              <div>
-                <h1 className="text-xl font-display font-bold text-foreground">{title}</h1>
-                {subtitle && (
-                  <p className="text-sm text-muted-foreground">{subtitle}</p>
-                )}
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-display font-bold text-foreground sm:text-xl">{title}</h1>
+                {subtitle && <p className="hidden text-sm text-muted-foreground sm:block">{subtitle}</p>}
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Search */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             <div className="relative hidden md:block">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search..."
-                className="w-64 pl-9 bg-secondary/50 border-transparent focus:border-primary"
+                className="w-48 bg-secondary/50 pl-9 border-transparent focus:border-primary lg:w-64"
               />
             </div>
 
-            {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative">
+                <Button variant="ghost" size="icon" className="relative shrink-0" aria-label="Notifications">
                   <Bell className="h-5 w-5" />
-                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
-                    3
-                  </span>
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">3</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-1rem)]">
                 <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
@@ -82,19 +93,15 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
                   <p className="text-xs text-muted-foreground">Widget Pro is below minimum level</p>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-center text-primary justify-center">
-                  View all notifications
-                </DropdownMenuItem>
+                <DropdownMenuItem className="justify-center text-center text-primary">View all notifications</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Actions */}
-            {actions}
+            {actions && <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{actions}</div>}
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="p-6">
+        <main className="min-w-0 w-full p-3 sm:p-6">
           {children}
         </main>
       </div>
