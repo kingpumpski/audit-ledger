@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import {
   LayoutDashboard,
   FileText,
-  KeyRound,
   Receipt,
   Users,
   Package,
@@ -41,8 +40,6 @@ const navItems: NavItem[] = [
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
   { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
   { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
-  { label: 'Password Resets', href: '/admin/password-resets', icon: KeyRound, roles: ['admin', 'auditor'] },
-  { label: 'User Management', href: '/admin/users', icon: Users, roles: ['admin'] },
 ];
 
 export function AppSidebar() {
