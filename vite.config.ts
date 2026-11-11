@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          const normalizedId = id.replace(/\\\\/g, "/");
+          const normalizedId = id.replace(/\\/g, "/");
           if (/\/node_modules\/(react|react-dom|scheduler)\//.test(normalizedId)) return "react-vendor";
           if (normalizedId.includes("/node_modules/@supabase/")) return "supabase-vendor";
           if (normalizedId.includes("/node_modules/@tanstack/")) return "query-vendor";
