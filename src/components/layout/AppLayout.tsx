@@ -106,7 +106,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <div className="relative hidden w-48 md:block lg:w-64">
+            <div className="relative order-last w-full md:order-none md:w-48 lg:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="Search application features"
