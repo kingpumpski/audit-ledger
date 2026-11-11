@@ -28,7 +28,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useAdminUsers } from '@/hooks/useAdminUsers';
+import { useAdminUsers, type UserWithRoles } from '@/hooks/useAdminUsers';
 import { BulkUserCreation } from '@/components/admin/BulkUserCreation';
 import { EditUserDialog } from '@/components/admin/EditUserDialog';
 import { useQueryClient } from '@tanstack/react-query';
@@ -67,7 +67,7 @@ export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
-  const [selectedUserForEdit, setSelectedUserForEdit] = useState<any>(null);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<UserWithRoles | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const filteredUsers = users.filter(user => {
@@ -88,7 +88,7 @@ export default function AdminUsers() {
     }
   };
 
-  const handleEditUser = (user: any) => {
+  const handleEditUser = (user: UserWithRoles) => {
     setSelectedUserForEdit(user);
     setIsEditDialogOpen(true);
   };
