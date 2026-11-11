@@ -197,7 +197,7 @@ export default function Products() {
                   Add a new product or service to your catalog
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+              <div className="space-y-4 py-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Product Name *</Label>
