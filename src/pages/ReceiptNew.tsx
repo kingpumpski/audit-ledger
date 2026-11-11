@@ -148,7 +148,7 @@ export default function ReceiptNew() {
         </Button>
       }
     >
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="mx-auto w-full max-w-2xl space-y-6 pb-10">
         <Card>
           <CardHeader><CardTitle>Payment Details</CardTitle></CardHeader>
           <CardContent className="space-y-4">
