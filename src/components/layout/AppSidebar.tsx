@@ -71,12 +71,12 @@ export function AppSidebar() {
 
   // Auto-collapse sidebar after 5 seconds of inactivity
   useEffect(() => {
-    if (isCollapsed || userInteracted) return;
+    if (isCollapsed || userInteracted || mobileOpen) return;
     const timer = setTimeout(() => {
       setIsCollapsed(true);
     }, 5000);
     return () => clearTimeout(timer);
-  }, [isCollapsed, userInteracted, location.pathname, setIsCollapsed]);
+  }, [isCollapsed, userInteracted, mobileOpen, location.pathname, setIsCollapsed]);
 
   const handleToggle = () => {
     setUserInteracted(true);
