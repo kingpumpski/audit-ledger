@@ -28,7 +28,7 @@ import {
 import { useReceipts, ReceiptWithRelations } from '@/hooks/useReceipts';
 import { useSettings } from '@/hooks/useSettings';
 import { EditReceiptDialog } from '@/components/receipts/EditReceiptDialog';
-import { supabase } from '@/integrations/supabase/client';
+import { useReceiptPrint } from '@/hooks/useReceiptPrint';
 import { 
   Plus, 
   Search, 
@@ -48,6 +48,7 @@ export default function Receipts() {
   const navigate = useNavigate();
   const { receipts, isLoading, updateReceipt, voidReceipt, isUpdating, isVoiding } = useReceipts();
   const { settings } = useSettings();
+  const { printReceipt, isPrinting } = useReceiptPrint();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
@@ -69,24 +70,7 @@ export default function Receipts() {
     });
   }, [receipts, searchQuery, statusFilter, methodFilter]);
 
-  const handlePrintReceipt = async (receipt: ReceiptWithRelations) => {
-    try {
-      const response = await supabase.functions.invoke('generate-receipt-pdf', {
-        body: { receiptId: receipt.id },
-      });
-
-      if (response.data) {
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(response.data);
-          printWindow.document.close();
-          printWindow.print();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to generate PDF:', error);
-    }
-  };
+  const handlePrintReceipt = (receipt: ReceiptWithRelations) => printReceipt(receipt.id);
 
   const paymentMethodLabels: Record<string, string> = {
     cash: 'Cash',
@@ -286,7 +270,8 @@ export default function Receipts() {
                               Edit Receipt
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => handlePrintReceipt(receipt)}>
+                          <DropdownMenuItem onClick={() => handlePrintReceipt(receipt)}
+                            disabled={isPrinting}>
                             <Printer className="mr-2 h-4 w-4" />
                             Print Receipt
                           </DropdownMenuItem>
@@ -385,6 +370,7 @@ export default function Receipts() {
                   variant="outline" 
                   className="flex-1"
                   onClick={() => handlePrintReceipt(selectedReceipt)}
+                  disabled={isPrinting}
                 >
                   <Printer className="mr-2 h-4 w-4" />
                   Print
