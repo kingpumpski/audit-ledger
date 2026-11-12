@@ -1,0 +1,97 @@
+export interface TaxRule {
+  id: string;
+  name: string;
+  code: string;
+  rate: number;
+  is_compound: boolean | null;
+  applies_to_category?: string | null;
+  effective_from?: string | null;
+  effective_to?: string | null;
+}
+
+export interface LineTaxBreakdown {
+  tax_id: string;
+  name: string;
+  code: string;
+  rate: number;
+  taxable_amount: number;
+  tax_amount: number;
+}
+
+export interface LineCalculation {
+  subtotal: number;
+  discount_amount: number;
+  taxable_base: number;
+  tax_amount: number;
+  line_total: number;
+  nominal_tax_rate: number;
+  taxes: LineTaxBreakdown[];
+}
+
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+export function calculateLineAmounts(input: {
+  quantity: number;
+  unit_price: number;
+  discount_type?: 'fixed' | 'percentage';
+  discount_value?: number;
+  taxes: TaxRule[];
+  pricesIncludeTax: boolean;
+}): LineCalculation {
+  const quantity = Math.max(0, Number(input.quantity) || 0);
+  const unitPrice = Math.max(0, Number(input.unit_price) || 0);
+  const subtotal = roundMoney(quantity * unitPrice);
+  const requestedDiscount = Math.max(0, Number(input.discount_value) || 0);
+  const discount = input.discount_type === 'percentage'
+    ? subtotal * Math.min(requestedDiscount, 100) / 100
+    : Math.min(requestedDiscount, subtotal);
+  const discountAmount = roundMoney(discount);
+  const amountAfterDiscount = Math.max(0, subtotal - discountAmount);
+
+  const orderedTaxes = [...input.taxes]
+    .filter(tax => Number.isFinite(Number(tax.rate)) && Number(tax.rate) > 0)
+    .sort((a, b) => Number(Boolean(a.is_compound)) - Number(Boolean(b.is_compound)) || a.code.localeCompare(b.code));
+
+  // Non-compound taxes use the base amount. Compound taxes are calculated
+  // after the non-compound taxes and earlier compound taxes have been added.
+  let accumulatedTaxFactor = 0;
+  const taxFactors = orderedTaxes.map(tax => {
+    const taxableFactor = tax.is_compound ? 1 + accumulatedTaxFactor : 1;
+    const taxFactor = taxableFactor * Number(tax.rate) / 100;
+    accumulatedTaxFactor += taxFactor;
+    return { tax, taxableFactor, taxFactor };
+  });
+  const totalTaxFactor = taxFactors.reduce((sum, item) => sum + item.taxFactor, 0);
+  const taxableBase = input.pricesIncludeTax
+    ? (totalTaxFactor > 0 ? amountAfterDiscount / (1 + totalTaxFactor) : amountAfterDiscount)
+    : amountAfterDiscount;
+
+  const taxes = taxFactors.map(({ tax, taxableFactor, taxFactor }) => ({
+    tax_id: tax.id,
+    name: tax.name,
+    code: tax.code,
+    rate: Number(tax.rate),
+    taxable_amount: roundMoney(taxableBase * taxableFactor),
+    tax_amount: roundMoney(taxableBase * taxFactor),
+  }));
+  const taxAmount = roundMoney(taxes.reduce((sum, tax) => sum + tax.tax_amount, 0));
+  const lineTotal = input.pricesIncludeTax
+    ? amountAfterDiscount
+    : roundMoney(amountAfterDiscount + taxAmount);
+
+  return {
+    subtotal,
+    discount_amount: discountAmount,
+    taxable_base: roundMoney(taxableBase),
+    tax_amount: taxAmount,
+    line_total: roundMoney(lineTotal),
+    nominal_tax_rate: roundMoney(orderedTaxes.reduce((sum, tax) => sum + Number(tax.rate), 0)),
+    taxes,
+  };
+}
+
+export function isTaxEffectiveOnDate(tax: TaxRule, date: string): boolean {
+  if (tax.effective_from && tax.effective_from > date) return false;
+  if (tax.effective_to && tax.effective_to < date) return false;
+  return true;
+}
