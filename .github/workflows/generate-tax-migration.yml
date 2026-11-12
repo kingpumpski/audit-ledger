@@ -1,0 +1,59 @@
+name: Generate invoice tax RLS migration
+
+on:
+  push:
+    branches:
+      - feat/configured-tax-calculation-and-receipt-breakdown
+
+permissions:
+  contents: write
+
+jobs:
+  generate-migration:
+    if: github.event.head_commit.message != 'chore(db): generate invoice tax cashier policy migration'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.113.0
+
+      - name: Generate migration filename with Supabase CLI
+        run: supabase migration new allow_cashier_invoice_tax_insert
+
+      - name: Write least-privilege insert policy
+        shell: bash
+        run: |
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_allow_cashier_invoice_tax_insert.sql' | sort | tail -n 1)"
+          test -n "$migration_file"
+          cat > "$migration_file" <<'SQL'
+          -- Cashiers may create the tax snapshots that accompany invoices they are allowed to create.
+          -- Admin/accountant management privileges remain governed by the existing ALL policy.
+          CREATE POLICY "Authenticated admins accountants and cashiers can create invoice taxes"
+          ON public.invoice_taxes
+          FOR INSERT
+          TO authenticated
+          WITH CHECK (
+            has_role((SELECT auth.uid()), 'admin'::app_role)
+            OR has_role((SELECT auth.uid()), 'accountant'::app_role)
+            OR has_role((SELECT auth.uid()), 'cashier'::app_role)
+          );
+          SQL
+          echo "GENERATED_MIGRATION=$migration_file" >> "$GITHUB_ENV"
+
+      - name: Remove temporary generator workflow
+        run: rm .github/workflows/generate-tax-migration.yml
+
+      - name: Commit generated migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$GENERATED_MIGRATION" .github/workflows/generate-tax-migration.yml
+          git commit -m "chore(db): generate invoice tax cashier policy migration"
+          git push origin "HEAD:${{ github.ref_name }}"
