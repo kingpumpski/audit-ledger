@@ -267,6 +267,22 @@ export default function ReceiptNew() {
                 <span className="font-medium">{selectedInvoice.invoice_number}</span>
               </div>
             )}
+            <div className="mb-4 flex items-end justify-between gap-4 border-t pt-4">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Authorized by</p>
+                <p className="font-medium">{authProfile?.full_name || profile?.full_name || 'Authorized Signatory'}</p>
+                <p className="text-xs text-muted-foreground">Digital signature</p>
+              </div>
+              {hasSignature ? (
+                <img
+                  src={signatureData}
+                  alt="Receipt authorization signature"
+                  className="max-h-16 max-w-[180px] object-contain"
+                />
+              ) : (
+                <p className="text-xs text-warning">Signature required</p>
+              )}
+            </div>
             {!hasSignature && (
               <p className="text-sm text-warning mb-3 flex items-center gap-1">
                 <AlertTriangle className="h-4 w-4" /> A digital signature is required to issue a receipt.
