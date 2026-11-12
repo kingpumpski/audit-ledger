@@ -63,13 +63,30 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, [isLoading]);
 
-  // Calculate real statistics
+  // Calculate period-consistent statistics. The revenue trend compares the
+  // current month's paid invoice value with the immediately preceding month.
   const stats = useMemo(() => {
-    const totalRevenue = invoices
-      .filter(inv => inv.status === 'paid')
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+    const now = new Date();
+    const currentMonthStart = startOfMonth(now);
+    const currentMonthEnd = endOfMonth(now);
+    const lastMonth = subMonths(now, 1);
+    const lastMonthStart = startOfMonth(lastMonth);
+    const lastMonthEnd = endOfMonth(lastMonth);
 
-    const totalReceived = receipts.reduce((sum, r) => sum + (r.amount || 0), 0);
+    const paidInvoicesInPeriod = (start: Date, end: Date) =>
+      invoices
+        .filter(inv => {
+          if (inv.status !== 'paid' || !inv.created_at) return false;
+          const date = parseISO(inv.created_at);
+          return isWithinInterval(date, { start, end });
+        })
+        .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+
+    const totalRevenue = paidInvoicesInPeriod(currentMonthStart, currentMonthEnd);
+    const lastMonthRevenue = paidInvoicesInPeriod(lastMonthStart, lastMonthEnd);
+    const totalReceived = receipts
+      .filter(receipt => receipt.status === 'issued')
+      .reduce((sum, receipt) => sum + (receipt.amount || 0), 0);
 
     const pendingPayments = invoices
       .filter(inv => ['issued', 'partially_paid'].includes(inv.status))
@@ -80,28 +97,15 @@ export default function Dashboard() {
 
     const activeCustomers = customers.filter(c => c.is_active).length;
 
-    const lowStockProducts = products.filter(p => 
-      p.stock_quantity !== null && 
-      p.min_stock_level !== null && 
+    const lowStockProducts = products.filter(p =>
+      p.stock_quantity !== null &&
+      p.min_stock_level !== null &&
       p.stock_quantity <= p.min_stock_level
     ).length;
 
-    // Get last month stats for comparison
-    const lastMonth = subMonths(new Date(), 1);
-    const lastMonthStart = startOfMonth(lastMonth);
-    const lastMonthEnd = endOfMonth(lastMonth);
-    
-    const lastMonthRevenue = invoices
-      .filter(inv => {
-        if (inv.status !== 'paid' || !inv.created_at) return false;
-        const date = parseISO(inv.created_at);
-        return isWithinInterval(date, { start: lastMonthStart, end: lastMonthEnd });
-      })
-      .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-    const revenueChange = lastMonthRevenue > 0 
+    const revenueChange = lastMonthRevenue > 0
       ? ((totalRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
-      : totalRevenue > 0 ? '100' : '0';
+      : totalRevenue > 0 ? 'New' : '0';
 
     return {
       totalRevenue,
@@ -112,7 +116,7 @@ export default function Dashboard() {
       activeCustomers,
       lowStockProducts,
       totalInvoices: invoices.length,
-      totalReceipts: receipts.length,
+      totalReceipts: receipts.filter(receipt => receipt.status === 'issued').length,
       revenueChange,
     };
   }, [invoices, receipts, customers, products]);
@@ -138,7 +142,7 @@ export default function Dashboard() {
       if (month) month.invoiced += invoice.total_amount || 0;
     }
     for (const receipt of receipts) {
-      if (!receipt.created_at) continue;
+      if (receipt.status !== 'issued' || !receipt.created_at) continue;
       const month = monthByKey.get(format(parseISO(receipt.created_at), 'yyyy-MM'));
       if (month) month.received += receipt.amount || 0;
     }
@@ -197,12 +201,12 @@ export default function Dashboard() {
 
   const statsCards = [
     {
-      title: 'Total Revenue',
+      title: 'Revenue This Month',
       value: `${currencySymbol}${stats.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       change: `${parseFloat(stats.revenueChange) >= 0 ? '+' : ''}${stats.revenueChange}%`,
-      trend: parseFloat(stats.revenueChange) >= 0 ? 'up' : 'down',
+      trend: stats.revenueChange === 'New' || parseFloat(stats.revenueChange) >= 0 ? 'up' : 'down',
       icon: DollarSign,
-      description: 'from paid invoices',
+      description: 'paid invoices · vs last month',
       gradient: 'from-primary to-info',
     },
     {
