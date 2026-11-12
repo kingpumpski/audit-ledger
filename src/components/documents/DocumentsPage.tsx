@@ -13,6 +13,7 @@ import { BusinessDocument } from './BusinessDocument';
 import { type BusinessDocument as DocumentData, type Company, type Customer, money, documentDate } from '@/lib/business-document';
 import { createDocumentPdf } from '@/lib/document-pdf';
 import { toast } from 'sonner';
+import { logDocumentEvent } from '@/lib/document-audit';
 type Invoice = Database['public']['Tables']['invoices']['Row'] & { customers: Customer | null };
 type ReceiptRow = Database['public']['Tables']['receipts']['Row'] & { customers: Customer | null };
 export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
@@ -24,6 +25,7 @@ export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
   const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState<DocumentData | null>(null);
   const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const params = useParams();
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -58,14 +60,15 @@ export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
         paymentMethod: isInvoice ? undefined : row.payment_method, issuer: isInvoice ? undefined : row.issuer_name,
         signature: isInvoice ? null : row.signature_data, checksum: row.checksum,
       };
-      setSelected(d);
+      setSelected(d); setSelectedId(row.id);
+      void logDocumentEvent(kind, row.id, d.number, 'preview');
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Unable to open document'); }
     finally { setBusy(false); }
   };
   const download = async () => {
     if (!selected) return;
     setBusy(true);
-    try { (await createDocumentPdf(selected)).save(`${selected.number.replace(/[^\w.-]/g, '_')}.pdf`); }
+    try { (await createDocumentPdf(selected)).save(`${selected.number.replace(/[^\w.-]/g, '_')}.pdf`); if (selectedId) void logDocumentEvent(selected.kind, selectedId, selected.number, 'download'); }
     catch (e) { toast.error(e instanceof Error ? e.message : 'Unable to export PDF'); }
     finally { setBusy(false); }
   };
