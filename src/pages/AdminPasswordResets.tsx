@@ -229,7 +229,7 @@ export default function AdminPasswordResets() {
                     <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }} />
                     <Legend />
                     <Bar dataKey="requests" stackId="a" fill="hsl(var(--primary))" />
-                    <Bar dataKey="completed" stackId="a" fill="hsl(var(--accent))" />
+                    <Bar dataKey="completed" stackId="a" fill="hsl(var(--success))" />
                     <Bar dataKey="failed" stackId="a" fill="hsl(var(--destructive))" />
                   </BarChart>
                 </ResponsiveContainer>
