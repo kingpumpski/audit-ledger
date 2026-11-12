@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,10 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireRoles(req, ["admin", "accountant"], { allowService: true });
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -115,7 +120,7 @@ serve(async (req) => {
           </div>
           
           <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <p style="font-size: 16px;">Dear ${invoice.customer.name},</p>
+            <p style="font-size: 16px;">Dear ${escapeHtml(invoice.customer.name)},</p>
             
             <p>This is a friendly reminder that your invoice is now <strong style="color: #ef4444;">${daysOverdue} days overdue</strong>.</p>
             
@@ -123,7 +128,7 @@ serve(async (req) => {
               <table style="width: 100%;">
                 <tr>
                   <td><strong>Invoice Number:</strong></td>
-                  <td style="text-align: right;">${invoice.invoice_number}</td>
+                  <td style="text-align: right;">${escapeHtml(invoice.invoice_number)}</td>
                 </tr>
                 <tr>
                   <td><strong>Original Due Date:</strong></td>
@@ -144,12 +149,12 @@ serve(async (req) => {
             
             <p>If you have already made this payment, please disregard this notice. If you have any questions or need to discuss payment arrangements, please contact us.</p>
             
-            <p style="margin-top: 30px;">Best regards,<br><strong>${companyName}</strong></p>
+            <p style="margin-top: 30px;">Best regards,<br><strong>${escapeHtml(companyName)}</strong></p>
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 12px;">
-            <p>This is an automated payment reminder from ${companyName}.</p>
-            <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+            <p>This is an automated payment reminder from ${escapeHtml(companyName)}.</p>
+            <p>&copy; ${new Date().getFullYear()} ${escapeHtml(companyName)}. All rights reserved.</p>
           </div>
         </body>
         </html>
@@ -163,7 +168,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: `${companyName} <notifications@resend.dev>`,
+            from: `${String(companyName).replace(/[<>"\r\n]/g, "")} <notifications@resend.dev>`,
             to: [invoice.customer.email],
             subject: `Payment Reminder: Invoice ${invoice.invoice_number} is ${daysOverdue} days overdue`,
             html: emailHtml,

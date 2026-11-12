@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +25,10 @@ serve(async (req) => {
       );
     }
 
+    const auth = await requireRoles(req, ["admin", "accountant", "cashier"], { allowService: true });
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -33,7 +38,7 @@ serve(async (req) => {
     const { invoiceId }: InvoiceEmailRequest = await req.json();
 
     // Fetch invoice with customer details
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: rawInvoice, error: invoiceError } = await supabase
       .from("invoices")
       .select(`
         *,
@@ -43,7 +48,7 @@ serve(async (req) => {
       .eq("id", invoiceId)
       .single();
 
-    if (invoiceError || !invoice) {
+    if (invoiceError || !rawInvoice) {
       return new Response(
         JSON.stringify({ error: "Invoice not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -51,12 +56,14 @@ serve(async (req) => {
     }
 
     // Fetch company settings
-    const { data: settings } = await supabase
+    const { data: rawSettings } = await supabase
       .from("company_settings")
       .select("*")
       .limit(1)
       .single();
 
+    const invoice = escapeDeep(rawInvoice);
+    const settings = escapeDeep(rawSettings);
     // Check if email notifications are enabled
     if (settings && !settings.notify_on_invoice_issued) {
       return new Response(
@@ -88,8 +95,8 @@ serve(async (req) => {
     
     // Use company email if verified domain exists, otherwise use Resend's test domain
     const fromEmail = settings?.company_email && settings.company_email.includes("@") 
-      ? `${companyName} <${settings.company_email}>`
-      : `${companyName} <onboarding@resend.dev>`;
+      ? `${(rawSettings?.company_name || "InvoiceHub").replace(/[<>"\r\n]/g, "")} <${rawSettings!.company_email}>`
+      : `${(rawSettings?.company_name || "InvoiceHub").replace(/[<>"\r\n]/g, "")} <onboarding@resend.dev>`;
 
     // Generate PDF HTML for attachment
     const itemsHtml = invoice.items
@@ -322,7 +329,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: fromEmail,
-        to: [invoice.customer.email],
+        to: [rawInvoice.customer.email],
         subject: `Invoice ${invoice.invoice_number} from ${companyName}`,
         html: emailHtml,
         attachments: [
