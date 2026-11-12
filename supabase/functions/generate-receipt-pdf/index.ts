@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,10 +41,14 @@ serve(async (req) => {
       );
     }
 
+    const auth = await requireRoles(req, ["admin", "accountant", "cashier", "auditor"]);
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const { receiptId }: ReceiptData = await req.json();
 
     // Fetch receipt with related data
-    const { data: receipt, error: receiptError } = await supabase
+    const { data: rawReceipt, error: receiptError } = await supabase
       .from("receipts")
       .select(`
         *,
@@ -54,13 +59,14 @@ serve(async (req) => {
       .eq("id", receiptId)
       .single();
 
-    if (receiptError || !receipt) {
+    if (receiptError || !rawReceipt) {
       return new Response(
         JSON.stringify({ error: "Receipt not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const receipt = escapeDeep(rawReceipt);
     // Generate PDF HTML content
     const pdfHtml = `
 <!DOCTYPE html>

@@ -1359,9 +1359,7 @@ export type Database = {
       has_any_role:
         | { Args: { _user_id: string }; Returns: boolean }
         | { Args: { roles: string[] }; Returns: boolean }
-      has_permission:
-        | { Args: { permission_code: string }; Returns: boolean }
-        | { Args: { permission_code: string; target_user_id: string }; Returns: boolean }
+      has_permission: { Args: { permission_code: string }; Returns: boolean }
       has_role:
         | {
             Args: {
@@ -1384,6 +1382,10 @@ export type Database = {
           _threshold?: number
         }
         Returns: Json
+      }
+      verify_cron_token: {
+        Args: { _name: string; _token: string }
+        Returns: boolean
       }
     }
     Enums: {

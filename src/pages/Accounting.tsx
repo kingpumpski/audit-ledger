@@ -1,3 +1,4 @@
+import { csvCell } from '@/lib/reset-monitoring';
 import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -164,7 +165,7 @@ export default function Accounting() {
     if (type === 'pl') {
       csv = `Income Statement\nRevenue,${financials.totalRevenue}\nCost of Goods,${financials.costOfGoods}\nGross Profit,${financials.grossProfit}\nOperating Expenses,${financials.operatingExpenses}\nNet Profit,${financials.netProfit}`;
     } else if (type === 'petty') {
-      csv = `Date,Description,Type,Amount,Category\n` + pettyCash.map(p => `${p.date},${p.description},${p.type},${p.amount},${p.category || ''}`).join('\n');
+      csv = `Date,Description,Type,Amount,Category\n` + pettyCash.map(p => [p.date, p.description, p.type, p.amount, p.category || ''].map(csvCell).join(',')).join('\n');
     }
     const blob = new Blob([csv], { type: 'text/csv' });
     const link = document.createElement('a');

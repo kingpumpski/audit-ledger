@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794474625844,
+      "tag": "0000_security_hardening_roles_rpc_policies",
+      "breakpoints": true
+    }
+  ]
+}

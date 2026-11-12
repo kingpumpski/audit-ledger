@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,12 +22,9 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const auth = await requireRoles(req, ["admin", "accountant", "cashier"], { allowService: true });
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -35,7 +33,14 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { type, recipientEmail, recipientPhone, data, channels, userId }: NotificationRequest = await req.json();
+    const { type, recipientEmail, recipientPhone, data: rawData, channels, userId }: NotificationRequest = await req.json();
+    const data = escapeDeep(rawData ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(channels)) {
+      return new Response(JSON.stringify({ error: "Invalid channels" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (recipientPhone && !/^\+[1-9]\d{7,14}$/.test(recipientPhone)) {
+      return new Response(JSON.stringify({ error: "Invalid phone number" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const results: Record<string, unknown> = {};
 
@@ -166,7 +171,7 @@ serve(async (req) => {
           title: template.title,
           message: template.message,
           type: type,
-          link: data.link as string || null,
+          link: (typeof rawData?.link === "string" && rawData.link.startsWith("/")) ? rawData.link : null,
         })
         .select()
         .single();

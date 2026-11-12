@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,10 @@ serve(async (req) => {
   }
 
   try {
+    const auth = await requireRoles(req, ["admin", "accountant", "cashier", "auditor"]);
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -24,7 +29,7 @@ serve(async (req) => {
     const { invoiceId, returnHtml = false }: InvoicePdfRequest = await req.json();
 
     // Fetch invoice with all related data
-    const { data: invoice, error: invoiceError } = await supabase
+    const { data: rawInvoice, error: invoiceError } = await supabase
       .from("invoices")
       .select(`
         *,
@@ -35,7 +40,7 @@ serve(async (req) => {
       .eq("id", invoiceId)
       .single();
 
-    if (invoiceError || !invoice) {
+    if (invoiceError || !rawInvoice) {
       return new Response(
         JSON.stringify({ error: "Invoice not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -43,12 +48,14 @@ serve(async (req) => {
     }
 
     // Fetch company settings
-    const { data: settings } = await supabase
+    const { data: rawSettings } = await supabase
       .from("company_settings")
       .select("*")
       .limit(1)
       .single();
 
+    const invoice = escapeDeep(rawInvoice);
+    const settings = escapeDeep(rawSettings);
     const companyName = settings?.company_name || "InvoiceHub";
     const currencySymbol = settings?.currency_symbol || "$";
     const companyLogo = settings?.company_logo_url || null;

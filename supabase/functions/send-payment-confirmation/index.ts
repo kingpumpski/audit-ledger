@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +25,10 @@ serve(async (req) => {
       );
     }
 
+    const auth = await requireRoles(req, ["admin", "accountant", "cashier"], { allowService: true });
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
       console.log("RESEND_API_KEY not configured, skipping email");
@@ -44,7 +49,7 @@ serve(async (req) => {
     }
 
     // Fetch payment with related data
-    const { data: payment, error: paymentError } = await supabase
+    const { data: rawPayment, error: paymentError } = await supabase
       .from("payments")
       .select(`
         *,
@@ -54,16 +59,19 @@ serve(async (req) => {
       .eq("id", paymentId)
       .single();
 
-    if (paymentError || !payment) {
-      throw new Error(`Payment not found: ${paymentError?.message}`);
+    if (paymentError || !rawPayment) {
+      console.error("Payment lookup failed", paymentError);
+      throw new Error("Payment not found");
     }
 
     // Fetch company settings
-    const { data: settings } = await supabase
+    const { data: rawSettings } = await supabase
       .from("company_settings")
       .select("*")
       .single();
 
+    const payment = escapeDeep(rawPayment);
+    const settings = escapeDeep(rawSettings);
     // Check if payment confirmation emails are enabled
     if (settings && !settings.notify_on_payment_received) {
       return new Response(
@@ -85,7 +93,7 @@ serve(async (req) => {
     const currencySymbol = settings?.currency_symbol || "$";
     const logoUrl = settings?.company_logo_url || "";
 
-    const customerEmail = payment.customer?.email;
+    const customerEmail = rawPayment.customer?.email;
     const customerName = payment.customer?.name || "Valued Customer";
 
     if (!customerEmail) {
