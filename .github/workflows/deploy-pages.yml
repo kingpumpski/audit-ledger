@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # These are public client settings; never put a service-role key here.
-      VITE_SUPABASE_PROJECT_ID: phfpbqlhxagonpofzvtn
-      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_QpziCdEvB4Kw1iuedjiqvw_6c8vL8n7
-      VITE_SUPABASE_URL: https://phfpbqlhxagonpofzvtn.supabase.co
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
