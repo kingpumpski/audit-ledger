@@ -286,14 +286,14 @@ export default function Inventory() {
 
       {/* Adjust Stock Dialog */}
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
-        <DialogContent>
+        <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Adjust Stock - {selectedProduct?.name}</DialogTitle>
             <DialogDescription>
               Current stock: {selectedProduct?.stock_quantity ?? 0} units
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-4 pr-2">
             <div className="space-y-2">
               <Label>Transaction Type</Label>
               <Select value={adjustForm.type} onValueChange={v => setAdjustForm({ ...adjustForm, type: v })}>
@@ -325,7 +325,7 @@ export default function Inventory() {
                 rows={2}
               />
             </div>
-            <div className="flex justify-end gap-3">
+            <div className="sticky bottom-0 z-10 flex shrink-0 justify-end gap-3 border-t bg-background pt-4">
               <Button variant="outline" onClick={() => setIsAdjustOpen(false)}>Cancel</Button>
               <Button onClick={() => recordAdjustment.mutate()} disabled={recordAdjustment.isPending || adjustForm.quantity <= 0}>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

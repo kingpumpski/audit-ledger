@@ -1,5 +1,3 @@
-import { supabase } from '@/integrations/supabase/client';
-
 export type DocumentAuditEvent = 'preview' | 'download';
 
 /** Map a document event to the stored audit action. */
@@ -10,6 +8,8 @@ export function documentAuditAction(event: DocumentAuditEvent) {
 /** Record an invoice/receipt preview or PDF download in the audit trail. Never throws. */
 export async function logDocumentEvent(kind: 'invoice' | 'receipt', id: string, number: string, event: DocumentAuditEvent) {
   try {
+    // Load the client only when an event is actually logged; pure helpers remain testable without app env.
+    const { supabase } = await import('@/integrations/supabase/client');
     const { data } = await supabase.auth.getUser();
     const user = data.user;
     if (!user) return;

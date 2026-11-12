@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "env:pull": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/pull-dev-env.ps1",
+    "dev:configured": "npm run env:pull && vite"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

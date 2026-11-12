@@ -1,4 +1,4 @@
-project_id = "ktlywndiwowgyftiwcqd"
+project_id = "phfpbqlhxagonpofzvtn"
 
 [functions.send-invoice-email]
 verify_jwt = false
@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.generate-receipt-pdf]
-verify_jwt = false
+verify_jwt = true
 
 [functions.check-overdue-invoices]
 verify_jwt = false

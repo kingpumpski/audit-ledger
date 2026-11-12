@@ -71,3 +71,18 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+
+## Supabase environment configuration
+
+GitHub Actions uses the repository Actions variables `VITE_SUPABASE_PROJECT_ID`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_PUBLISHABLE_KEY` for the production Pages build.
+
+For local Windows development, create separate development-scoped repository variables named `DEV_VITE_SUPABASE_PROJECT_ID`, `DEV_VITE_SUPABASE_URL`, and `DEV_VITE_SUPABASE_PUBLISHABLE_KEY`. Authenticate GitHub CLI with repository read access, then run:
+
+```powershell
+gh auth login
+npm run env:pull
+npm run dev
+```
+
+The helper writes only the development values to the ignored `.env.local` file and refuses to use the configured production project ref. Never put a Supabase service-role or secret key in a `VITE_*` variable.
