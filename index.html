@@ -16,6 +16,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Restore deep links redirected through GitHub Pages' 404.html fallback.
+      const redirectParams = new URLSearchParams(window.location.search);
+      const redirectPath = redirectParams.get("p");
+      if (redirectPath !== null) {
+        const redirectQuery = redirectParams.get("q");
+        const restoredUrl = "%BASE_URL%" + redirectPath
+          + (redirectQuery ? "?" + redirectQuery : "")
+          + window.location.hash;
+        window.history.replaceState(null, "", restoredUrl);
+      }
+    </script>
     <script type="module" src="src/main.tsx"></script>
   </body>
 </html>
