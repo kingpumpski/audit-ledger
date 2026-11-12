@@ -71,6 +71,13 @@ jobs:
             throw new Error('Production HTML still references the raw TypeScript entry point.');
           }
 
+          if (html.includes('%BASE_URL%')) {
+            throw new Error('Production HTML contains an unresolved %BASE_URL% placeholder.');
+          }
+          if (!existsSync('dist/favicon.ico')) {
+            throw new Error('The production favicon is missing from the Pages artifact.');
+          }
+
           const scripts = [...html.matchAll(/<script[^>]+src="([^"]+\.js)"/g)];
           if (scripts.length === 0) {
             throw new Error('No compiled JavaScript module entry was found in dist/index.html.');
