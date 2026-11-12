@@ -203,7 +203,6 @@ export default function InvoiceNew() {
         issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         prices_include_tax: pricesIncludeTax,
-        prices_include_tax: pricesIncludeTax,
         notes,
         terms,
         items: items.map(item => ({
