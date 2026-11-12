@@ -41,7 +41,7 @@ export function getSupabaseConfig(config: SupabasePublicConfig): ValidatedSupaba
   }
 
   if (publishableKey.startsWith('sb_secret_')) {
-    throw new Error('A Supabase secret key was supplied to the browser client. Use the project's publishable key; never expose secret or service-role credentials in VITE_* variables.');
+    throw new Error("A Supabase secret key was supplied to the browser client. Use the project publishable key; never expose secret or service-role credentials in VITE_* variables.");
   }
 
   return { url: parsedUrl.toString().replace(/\/$/, ''), publishableKey };
