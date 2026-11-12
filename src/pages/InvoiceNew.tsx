@@ -14,6 +14,7 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Popover,
   PopoverContent,
@@ -56,12 +57,15 @@ export default function InvoiceNew() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { createInvoice, issueInvoice, isCreating, isIssuing } = useInvoices();
-  const { customers, isLoading: customersLoading } = useCustomers();
+  const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
   const { products, isLoading: productsLoading } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
+  const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
+  const [issueDate, setIssueDate] = useState<Date>(new Date());
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('Payment due within 30 days.');
@@ -148,6 +152,24 @@ export default function InvoiceNew() {
 
   const selectedCustomer = customers.find(c => c.id === customerId);
 
+  const handleCreateCustomer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newCustomer.name.trim()) return;
+    try {
+      const customer = await createCustomer({
+        name: newCustomer.name.trim(),
+        email: newCustomer.email.trim() || null,
+        phone: newCustomer.phone.trim() || null,
+      });
+      setCustomerId(customer.id);
+      setNewCustomer({ name: '', email: '', phone: '' });
+      setIsCustomerDialogOpen(false);
+      toast({ title: 'Customer added', description: 'The new customer has been selected for this invoice.' });
+    } catch (error) {
+      console.error('Failed to create customer from invoice:', error);
+    }
+  };
+
   const handleSubmit = async (asDraft: boolean = true) => {
     if (!customerId || items.length === 0) {
       toast({
@@ -172,6 +194,7 @@ export default function InvoiceNew() {
     try {
       const invoice = await createInvoice({
         customer_id: customerId,
+        issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         notes,
         terms,
@@ -256,6 +279,17 @@ export default function InvoiceNew() {
         </div>
       }
     >
+      <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add a customer</DialogTitle><DialogDescription>Create the missing customer and return to this invoice automatically.</DialogDescription></DialogHeader>
+          <form onSubmit={handleCreateCustomer} className="space-y-4">
+            <div className="space-y-2"><Label>Customer name *</Label><Input autoFocus value={newCustomer.name} onChange={e => setNewCustomer(v => ({ ...v, name: e.target.value }))} required /></div>
+            <div className="space-y-2"><Label>Email</Label><Input type="email" value={newCustomer.email} onChange={e => setNewCustomer(v => ({ ...v, email: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Phone</Label><Input value={newCustomer.phone} onChange={e => setNewCustomer(v => ({ ...v, phone: e.target.value }))} /></div>
+            <DialogFooter><Button type="button" variant="outline" onClick={() => setIsCustomerDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={isCreatingCustomer || !newCustomer.name.trim()}>{isCreatingCustomer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create and select</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <div className={cn('mx-auto grid w-full max-w-6xl gap-6', showPreview && 'xl:grid-cols-2')}>
         {/* Form */}
         <div className="space-y-6">
@@ -265,10 +299,15 @@ export default function InvoiceNew() {
               <CardTitle>Invoice Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Invoice Date *</Label>
+                  <Input type="date" value={format(issueDate, 'yyyy-MM-dd')} onChange={e => { const value = e.target.value; if (value) setIssueDate(new Date(`${value}T12:00:00`)); }} />
+                  <p className="text-xs text-muted-foreground">You can record invoices for previous accounting periods.</p>
+                </div>
                 <div className="space-y-2">
                   <Label>Customer *</Label>
-                  <Select value={customerId} onValueChange={setCustomerId}>
+                  <Select value={customerId} onValueChange={(value) => value === '__add_customer__' ? setIsCustomerDialogOpen(true) : setCustomerId(value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select customer" />
                     </SelectTrigger>
@@ -278,8 +317,12 @@ export default function InvoiceNew() {
                           {customer.name} ({customer.code})
                         </SelectItem>
                       ))}
+                      <SelectItem value="__add_customer__">+ Add new customer…</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button type="button" variant="link" className="h-auto p-0" onClick={() => setIsCustomerDialogOpen(true)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />Add customer if not listed
+                  </Button>
                 </div>
 
                 <div className="space-y-2">
@@ -296,8 +339,7 @@ export default function InvoiceNew() {
                         mode="single"
                         selected={dueDate}
                         onSelect={(date) => date && setDueDate(date)}
-                        disabled={(date) => date < new Date()}
-                      />
+                         />
                     </PopoverContent>
                   </Popover>
                 </div>
