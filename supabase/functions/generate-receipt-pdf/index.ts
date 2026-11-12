@@ -114,12 +114,15 @@ function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyNa
     <td style="text-align:right">${currencySymbol} ${formatAmount(tax.taxable_amount)}</td>
     <td style="text-align:right">${currencySymbol} ${formatAmount(tax.tax_amount)}</td>
   </tr>`).join("") || "";
+  const taxIsIncludedInSubtotal = Boolean(invoice &&
+    Number(invoice.tax_amount || 0) > 0 &&
+    Math.abs(Number(invoice.total_amount || 0) - (Number(invoice.subtotal || 0) - Number(invoice.discount_amount || 0))) < 0.02);
   const invoiceSummaryHtml = invoice ? `
     <table class="summary-table">
       <tbody>
-        <tr><td>Subtotal</td><td>${currencySymbol} ${formatAmount(invoice.subtotal || 0)}</td></tr>
+        <tr><td>${taxIsIncludedInSubtotal ? "Subtotal (tax-inclusive)" : "Subtotal"}</td><td>${currencySymbol} ${formatAmount(invoice.subtotal || 0)}</td></tr>
         <tr><td>Discount</td><td>− ${currencySymbol} ${formatAmount(invoice.discount_amount || 0)}</td></tr>
-        <tr><td>Total taxes</td><td>${currencySymbol} ${formatAmount(invoice.tax_amount || 0)}</td></tr>
+        <tr><td>${taxIsIncludedInSubtotal ? "Tax included in subtotal" : "Total taxes added"}</td><td>${currencySymbol} ${formatAmount(invoice.tax_amount || 0)}</td></tr>
         <tr class="summary-total"><td>Invoice total</td><td>${currencySymbol} ${formatAmount(invoice.total_amount || 0)}</td></tr>
         <tr><td>Received on this receipt</td><td>${currencySymbol} ${amount}</td></tr>
         <tr><td>Paid to date</td><td>${currencySymbol} ${formatAmount(invoice.amount_paid || 0)}</td></tr>
