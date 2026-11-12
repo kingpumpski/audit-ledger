@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  pages: read
 
 concurrency:
   group: github-pages-${{ github.ref }}
@@ -59,11 +60,74 @@ jobs:
       - name: Build production site
         run: npm run build
 
-      - name: Add SPA route fallback
-        run: cp dist/index.html dist/404.html
+      - name: Verify Pages contains compiled JavaScript entry points
+        run: |
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          import { resolve } from 'node:path';
+
+          const html = readFileSync('dist/index.html', 'utf8');
+          if (html.includes('src/main.tsx') || html.includes('src/main.ts')) {
+            throw new Error('Production HTML still references the raw TypeScript entry point.');
+          }
+
+          if (html.includes('%BASE_URL%')) {
+            throw new Error('Production HTML contains an unresolved %BASE_URL% placeholder.');
+          }
+          if (!existsSync('dist/favicon.ico')) {
+            throw new Error('The production favicon is missing from the Pages artifact.');
+          }
+
+          const scripts = [...html.matchAll(/<script[^>]+src="([^"]+\.js)"/g)];
+          if (scripts.length === 0) {
+            throw new Error('No compiled JavaScript module entry was found in dist/index.html.');
+          }
+
+          for (const [, src] of scripts) {
+            const relativePath = src.replace(/^\/audit-ledger\//, '');
+            if (!existsSync(resolve('dist', relativePath))) {
+              throw new Error(`Compiled module referenced by HTML is missing: ${src}`);
+            }
+          }
+
+          writeFileSync('dist/.nojekyll', '');
+          console.log(`Verified ${scripts.length} compiled module entry point(s).`);
+          NODE
+
+      - name: Add GitHub Pages deep-link fallback
+        run: |
+          cat > dist/404.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body>
+              <script>
+                const segments = window.location.pathname.split("/").filter(Boolean);
+                const repository = segments.shift() || "audit-ledger";
+                const route = segments.join("/");
+                const query = window.location.search.slice(1);
+                const destination = "/" + repository + "/?p=" + encodeURIComponent(route)
+                  + (query ? "&q=" + encodeURIComponent(query) : "")
+                  + window.location.hash;
+                window.location.replace(destination);
+              </script>
+              <p>Redirecting to Audit Ledger…</p>
+            </body>
+          </html>
+          HTML
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
+
+      - name: Verify GitHub Pages publishes GitHub Actions artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PUBLISHING_SOURCE="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.build_type')"
+          if [ "$PUBLISHING_SOURCE" != "workflow" ]; then
+            echo "::error::GitHub Pages is configured to publish from '$PUBLISHING_SOURCE'. Set Settings > Pages > Build and deployment > Source to GitHub Actions."
+            exit 1
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

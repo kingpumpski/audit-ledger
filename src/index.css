@@ -481,8 +481,8 @@
 }
 
 
-/* Small-screen form and data-layout safeguards */
-@media (max-width: 640px) {
+/* Responsive form and data-layout safeguards */
+@media (max-width: 767px) {
   main form [class*="grid-cols-"],
   [role="dialog"] form [class*="grid-cols-"] {
     grid-template-columns: minmax(0, 1fr) !important;

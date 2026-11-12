@@ -18,7 +18,7 @@ import { SignaturePad } from '@/components/SignaturePad';
 import { 
   Loader2, ArrowLeft, CheckCircle, Receipt, Printer, AlertTriangle
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { useReceiptPrint } from '@/hooks/useReceiptPrint';
 import { useAuth } from '@/contexts/AuthContext';
 
 const paymentMethods = [
@@ -41,6 +41,7 @@ export default function ReceiptNew() {
   const { profile: authProfile } = useAuth();
   const { profile } = useProfile();
   const { createReceipt, isCreating } = useReceipts();
+  const { printReceipt } = useReceiptPrint();
   const { customers } = useCustomers();
   const { invoices } = useInvoices();
 
@@ -96,24 +97,8 @@ export default function ReceiptNew() {
     }
   };
 
-  const handlePrintReceipt = async () => {
-    if (!issuedReceipt) return;
-    try {
-      const response = await supabase.functions.invoke('generate-receipt-pdf', {
-        body: { receiptId: issuedReceipt.id },
-      });
-      if (response.data) {
-        const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to generate PDF:', error);
-    }
+  const handlePrintReceipt = () => {
+    if (issuedReceipt) void printReceipt(issuedReceipt.id);
   };
 
   if (isIssued && issuedReceipt) {
