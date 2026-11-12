@@ -57,6 +57,20 @@ jobs:
           test -n "$VITE_SUPABASE_PROJECT_ID"
           test -n "$VITE_SUPABASE_PUBLISHABLE_KEY"
           test -n "$VITE_SUPABASE_URL"
+          if [ "$VITE_SUPABASE_PROJECT_ID" != "phfpbqlhxagonpofzvtn" ]; then
+            echo "::error::Production build must target the dedicated Audit Ledger production Supabase project."
+            exit 1
+          fi
+          if [ "$VITE_SUPABASE_URL" != "https://phfpbqlhxagonpofzvtn.supabase.co" ]; then
+            echo "::error::Production Supabase URL does not match the dedicated production project."
+            exit 1
+          fi
+          case "$VITE_SUPABASE_PUBLISHABLE_KEY" in
+            sb_secret_*|*service_role*)
+              echo "::error::A secret/service-role key must never be bundled into the browser."
+              exit 1
+              ;;
+          esac
 
       - name: Build production site
         run: npm run build
