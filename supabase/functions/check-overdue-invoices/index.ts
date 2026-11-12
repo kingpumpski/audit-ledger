@@ -4,7 +4,7 @@ import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-token",
 };
 
 serve(async (req) => {
@@ -13,7 +13,14 @@ serve(async (req) => {
   }
 
   try {
-    const auth = await requireRoles(req, ["admin", "accountant"], { allowService: true });
+    const cronToken = req.headers.get("x-cron-token");
+    let cronOk = false;
+    if (cronToken) {
+      const { data: valid } = await createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!)
+        .rpc("verify_cron_token", { _name: "overdue", _token: cronToken });
+      cronOk = valid === true;
+    }
+    const auth = cronOk ? { ok: true as const } : await requireRoles(req, ["admin", "accountant"], { allowService: true });
     if (!auth.ok) {
       return new Response(JSON.stringify({ error: auth.error }), { status: auth.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
