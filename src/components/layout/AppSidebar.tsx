@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
@@ -44,20 +44,11 @@ const navItems: NavItem[] = [
 
 export function AppSidebar() {
   const { collapsed: isCollapsed, setCollapsed: setIsCollapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const [userInteracted, setUserInteracted] = useState(false);
   const { roles } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    if (isCollapsed || userInteracted || mobileOpen) return;
-    const timer = setTimeout(() => setIsCollapsed(true), 5000);
-    return () => clearTimeout(timer);
-  }, [isCollapsed, userInteracted, mobileOpen, location.pathname, setIsCollapsed]);
-
   const handleToggle = () => {
-    setUserInteracted(true);
     setIsCollapsed(!isCollapsed);
-    setTimeout(() => setUserInteracted(false), 30000);
   };
 
   const filteredNavItems = navItems.filter((item) =>
