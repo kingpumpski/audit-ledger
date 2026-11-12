@@ -11,16 +11,21 @@ export function escapeHtml(value: unknown): string {
 }
 
 /** Recursively HTML-escape every string in a record so it is safe to interpolate into templates. */
-// deno-lint-ignore no-explicit-any
-export function escapeDeep<T>(value: T): any {
-  if (typeof value === "string") return escapeHtml(value);
-  if (Array.isArray(value)) return value.map((v) => escapeDeep(v));
+export type DeepEscaped<T> =
+  T extends string ? string :
+  T extends readonly (infer U)[] ? DeepEscaped<U>[] :
+  T extends object ? { [K in keyof T]: DeepEscaped<T[K]> } :
+  T;
+
+export function escapeDeep<T>(value: T): DeepEscaped<T> {
+  if (typeof value === "string") return escapeHtml(value) as DeepEscaped<T>;
+  if (Array.isArray(value)) return value.map((v) => escapeDeep(v)) as DeepEscaped<T>;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = escapeDeep(v);
-    return out;
+    return out as DeepEscaped<T>;
   }
-  return value;
+  return value as DeepEscaped<T>;
 }
 
 export function serviceClient(): SupabaseClient {
