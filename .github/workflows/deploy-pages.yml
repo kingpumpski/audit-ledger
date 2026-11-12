@@ -94,8 +94,27 @@ jobs:
           console.log(`Verified ${scripts.length} compiled module entry point(s).`);
           NODE
 
-      - name: Add SPA route fallback
-        run: cp dist/index.html dist/404.html
+      - name: Add GitHub Pages deep-link fallback
+        run: |
+          cat > dist/404.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+            <body>
+              <script>
+                const segments = window.location.pathname.split("/").filter(Boolean);
+                const repository = segments.shift() || "audit-ledger";
+                const route = segments.join("/");
+                const query = window.location.search.slice(1);
+                const destination = "/" + repository + "/?p=" + encodeURIComponent(route)
+                  + (query ? "&q=" + encodeURIComponent(query) : "")
+                  + window.location.hash;
+                window.location.replace(destination);
+              </script>
+              <p>Redirecting to Audit Ledger…</p>
+            </body>
+          </html>
+          HTML
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
