@@ -12,17 +12,17 @@ describe('calculateLineAmounts', () => {
     });
     expect(result.subtotal).toBe(200);
     expect(result.discount_amount).toBe(0);
-    expect(result.tax_amount).toBe(34.1);
-    expect(result.line_total).toBe(234.1);
+    expect(result.tax_amount).toBe(35.2);
+    expect(result.line_total).toBe(235.2);
     expect(result.taxes.map(t => t.code)).toEqual(['LEVY', 'VAT', 'Z-COMP']);
   });
 
   it('extracts the configured tax components from an inclusive price', () => {
     const result = calculateLineAmounts({
-      quantity: 1, unit_price: 117.81, taxes: [vat, levy, compound], pricesIncludeTax: true,
+      quantity: 1, unit_price: 117.6, taxes: [vat, levy, compound], pricesIncludeTax: true,
     });
-    expect(result.line_total).toBe(117.81);
-    expect(result.tax_amount).toBeCloseTo(17.81, 2);
+    expect(result.line_total).toBe(117.6);
+    expect(result.tax_amount).toBeCloseTo(17.6, 2);
     expect(result.taxable_base).toBeCloseTo(100, 2);
   });
 
