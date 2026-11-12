@@ -133,8 +133,6 @@ export default function Taxes() {
   const taxReportRows = (taxReportQuery.data || []).filter(row =>
     row.invoice && row.invoice.status !== 'draft' && row.invoice.status !== 'canceled'
   );
-  const totalTaxCharged = taxReportRows.reduce((sum, row) => sum + Number(row.tax_amount || 0), 0);
-
   const downloadTaxReport = () => {
     const headers = ['Invoice', 'Invoice date', 'Customer', 'Tax', 'Tax code', 'Rate (%)', 'Taxable amount', 'Tax amount'];
     const rows = taxReportRows.map(row => [
