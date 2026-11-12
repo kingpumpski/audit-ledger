@@ -29,7 +29,31 @@ interface ReceiptRecord {
     address_line1: string | null;
     city: string | null;
   } | null;
-  invoice: { invoice_number: string } | null;
+  invoice: {
+    invoice_number: string;
+    subtotal: number | string | null;
+    discount_amount: number | string | null;
+    tax_amount: number | string | null;
+    total_amount: number | string | null;
+    amount_paid: number | string | null;
+    balance_due: number | string | null;
+    items: Array<{
+      description: string;
+      quantity: number | string;
+      unit_price: number | string;
+      discount_type: string | null;
+      discount_value: number | string | null;
+      tax_rate: number | string | null;
+      tax_amount: number | string | null;
+      line_total: number | string;
+    }>;
+    invoice_taxes: Array<{
+      tax_rate: number | string;
+      taxable_amount: number | string;
+      tax_amount: number | string;
+      tax: { name: string; code: string } | null;
+    }>;
+  } | null;
 }
 
 function escapeHtml(value: unknown): string {
@@ -57,7 +81,7 @@ function formatAmount(value: number | string): string {
   return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function renderReceipt(receipt: ReceiptRecord): string {
+function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyName: string): string {
   const status = receipt.status === "issued" ? "issued" : "void";
   const statusLabel = status === "issued" ? "Issued" : "Void";
   const date = new Date(receipt.issue_date);
@@ -70,6 +94,38 @@ function renderReceipt(receipt: ReceiptRecord): string {
   const invoiceNumber = receipt.invoice?.invoice_number
     ? escapeHtml(receipt.invoice.invoice_number)
     : null;
+  const invoice = receipt.invoice;
+  const invoiceItemsHtml = invoice?.items?.map(item => {
+    const discount = Number(item.discount_value || 0);
+    const discountLabel = discount > 0
+      ? item.discount_type === "percentage" ? `${formatAmount(discount)}%` : `${currencySymbol} ${formatAmount(discount)}`
+      : "—";
+    return `<tr>
+      <td>${escapeHtml(item.description)}</td>
+      <td style="text-align:center">${escapeHtml(item.quantity)}</td>
+      <td style="text-align:right">${currencySymbol} ${formatAmount(item.unit_price)}</td>
+      <td style="text-align:right">${discountLabel}</td>
+      <td style="text-align:right">${currencySymbol} ${formatAmount(item.line_total)}</td>
+    </tr>`;
+  }).join("") || "";
+  const taxBreakdownHtml = invoice?.invoice_taxes?.map(tax => `<tr>
+    <td>${escapeHtml(tax.tax?.name || tax.tax?.code || "Tax")}</td>
+    <td style="text-align:right">${formatAmount(tax.tax_rate)}%</td>
+    <td style="text-align:right">${currencySymbol} ${formatAmount(tax.taxable_amount)}</td>
+    <td style="text-align:right">${currencySymbol} ${formatAmount(tax.tax_amount)}</td>
+  </tr>`).join("") || "";
+  const invoiceSummaryHtml = invoice ? `
+    <table class="summary-table">
+      <tbody>
+        <tr><td>Subtotal</td><td>${currencySymbol} ${formatAmount(invoice.subtotal || 0)}</td></tr>
+        <tr><td>Discount</td><td>− ${currencySymbol} ${formatAmount(invoice.discount_amount || 0)}</td></tr>
+        <tr><td>Total taxes</td><td>${currencySymbol} ${formatAmount(invoice.tax_amount || 0)}</td></tr>
+        <tr class="summary-total"><td>Invoice total</td><td>${currencySymbol} ${formatAmount(invoice.total_amount || 0)}</td></tr>
+        <tr><td>Received on this receipt</td><td>${currencySymbol} ${amount}</td></tr>
+        <tr><td>Paid to date</td><td>${currencySymbol} ${formatAmount(invoice.amount_paid || 0)}</td></tr>
+        <tr class="summary-balance"><td>Balance remaining</td><td>${currencySymbol} ${formatAmount(invoice.balance_due || 0)}</td></tr>
+      </tbody>
+    </table>` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -94,8 +150,13 @@ function renderReceipt(receipt: ReceiptRecord): string {
     .amount-label { font-size: 14px; margin-bottom: 10px; }
     .amount-value { font-size: 42px; font-weight: bold; overflow-wrap: anywhere; }
     .details-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-    .details-table th, .details-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; overflow-wrap: anywhere; }
-    .details-table th { background: #f8f9fa; font-weight: 600; color: #666; font-size: 12px; text-transform: uppercase; }
+    .details-table th, .details-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; overflow-wrap: anywhere; font-size: 13px; }
+    .details-table th { background: #f8f9fa; font-weight: 600; color: #666; font-size: 11px; text-transform: uppercase; }
+    .summary-table { width: 100%; max-width: 520px; margin: 0 0 28px auto; border-collapse: collapse; }
+    .summary-table td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+    .summary-table td:last-child { text-align: right; white-space: nowrap; }
+    .summary-total { font-weight: 700; border-top: 2px solid #333; }
+    .summary-balance { font-weight: 700; color: #0f766e; }
     .signature-section { margin-top: 60px; border-top: 1px solid #eee; padding-top: 30px; }
     .signature-box { width: 250px; max-width: 100%; }
     .signature-image { display: block; max-width: 200px; max-height: 60px; object-fit: contain; margin-bottom: 10px; }
@@ -124,7 +185,7 @@ function renderReceipt(receipt: ReceiptRecord): string {
 <body>
   <header class="header">
     <div>
-      <div class="logo">InvoiceHub</div>
+      <div class="logo">${escapeHtml(companyName)}</div>
       <div style="color:#666;font-size:14px;margin-top:5px">Payment Receipt</div>
     </div>
     <div class="receipt-info">
@@ -153,19 +214,27 @@ function renderReceipt(receipt: ReceiptRecord): string {
 
   <section class="amount-box">
     <div class="amount-label">Amount Received</div>
-    <div class="amount-value">$ ${amount}</div>
+    <div class="amount-value">${currencySymbol} ${amount}</div>
   </section>
 
+  ${invoice ? `
+  <h2 style="font-size:16px;margin:0 0 12px">Invoice items</h2>
   <table class="details-table">
-    <thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>Payment for ${invoiceNumber ? `Invoice ${invoiceNumber}` : "Services"}</td>
-        <td style="text-align:right">$ ${amount}</td>
-      </tr>
-      ${receipt.notes ? `<tr><td colspan="2" style="color:#666;font-style:italic">Note: ${escapeHtml(receipt.notes)}</td></tr>` : ""}
-    </tbody>
+    <thead><tr><th>Description</th><th>Qty</th><th style="text-align:right">Unit price</th><th style="text-align:right">Discount</th><th style="text-align:right">Line total</th></tr></thead>
+    <tbody>${invoiceItemsHtml || '<tr><td colspan="5">No item details available</td></tr>'}</tbody>
   </table>
+  ${invoice.invoice_taxes?.length ? `
+  <h2 style="font-size:16px;margin:24px 0 12px">Tax breakdown</h2>
+  <table class="details-table">
+    <thead><tr><th>Tax</th><th style="text-align:right">Rate</th><th style="text-align:right">Taxable amount</th><th style="text-align:right">Tax amount</th></tr></thead>
+    <tbody>${taxBreakdownHtml}</tbody>
+  </table>` : ""}
+  ${invoiceSummaryHtml}
+  ` : `
+  <table class="details-table"><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody><tr><td>Payment for services</td><td style="text-align:right">${currencySymbol} ${amount}</td></tr></tbody>
+  </table>`}
+  ${receipt.notes ? `<p style="margin:18px 0;color:#666;font-style:italic">Note: ${escapeHtml(receipt.notes)}</p>` : ""}
 
   <section class="signature-section">
     <div class="signature-box">
@@ -281,7 +350,16 @@ serve(async (req) => {
       });
     }
 
-    const html = renderReceipt(receipt as unknown as ReceiptRecord);
+    const { data: settings } = await supabase
+      .from("company_settings")
+      .select("company_name, currency_symbol")
+      .limit(1)
+      .maybeSingle();
+    const html = renderReceipt(
+      receipt as unknown as ReceiptRecord,
+      settings?.currency_symbol || "$",
+      settings?.company_name || "Your Business",
+    );
     return new Response(html, {
       status: 200,
       headers: {
