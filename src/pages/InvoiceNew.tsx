@@ -203,6 +203,7 @@ export default function InvoiceNew() {
         issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         prices_include_tax: pricesIncludeTax,
+        prices_include_tax: pricesIncludeTax,
         notes,
         terms,
         items: items.map(item => ({
@@ -242,6 +243,7 @@ export default function InvoiceNew() {
         customer_id: customerId,
         issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
+        prices_include_tax: pricesIncludeTax,
         notes,
         terms,
         items: items.map(item => ({
@@ -251,7 +253,7 @@ export default function InvoiceNew() {
           unit_price: item.unit_price,
           discount_type: item.discount_type,
           discount_value: item.discount_value,
-          tax_rate: item.tax_rate,
+          tax_ids: item.tax_ids || [],
         })),
       });
 
