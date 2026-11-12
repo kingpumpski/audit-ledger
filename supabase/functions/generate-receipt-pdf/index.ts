@@ -178,7 +178,8 @@ function renderReceipt(receipt: ReceiptRecord): string {
   </section>
 
   <footer class="footer">
-    <p>This is a computer-generated receipt. Thank you for your payment.</p>
+    <p>This is a computer-generated receipt.</p>
+    <p style="margin-top:10px;font-size:15px;color:#0f766e;font-weight:600">Thank you for choosing us. We sincerely appreciate your patronage!</p>
     ${receipt.checksum ? `<div class="checksum">Verification: ${escapeHtml(receipt.checksum)}</div>` : ""}
   </footer>
 </body>
