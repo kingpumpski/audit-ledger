@@ -30,16 +30,16 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Invoices', href: '/invoices', icon: FileText },
-  { label: 'Receipts', href: '/receipts', icon: Receipt },
+  { label: 'Sales & Invoices', href: '/invoices', icon: FileText },
+  { label: 'Money Received', href: '/receipts', icon: Receipt },
   { label: 'Customers', href: '/customers', icon: Users },
-  { label: 'Products', href: '/products', icon: Package },
-  { label: 'Accounting', href: '/accounting', icon: BookOpen, roles: ['admin', 'accountant', 'auditor'] },
-  { label: 'Inventory', href: '/inventory', icon: Package, roles: ['admin', 'accountant', 'cashier'] },
+  { label: 'Products & Services', href: '/products', icon: Package },
+  { label: 'Accounting Tools', href: '/accounting', icon: BookOpen, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Stock', href: '/inventory', icon: Package, roles: ['admin', 'accountant', 'cashier'] },
   { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
   { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
-  { label: 'Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
-  { label: 'Audit Logs', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
+  { label: 'Business Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
+  { label: 'Activity History', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
 ];
 
 export function AppSidebar() {
