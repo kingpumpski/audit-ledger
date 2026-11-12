@@ -48,12 +48,60 @@ import { cn } from '@/lib/utils';
 import { type Product } from '@/hooks/useProducts';
 
 export default function Products() {
-  const { products, isLoading, createProduct, updateProduct, deleteProduct, isCreating } = useProducts();
+  const { products, isLoading, createProduct, updateProduct, updateProductAsync, deleteProduct, isCreating, isUpdating } = useProducts();
   const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isEditingProduct, setIsEditingProduct] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '', sku: '', description: '', category: '', current_price: 0,
+    cost_price: 0, stock_quantity: 0, min_stock_level: 0, unit: 'piece',
+    is_service: false, is_active: true,
+  });
+
+  const openProductDetails = (product: Product) => {
+    setSelectedProduct(product);
+    setIsEditingProduct(false);
+    setEditFormData({
+      name: product.name,
+      sku: product.sku || '',
+      description: product.description || '',
+      category: product.category || '',
+      current_price: Number(product.current_price) || 0,
+      cost_price: Number(product.cost_price) || 0,
+      stock_quantity: Number(product.stock_quantity) || 0,
+      min_stock_level: Number(product.min_stock_level) || 0,
+      unit: product.unit || 'piece',
+      is_service: Boolean(product.is_service),
+      is_active: product.is_active ?? true,
+    });
+  };
+
+  const handleSaveProduct = async () => {
+    if (!selectedProduct || !editFormData.name.trim()) return;
+    try {
+      await updateProductAsync({
+        id: selectedProduct.id,
+        name: editFormData.name.trim(),
+        sku: editFormData.sku.trim(),
+        description: editFormData.description.trim() || null,
+        category: editFormData.category.trim() || null,
+        current_price: editFormData.current_price,
+        cost_price: editFormData.cost_price,
+        stock_quantity: editFormData.is_service ? null : editFormData.stock_quantity,
+        min_stock_level: editFormData.is_service ? null : editFormData.min_stock_level,
+        unit: editFormData.unit,
+        is_service: editFormData.is_service,
+        is_active: editFormData.is_active,
+      });
+      setSelectedProduct(null);
+      setIsEditingProduct(false);
+    } catch (error) {
+      console.error('Failed to update product:', error);
+    }
+  };
   
   // Form state
   const [formData, setFormData] = useState({
@@ -523,7 +571,7 @@ export default function Products() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setSelectedProduct(product)}>
+                          <DropdownMenuItem onClick={() => openProductDetails(product)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
@@ -555,52 +603,49 @@ export default function Products() {
       </Card>
 
       {/* Product Details Dialog */}
-      <Dialog open={!!selectedProduct} onOpenChange={() => setSelectedProduct(null)}>
-        <DialogContent>
+      <Dialog open={!!selectedProduct} onOpenChange={(open) => { if (!open) { setSelectedProduct(null); setIsEditingProduct(false); } }}>
+        <DialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedProduct?.name}</DialogTitle>
-            <DialogDescription>SKU: {selectedProduct?.sku}</DialogDescription>
+            <DialogTitle>{isEditingProduct ? 'Edit Product or Service' : selectedProduct?.name}</DialogTitle>
+            <DialogDescription>{isEditingProduct ? 'Correct product details without creating a duplicate.' : `SKU: ${selectedProduct?.sku}`}</DialogDescription>
           </DialogHeader>
-          {selectedProduct && (
+          {selectedProduct && (isEditingProduct ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2"><Label>Product Name *</Label><Input value={editFormData.name} onChange={e => setEditFormData(v => ({ ...v, name: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>SKU</Label><Input value={editFormData.sku} onChange={e => setEditFormData(v => ({ ...v, sku: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Category</Label><Input value={editFormData.category} onChange={e => setEditFormData(v => ({ ...v, category: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Unit</Label><Input value={editFormData.unit} onChange={e => setEditFormData(v => ({ ...v, unit: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Selling Price ({currencySymbol})</Label><Input type="number" min="0" step="0.01" value={editFormData.current_price} onChange={e => setEditFormData(v => ({ ...v, current_price: Number(e.target.value) }))} /></div>
+                <div className="space-y-2"><Label>Cost Price ({currencySymbol})</Label><Input type="number" min="0" step="0.01" value={editFormData.cost_price} onChange={e => setEditFormData(v => ({ ...v, cost_price: Number(e.target.value) }))} /></div>
+                <div className="space-y-2"><Label>Stock Quantity</Label><Input type="number" min="0" disabled={editFormData.is_service} value={editFormData.stock_quantity} onChange={e => setEditFormData(v => ({ ...v, stock_quantity: Number(e.target.value) }))} /></div>
+                <div className="space-y-2"><Label>Minimum Stock Level</Label><Input type="number" min="0" disabled={editFormData.is_service} value={editFormData.min_stock_level} onChange={e => setEditFormData(v => ({ ...v, min_stock_level: Number(e.target.value) }))} /></div>
+              </div>
+              <div className="space-y-2"><Label>Description</Label><Textarea rows={3} value={editFormData.description} onChange={e => setEditFormData(v => ({ ...v, description: e.target.value }))} /></div>
+              <div className="flex flex-wrap gap-6">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editFormData.is_service} onChange={e => setEditFormData(v => ({ ...v, is_service: e.target.checked }))} /> Service (no stock tracking)</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editFormData.is_active} onChange={e => setEditFormData(v => ({ ...v, is_active: e.target.checked }))} /> Active</label>
+              </div>
+              <div className="flex justify-end gap-2 border-t pt-4">
+                <Button variant="outline" onClick={() => setIsEditingProduct(false)}>Cancel</Button>
+                <Button onClick={handleSaveProduct} disabled={isUpdating || !editFormData.name.trim() || editFormData.current_price < 0}>
+                  {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit className="mr-2 h-4 w-4" />}Save Changes
+                </Button>
+              </div>
+            </div>
+          ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Category</p>
-                  <p className="font-medium">{selectedProduct.category || 'Uncategorized'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Type</p>
-                  <p className="font-medium">{selectedProduct.is_service ? 'Service' : 'Product'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Price</p>
-                  <p className="font-medium">{currencySymbol}{selectedProduct.current_price.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Cost</p>
-                  <p className="font-medium">{currencySymbol}{(selectedProduct.cost_price || 0).toFixed(2)}</p>
-                </div>
-                {!selectedProduct.is_service && (
-                  <>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Stock</p>
-                      <p className="font-medium">{selectedProduct.stock_quantity ?? '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Min Stock Level</p>
-                      <p className="font-medium">{selectedProduct.min_stock_level ?? '—'}</p>
-                    </div>
-                  </>
-                )}
+                <div><p className="text-sm text-muted-foreground">Category</p><p className="font-medium">{selectedProduct.category || 'Uncategorized'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Type</p><p className="font-medium">{selectedProduct.is_service ? 'Service' : 'Product'}</p></div>
+                <div><p className="text-sm text-muted-foreground">Price</p><p className="font-medium">{currencySymbol}{selectedProduct.current_price.toFixed(2)}</p></div>
+                <div><p className="text-sm text-muted-foreground">Cost</p><p className="font-medium">{currencySymbol}{(selectedProduct.cost_price || 0).toFixed(2)}</p></div>
+                {!selectedProduct.is_service && <><div><p className="text-sm text-muted-foreground">Stock</p><p className="font-medium">{selectedProduct.stock_quantity ?? '—'}</p></div><div><p className="text-sm text-muted-foreground">Min Stock Level</p><p className="font-medium">{selectedProduct.min_stock_level ?? '—'}</p></div></>}
               </div>
-              {selectedProduct.description && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Description</p>
-                  <p className="text-sm">{selectedProduct.description}</p>
-                </div>
-              )}
+              {selectedProduct.description && <div><p className="text-sm text-muted-foreground">Description</p><p className="text-sm">{selectedProduct.description}</p></div>}
+              <div className="flex justify-end border-t pt-4"><Button onClick={() => setIsEditingProduct(true)}><Edit className="mr-2 h-4 w-4" />Edit Product</Button></div>
             </div>
-          )}
+          ))}
         </DialogContent>
       </Dialog>
     </AppLayout>
