@@ -30,6 +30,23 @@ jobs:
         with:
           version: latest
 
+      - name: Generate tax policy migration scaffold with Supabase CLI
+        if: github.head_ref == 'feat/configured-tax-calculation-and-receipt-breakdown'
+        id: tax_migration_scaffold
+        run: |
+          supabase migration new allow_cashier_invoice_tax_insert
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_allow_cashier_invoice_tax_insert.sql' | sort | tail -n 1)"
+          test -n "$migration_file"
+          echo "migration_file=$migration_file" >> "$GITHUB_OUTPUT"
+          echo "SUPABASE_CLI_GENERATED_MIGRATION=$migration_file"
+
+      - name: Upload generated tax migration scaffold
+        if: github.head_ref == 'feat/configured-tax-calculation-and-receipt-breakdown'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tax-migration-scaffold
+          path: ${{ steps.tax_migration_scaffold.outputs.migration_file }}
+
       - name: Assign isolated database ports
         run: |
           # Avoid collisions with services prebound on GitHub-hosted runners.
