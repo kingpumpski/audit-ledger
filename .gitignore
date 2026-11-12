@@ -14,6 +14,7 @@ dist-ssr
 
 # Environment files: keep real local credentials out of Git.
 .env*
+.env.local*
 !.env.example
 
 # Editor directories and files
