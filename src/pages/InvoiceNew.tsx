@@ -233,6 +233,7 @@ export default function InvoiceNew() {
     try {
       const invoice = await createInvoice({
         customer_id: customerId,
+        issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
         notes,
         terms,
