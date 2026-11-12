@@ -262,7 +262,7 @@ export default function Accounting() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>Revenue vs Expenses Trend</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Paid Invoice Value vs Recorded Expenses</CardTitle></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={trendData}>
@@ -271,7 +271,7 @@ export default function Accounting() {
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(value: number) => `${currencySymbol}${value.toLocaleString()}`} />
                     <Legend />
-                    <Area type="monotone" dataKey="revenue" stroke="hsl(161, 93%, 30%)" fill="hsl(161, 93%, 30%)" fillOpacity={0.2} name="Revenue" />
+                    <Area type="monotone" dataKey="revenue" stroke="hsl(161, 93%, 30%)" fill="hsl(161, 93%, 30%)" fillOpacity={0.2} name="Paid invoice value" />
                     <Area type="monotone" dataKey="expenses" stroke="hsl(0, 72%, 50%)" fill="hsl(0, 72%, 50%)" fillOpacity={0.1} name="Expenses" />
                   </AreaChart>
                 </ResponsiveContainer>
