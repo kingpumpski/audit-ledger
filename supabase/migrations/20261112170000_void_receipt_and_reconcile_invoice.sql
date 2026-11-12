@@ -19,12 +19,9 @@ BEGIN
     RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '42501';
   END IF;
 
-  IF NOT (
-    public.has_role(auth.uid(), 'admin'::public.app_role)
-    OR public.has_role(auth.uid(), 'accountant'::public.app_role)
-    OR public.has_role(auth.uid(), 'cashier'::public.app_role)
-  ) THEN
-    RAISE EXCEPTION 'Insufficient permissions to void receipts' USING ERRCODE = '42501';
+  -- Preserve the existing database policy: receipt voiding is admin-only.
+  IF NOT public.has_role(auth.uid(), 'admin'::public.app_role) THEN
+    RAISE EXCEPTION 'Only administrators can void receipts' USING ERRCODE = '42501';
   END IF;
 
   SELECT *
