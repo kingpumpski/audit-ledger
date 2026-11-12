@@ -549,7 +549,7 @@ export default function InvoiceNew() {
                 )}
                 {totalTax > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span>Tax</span>
+                    <span>{pricesIncludeTax ? 'Tax included in price' : 'Tax'}</span>
                     <span>{currencySymbol}{totalTax.toFixed(2)}</span>
                   </div>
                 )}
@@ -608,7 +608,7 @@ export default function InvoiceNew() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Issue Date</p>
-                    <p className="font-medium">{format(new Date(), 'MMM d, yyyy')}</p>
+                    <p className="font-medium">{format(issueDate, 'MMM d, yyyy')}</p>
                     <p className="text-sm text-muted-foreground mt-2">Due Date</p>
                     <p className="font-medium">{format(dueDate, 'MMM d, yyyy')}</p>
                   </div>
