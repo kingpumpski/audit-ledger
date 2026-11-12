@@ -112,6 +112,8 @@ npm run dev
 
 The helper uses development-scoped GitHub Actions variables when available and refuses to use the configured production project for local development.
 
+**Important:** GitHub Actions Variables are only injected into GitHub-hosted workflows; they are not automatically available to a local Vite process. If you run `npm run dev` locally, you must first create `.env.local` with a separate development project's URL and publishable key. If you want to pull them from GitHub, add all three `DEV_VITE_SUPABASE_PROJECT_ID`, `DEV_VITE_SUPABASE_URL` and `DEV_VITE_SUPABASE_PUBLISHABLE_KEY` variables, authenticate with `gh auth login`, and run `npm run env:pull`. The standard `VITE_SUPABASE_*` repository variables are reserved for the production Pages build and are intentionally rejected by the local bootstrap helper when they point to production.
+
 ## Environment and credential safety
 
 - Commit only the placeholder template `.env.example`.
