@@ -64,7 +64,7 @@ const actionColors: Record<string, string> = {
   login: 'bg-primary/10 text-primary border-primary/20',
   logout: 'bg-muted text-muted-foreground',
   view: 'bg-secondary text-secondary-foreground',
-  export: 'bg-accent/10 text-accent border-accent/20',
+  export: 'bg-primary/10 text-primary border-primary/30',
   sign: 'bg-warning/10 text-warning border-warning/20',
 };
 
@@ -102,7 +102,7 @@ export default function AuditLogs() {
       log.action,
       log.entity_type,
       log.entity_id || '',
-      JSON.stringify(log.new_data || log.old_data || {}),
+      JSON.stringify(log.new_data || log.old_data || log.metadata || {}),
     ]);
 
     const csvContent = [
@@ -376,6 +376,8 @@ export default function AuditLogs() {
                                 </pre>
                               </PopoverContent>
                             </Popover>
+                          ) : (log.metadata as { document_number?: string; event?: string } | null)?.document_number ? (
+                            <span className="text-sm">{(log.metadata as { event?: string }).event === 'download' ? 'Downloaded PDF' : 'Previewed'} · {(log.metadata as { document_number?: string }).document_number}</span>
                           ) : (
                             <span className="text-sm text-muted-foreground">—</span>
                           )}
