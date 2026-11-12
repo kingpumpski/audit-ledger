@@ -15,6 +15,7 @@ export interface InvoiceWithItems extends Invoice {
 interface CreateInvoiceData {
   customer_id: string;
   due_date?: string;
+  issue_date?: string;
   notes?: string;
   terms?: string;
   items: {
@@ -104,6 +105,7 @@ export function useInvoices() {
           invoice_number: invoiceNumber,
           customer_id: invoiceData.customer_id,
           due_date: invoiceData.due_date,
+          issue_date: invoiceData.issue_date,
           notes: invoiceData.notes,
           terms: invoiceData.terms,
           subtotal,
