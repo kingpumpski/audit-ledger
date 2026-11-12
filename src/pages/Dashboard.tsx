@@ -257,7 +257,7 @@ export default function Dashboard() {
         </Button>
       }
     >
-      <div className="space-y-6 animate-in">
+      <div className="space-y-6 animate-fade-up">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {statsCards.map((stat, index) => (

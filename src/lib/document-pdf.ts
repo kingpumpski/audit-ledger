@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import fontAsset from '@/assets/document-font.asset.json';
+import fontUrl from '@/assets/document-font.ttf?url';
 import { type BusinessDocument, money, documentDate } from './business-document';
 
 // PDF palette is supplied by the semantic document tokens, keeping print and preview consistent.
@@ -25,9 +25,11 @@ async function imageData(url: string) {
   });
 }
 export async function createDocumentPdf(d: BusinessDocument) {
-  fontData ??= fetch(fontAsset.url).then(async r => {
+  fontData ??= fetch(fontUrl).then(async r => {
     if (!r.ok) throw new Error('Document font could not be loaded');
     const bytes = new Uint8Array(await r.arrayBuffer());
+    const sig = String.fromCharCode(...bytes.subarray(0, 4));
+    if (!(sig === 'true' || sig === 'OTTO' || (bytes[0] === 0 && bytes[1] === 1))) throw new Error('Document font file is not a TrueType font');
     let binary = '';
     for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
     return btoa(binary);
@@ -38,10 +40,16 @@ export async function createDocumentPdf(d: BusinessDocument) {
   });
   const pdf = new jsPDF({ format: 'a4', unit: 'mm' });
   const customFont = await fontData;
-  const fontName = customFont ? 'Document' : 'helvetica';
+  let fontName = 'helvetica';
   if (customFont) {
-    pdf.addFileToVFS('Document.ttf', customFont);
-    pdf.addFont('Document.ttf', 'Document', 'normal');
+    try {
+      pdf.addFileToVFS('Document.ttf', customFont);
+      pdf.addFont('Document.ttf', 'Document', 'normal');
+      pdf.setFont('Document');
+      fontName = 'Document';
+    } catch (error) {
+      console.warn('Using built-in PDF font:', error);
+    }
   }
   pdf.setFont(fontName);
   pdf.setProperties({ title: `${d.kind} ${d.number}`, author: d.company?.company_name || '' });
