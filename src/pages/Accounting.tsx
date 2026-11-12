@@ -99,13 +99,12 @@ export default function Accounting() {
     const totalReceived = receipts.filter(r => r.status === 'issued').reduce((s, r) => s + r.amount, 0);
     const outstanding = invoices.filter(i => ['issued', 'overdue', 'partially_paid'].includes(i.status))
       .reduce((s, i) => s + (i.balance_due || 0), 0);
-    const costOfGoods = totalRevenue * 0.6; // Estimate - could be improved with actual cost data
-    const grossProfit = totalRevenue - costOfGoods;
     const operatingExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
     const pettyCashIncome = pettyCash.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
-    const netProfit = grossProfit - operatingExpenses;
 
-    return { totalRevenue, totalInvoiced, totalTax, totalDiscounts, totalReceived, outstanding, costOfGoods, grossProfit, operatingExpenses, pettyCashIncome, netProfit };
+    // Do not estimate cost of goods or present a profit figure. Purchase costs
+    // are not reliably linked to sales across the current data model.
+    return { totalRevenue, totalInvoiced, totalTax, totalDiscounts, totalReceived, outstanding, operatingExpenses, pettyCashIncome };
   }, [invoices, receipts, pettyCash]);
 
   // Revenue trend data
@@ -147,7 +146,7 @@ export default function Accounting() {
       const expenses = pettyCash
         .filter(pc => pc.type === 'expense' && new Date(pc.date) >= p.start && new Date(pc.date) < p.end)
         .reduce((s, pc) => s + Number(pc.amount), 0);
-      return { name: p.label, revenue, expenses, profit: revenue - expenses };
+      return { name: p.label, revenue, expenses };
     });
   }, [invoices, pettyCash, timeFrame]);
 
@@ -163,7 +162,7 @@ export default function Accounting() {
   const exportReport = (type: string) => {
     let csv = '';
     if (type === 'pl') {
-      csv = `Income Statement\nRevenue,${financials.totalRevenue}\nCost of Goods,${financials.costOfGoods}\nGross Profit,${financials.grossProfit}\nOperating Expenses,${financials.operatingExpenses}\nNet Profit,${financials.netProfit}`;
+      csv = `Recorded Business Summary (not a formal income statement)\nPaid Invoice Value,${financials.totalRevenue}\nOther Income Entries,${financials.pettyCashIncome}\nRecorded Operating Expenses,${financials.operatingExpenses}\nInvoice Discounts,${financials.totalDiscounts}\nUnpaid Invoice Balance,${financials.outstanding}\nNote,Profit is not calculated because actual cost of goods and complete expense capture are not yet linked to sales.`;
     } else if (type === 'petty') {
       csv = `Date,Description,Type,Amount,Category\n` + pettyCash.map(p => [p.date, p.description, p.type, p.amount, p.category || ''].map(csvCell).join(',')).join('\n');
     }
@@ -193,7 +192,7 @@ export default function Accounting() {
         </Select>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => exportReport('pl')}>
-            <Download className="mr-2 h-4 w-4" />Export P&L
+            <Download className="mr-2 h-4 w-4" />Export Summary
           </Button>
           <Button variant="outline" size="sm" onClick={() => exportReport('petty')}>
             <Download className="mr-2 h-4 w-4" />Export Petty Cash
@@ -206,19 +205,19 @@ export default function Accounting() {
         <Card><CardContent className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-success/10"><TrendingUp className="h-5 w-5 text-success" /></div>
-            <div><p className="text-sm text-muted-foreground">Total Revenue</p><p className="text-2xl font-bold">{currencySymbol}{financials.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
+            <div><p className="text-sm text-muted-foreground">Paid Invoice Value</p><p className="text-2xl font-bold">{currencySymbol}{financials.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10"><DollarSign className="h-5 w-5 text-primary" /></div>
-            <div><p className="text-sm text-muted-foreground">Net Profit</p><p className={cn('text-2xl font-bold', financials.netProfit >= 0 ? 'text-success' : 'text-destructive')}>{currencySymbol}{financials.netProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
+            <div><p className="text-sm text-muted-foreground">Recorded Expenses</p><p className="text-2xl font-bold">{currencySymbol}{financials.operatingExpenses.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-warning/10"><Calculator className="h-5 w-5 text-warning" /></div>
-            <div><p className="text-sm text-muted-foreground">Tax Collected</p><p className="text-2xl font-bold">{currencySymbol}{financials.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
+            <div><p className="text-sm text-muted-foreground">Tax on Paid Invoices</p><p className="text-2xl font-bold">{currencySymbol}{financials.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p></div>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-4">
@@ -232,8 +231,8 @@ export default function Accounting() {
       <Tabs defaultValue="pl" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="coa">Chart of Accounts</TabsTrigger>
-          <TabsTrigger value="pl">P&L / Income Statement</TabsTrigger>
-          <TabsTrigger value="balance">Balance Sheet</TabsTrigger>
+          <TabsTrigger value="pl">Recorded Income & Expenses</TabsTrigger>
+          <TabsTrigger value="balance">Business Balances</TabsTrigger>
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
           <TabsTrigger value="petty">Petty Cash</TabsTrigger>
           <TabsTrigger value="income-exp">Income & Expenditure</TabsTrigger>
@@ -242,20 +241,24 @@ export default function Accounting() {
         <TabsContent value="coa">
           <ChartOfAccounts />
         </TabsContent>
-        {/* P&L / Income Statement */}
+        {/* Recorded income & expenses */}
         <TabsContent value="pl">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Income Statement</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Recorded Income and Expenses</CardTitle>
+                <CardDescription>Separate totals from current records, not a calculated profit statement.</CardDescription>
+              </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between py-2 border-b"><span className="font-medium">Revenue</span><span className="font-bold">{currencySymbol}{financials.totalRevenue.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 border-b text-muted-foreground"><span>Cost of Goods Sold</span><span>-{currencySymbol}{financials.costOfGoods.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 border-b font-medium"><span>Gross Profit</span><span className="text-success">{currencySymbol}{financials.grossProfit.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 border-b text-muted-foreground"><span>Operating Expenses</span><span>-{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 border-b text-muted-foreground"><span>Discounts Given</span><span>-{currencySymbol}{financials.totalDiscounts.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-3 text-lg font-bold border-t-2"><span>Net Profit</span><span className={financials.netProfit >= 0 ? 'text-success' : 'text-destructive'}>{currencySymbol}{financials.netProfit.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span className="font-medium">Paid invoice value</span><span className="font-bold">{currencySymbol}{financials.totalRevenue.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Other income entries</span><span>{currencySymbol}{financials.pettyCashIncome.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b text-muted-foreground"><span>Recorded operating expenses</span><span>{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b text-muted-foreground"><span>Invoice discounts</span><span>{currencySymbol}{financials.totalDiscounts.toLocaleString()}</span></div>
                 </div>
+                <p className="mt-4 rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                  Profit is not shown because actual product purchase costs and complete expense records are not yet reliably connected to sales. This avoids giving you a misleading figure.
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -277,35 +280,23 @@ export default function Accounting() {
           </div>
         </TabsContent>
 
-        {/* Balance Sheet */}
+        {/* Business Balances */}
         <TabsContent value="balance">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Statement of Financial Position</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Recorded Business Balances</CardTitle>
+                <CardDescription>Separate totals from current records; this is not a reconciled balance sheet.</CardDescription>
+              </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-sm uppercase text-muted-foreground mb-2">Assets</h4>
-                    <div className="space-y-2 pl-4">
-                      <div className="flex justify-between py-1"><span>Cash Received</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
-                      <div className="flex justify-between py-1"><span>Accounts Receivable</span><span>{currencySymbol}{financials.outstanding.toLocaleString()}</span></div>
-                      <div className="flex justify-between py-1"><span>Petty Cash Balance</span><span>{currencySymbol}{(financials.pettyCashIncome - financials.operatingExpenses).toLocaleString()}</span></div>
-                      <div className="flex justify-between py-1 font-bold border-t"><span>Total Assets</span><span>{currencySymbol}{(financials.totalReceived + financials.outstanding + financials.pettyCashIncome - financials.operatingExpenses).toLocaleString()}</span></div>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-sm uppercase text-muted-foreground mb-2">Liabilities</h4>
-                    <div className="space-y-2 pl-4">
-                      <div className="flex justify-between py-1"><span>Tax Payable</span><span>{currencySymbol}{financials.totalTax.toLocaleString()}</span></div>
-                      <div className="flex justify-between py-1 font-bold border-t"><span>Total Liabilities</span><span>{currencySymbol}{financials.totalTax.toLocaleString()}</span></div>
-                    </div>
-                  </div>
-                  <div className="border-t-2 pt-2">
-                    <div className="flex justify-between font-bold text-lg">
-                      <span>Equity</span>
-                      <span className="text-primary">{currencySymbol}{(financials.totalReceived + financials.outstanding + financials.pettyCashIncome - financials.operatingExpenses - financials.totalTax).toLocaleString()}</span>
-                    </div>
-                  </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between py-2 border-b"><span>Money received on receipts</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Unpaid invoice balances</span><span>{currencySymbol}{financials.outstanding.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Other income entries</span><span>{currencySymbol}{financials.pettyCashIncome.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Recorded petty cash expenses</span><span>{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
+                  <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                    A proper balance sheet needs reconciled cash and bank balances, inventory, assets, liabilities, owner equity and tax balances. Those figures are not yet fully represented by these records, so totals for assets, liabilities and equity are intentionally not displayed.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -409,7 +400,7 @@ export default function Accounting() {
         <TabsContent value="income-exp">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Profit Trend</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Paid Invoice Value and Expenses</CardTitle><CardDescription>This chart compares paid invoice value with petty cash expenses only.</CardDescription></CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={trendData}>
@@ -420,31 +411,28 @@ export default function Accounting() {
                     <Legend />
                     <Bar dataKey="revenue" fill="hsl(161, 93%, 30%)" name="Revenue" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="expenses" fill="hsl(0, 72%, 50%)" name="Expenses" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="profit" fill="hsl(199, 89%, 48%)" name="Profit" radius={[4, 4, 0, 0]} />
+
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>Income & Expenditure Summary</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Recorded Income & Expenditure</CardTitle><CardDescription>Income sources are listed separately because receipts and other income entries may overlap.</CardDescription></CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   <h4 className="font-semibold text-sm uppercase text-muted-foreground">Income</h4>
                   <div className="flex justify-between py-2 pl-4 border-b"><span>Invoice Revenue</span><span className="text-success">{currencySymbol}{financials.totalRevenue.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 pl-4 border-b"><span>Petty Cash Income</span><span className="text-success">{currencySymbol}{financials.pettyCashIncome.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 font-bold"><span>Total Income</span><span>{currencySymbol}{(financials.totalRevenue + financials.pettyCashIncome).toLocaleString()}</span></div>
+
                   
                   <h4 className="font-semibold text-sm uppercase text-muted-foreground pt-2">Expenditure</h4>
                   <div className="flex justify-between py-2 pl-4 border-b"><span>Operating Expenses</span><span className="text-destructive">{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 pl-4 border-b"><span>Discounts Given</span><span className="text-destructive">{currencySymbol}{financials.totalDiscounts.toLocaleString()}</span></div>
-                  <div className="flex justify-between py-2 font-bold"><span>Total Expenditure</span><span>{currencySymbol}{(financials.operatingExpenses + financials.totalDiscounts).toLocaleString()}</span></div>
+
                   
-                  <div className="flex justify-between py-3 text-lg font-bold border-t-2">
-                    <span>Net Income</span>
-                    <span className={cn((financials.totalRevenue + financials.pettyCashIncome - financials.operatingExpenses - financials.totalDiscounts) >= 0 ? 'text-success' : 'text-destructive')}>
-                      {currencySymbol}{(financials.totalRevenue + financials.pettyCashIncome - financials.operatingExpenses - financials.totalDiscounts).toLocaleString()}
-                    </span>
-                  </div>
+                  <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+                    These amounts are shown separately. Receipts may relate to invoice payments, so adding all income sources together could count the same money twice. This view does not calculate profit.
+                  </p>
                 </div>
               </CardContent>
             </Card>
