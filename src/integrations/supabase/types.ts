@@ -1383,6 +1383,10 @@ export type Database = {
         }
         Returns: Json
       }
+      void_receipt_and_reconcile: {
+        Args: { receipt_id: string }
+        Returns: undefined
+      }
       verify_cron_token: {
         Args: { _name: string; _token: string }
         Returns: boolean

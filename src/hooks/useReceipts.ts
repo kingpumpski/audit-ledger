@@ -45,7 +45,8 @@ export function useReceipts() {
           customer:customers(*),
           invoice:invoices(*)
         `)
-        .is('deleted_at', null)
+        // Keep voided receipts visible for audit history while excluding other soft-deleted rows.
+        .or('deleted_at.is.null,status.eq.void')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -113,7 +114,7 @@ export function useReceipts() {
       if (receiptError) throw receiptError;
 
       // If linked to invoice, update invoice payment status
-      if (receiptData.invoice_id) {
+      if (receiptData.invoice_id && !receiptData.payment_id) {
         const { data: invoice } = await supabase
           .from('invoices')
           .select('total_amount, amount_paid')
@@ -182,16 +183,17 @@ export function useReceipts() {
 
   const voidReceiptMutation = useMutation({
     mutationFn: async (receiptId: string) => {
-      const { error } = await supabase
-        .from('receipts')
-        .update({ status: 'void', deleted_at: new Date().toISOString() })
-        .eq('id', receiptId);
+      const { error } = await supabase.rpc('void_receipt_and_reconcile', {
+        receipt_id: receiptId,
+      });
 
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
-      toast({ title: 'Receipt voided' });
+      queryClient.invalidateQueries({ queryKey: ['receipt'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({ title: 'Receipt voided', description: 'Any standalone receipt payment has been reversed from its linked invoice.' });
     },
     onError: (error) => {
       toast({ title: 'Failed to void receipt', description: error.message, variant: 'destructive' });
