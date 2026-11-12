@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTaxes, type Tax } from '@/hooks/useTaxes';
-import { Plus, Loader2, Calculator, Pencil } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Plus, Loader2, Calculator, Pencil, Download } from 'lucide-react';
 
 const TAX_TYPES = [
   { value: 'vat', label: 'VAT' },
@@ -109,6 +111,50 @@ export default function Taxes() {
     
     setIsDialogOpen(false);
     resetForm();
+  };
+
+  const taxReportQuery = useQuery({
+    queryKey: ['tax-report'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('invoice_taxes')
+        .select(`
+          id, tax_rate, taxable_amount, tax_amount, created_at,
+          tax:taxes(name, code),
+          invoice:invoices(invoice_number, issue_date, status, customer:customers(name))
+        `)
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const taxReportRows = (taxReportQuery.data || []).filter(row =>
+    row.invoice && row.invoice.status !== 'draft' && row.invoice.status !== 'canceled'
+  );
+  const totalTaxCharged = taxReportRows.reduce((sum, row) => sum + Number(row.tax_amount || 0), 0);
+
+  const downloadTaxReport = () => {
+    const headers = ['Invoice', 'Invoice date', 'Customer', 'Tax', 'Tax code', 'Rate (%)', 'Taxable amount', 'Tax amount'];
+    const rows = taxReportRows.map(row => [
+      row.invoice?.invoice_number || '',
+      row.invoice?.issue_date || '',
+      row.invoice?.customer?.name || '',
+      row.tax?.name || '',
+      row.tax?.code || '',
+      String(row.tax_rate),
+      String(row.taxable_amount),
+      String(row.tax_amount),
+    ]);
+    const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'audit-ledger-tax-report.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const getTypeBadgeColor = (type: string) => {
@@ -297,6 +343,51 @@ export default function Taxes() {
                 ))}
               </tbody>
             </table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-6">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Tax activity report</h2>
+              <p className="text-sm text-muted-foreground">Tax breakdowns saved on issued, partially paid and paid invoices. Draft and canceled invoices are excluded.</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={downloadTaxReport} disabled={taxReportRows.length === 0}>
+              <Download className="mr-2 h-4 w-4" />Export CSV
+            </Button>
+          </div>
+          <div className="rounded-lg bg-muted/40 p-4">
+            <p className="text-sm text-muted-foreground">Tax charged on recorded invoices</p>
+            <p className="text-2xl font-bold">{taxReportRows.length ? taxReportRows.reduce((sum, row) => sum + Number(row.tax_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</p>
+            <p className="text-xs text-muted-foreground">This is tax assessed on invoices, not a confirmation of tax remitted or tax legally payable.</p>
+          </div>
+          {taxReportQuery.isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+          ) : taxReportQuery.isError ? (
+            <p className="text-sm text-destructive">Tax report could not be loaded. Please try again.</p>
+          ) : taxReportRows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No issued invoice tax records are available yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Tax</th><th>Rate</th><th>Taxable amount</th><th>Tax amount</th></tr></thead>
+                <tbody>
+                  {taxReportRows.map(row => (
+                    <tr key={row.id}>
+                      <td className="font-medium">{row.invoice?.invoice_number || '—'}</td>
+                      <td>{row.invoice?.issue_date || '—'}</td>
+                      <td>{row.invoice?.customer?.name || '—'}</td>
+                      <td>{row.tax?.name || row.tax?.code || 'Tax'}</td>
+                      <td>{Number(row.tax_rate).toFixed(2)}%</td>
+                      <td>{Number(row.taxable_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="font-medium">{Number(row.tax_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
