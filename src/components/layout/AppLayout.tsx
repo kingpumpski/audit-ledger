@@ -26,16 +26,16 @@ interface AppLayoutProps {
 
 const featureLinks = [
   { label: 'Dashboard', description: 'Overview and business metrics', href: '/dashboard', terms: 'home overview' },
-  { label: 'Invoices', description: 'Create and manage invoices', href: '/invoices', terms: 'billing sales' },
-  { label: 'Receipts', description: 'Issue and manage receipts', href: '/receipts', terms: 'payments collections' },
-  { label: 'Customers', description: 'Manage customer records', href: '/customers', terms: 'clients contacts' },
-  { label: 'Products', description: 'Manage products and services', href: '/products', terms: 'catalog services' },
-  { label: 'Inventory', description: 'Stock and inventory control', href: '/inventory', terms: 'stock warehouse' },
-  { label: 'Accounting', description: 'Accounting workspace', href: '/accounting', terms: 'ledger chart accounts' },
+  { label: 'Sales & Invoices', description: 'Record sales and manage customer invoices', href: '/invoices', terms: 'billing sales money owed' },
+  { label: 'Money Received', description: 'Record and review customer payments', href: '/receipts', terms: 'payments collections cash mobile money' },
+  { label: 'Customers', description: 'Keep customer names and contact details', href: '/customers', terms: 'clients contacts people who owe' },
+  { label: 'Products & Services', description: 'Manage what your business sells', href: '/products', terms: 'catalog goods items services' },
+  { label: 'Stock', description: 'See what you have and what needs restocking', href: '/inventory', terms: 'inventory warehouse quantity' },
+  { label: 'Accounting Tools', description: 'Detailed accounting tools for finance staff', href: '/accounting', terms: 'ledger chart accounts journals' },
   { label: 'Taxes', description: 'Tax configuration and records', href: '/taxes', terms: 'vat tax' },
   { label: 'Discounts', description: 'Manage discounts', href: '/discounts', terms: 'offers promotions' },
-  { label: 'Reports', description: 'Financial and business reports', href: '/reports', terms: 'analytics statements' },
-  { label: 'Audit Logs', description: 'Review system activity', href: '/audit-logs', terms: 'activity history' },
+  { label: 'Business Reports', description: 'Understand sales, spending and business performance', href: '/reports', terms: 'analytics statements profit loss' },
+  { label: 'Activity History', description: 'See who changed important business records', href: '/audit-logs', terms: 'audit logs activity history' },
 ];
 
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {

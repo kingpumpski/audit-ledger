@@ -201,16 +201,16 @@ export default function Dashboard() {
 
   const statsCards = [
     {
-      title: 'Revenue This Month',
+      title: 'Paid Invoices This Month',
       value: `${currencySymbol}${stats.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
-      change: `${parseFloat(stats.revenueChange) >= 0 ? '+' : ''}${stats.revenueChange}%`,
+      change: stats.revenueChange === 'New' ? 'New' : `${parseFloat(stats.revenueChange) >= 0 ? '+' : ''}${stats.revenueChange}%`,
       trend: stats.revenueChange === 'New' || parseFloat(stats.revenueChange) >= 0 ? 'up' : 'down',
       icon: DollarSign,
-      description: 'paid invoices · vs last month',
+      description: 'Compared with last month',
       gradient: 'from-primary to-info',
     },
     {
-      title: 'Invoices Sent',
+      title: 'Invoices on Record',
       value: stats.totalInvoices.toString(),
       change: `${invoices.filter(i => i.status === 'issued').length} pending`,
       trend: 'up',
@@ -219,12 +219,12 @@ export default function Dashboard() {
       gradient: 'from-accent to-purple-500',
     },
     {
-      title: 'Pending Payments',
+      title: 'Customers Still Owe',
       value: `${currencySymbol}${stats.pendingPayments.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       change: stats.overdueCount > 0 ? `${stats.overdueCount} overdue` : 'All on time',
       trend: stats.overdueCount > 0 ? 'down' : 'up',
       icon: Clock,
-      description: 'awaiting payment',
+      description: 'Outstanding customer balances',
       gradient: 'from-warning to-orange-500',
     },
     {
@@ -251,12 +251,12 @@ export default function Dashboard() {
   return (
     <AppLayout
       title="Dashboard"
-      subtitle="Welcome back! Here's what's happening with your business."
+      subtitle="A simple view of your sales, customer balances and stock."
       actions={
         <Button asChild>
           <Link to="/invoices/new">
             <Plus className="mr-2 h-4 w-4" />
-            New Invoice
+            Create an Invoice
           </Link>
         </Button>
       }
@@ -353,14 +353,14 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Recent Invoices & Quick Actions */}
+        {/* Recent Sales Invoices & Common Business Tasks */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Recent Invoices */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg font-display">Recent Invoices</CardTitle>
-                <CardDescription>Latest invoice activity</CardDescription>
+                <CardDescription>Your latest recorded invoices</CardDescription>
               </div>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/invoices">View all</Link>
@@ -441,25 +441,25 @@ export default function Dashboard() {
               <Button variant="outline" className="w-full justify-start" asChild>
                 <Link to="/receipts/new">
                   <Receipt className="mr-2 h-4 w-4" />
-                  Issue Receipt
+                  Record Money Received
                 </Link>
               </Button>
               <Button variant="outline" className="w-full justify-start" asChild>
                 <Link to="/customers">
                   <Users className="mr-2 h-4 w-4" />
-                  Manage Customers
+                  View Customers
                 </Link>
               </Button>
               <Button variant="outline" className="w-full justify-start" asChild>
                 <Link to="/products">
                   <Package className="mr-2 h-4 w-4" />
-                  Manage Products
+                  View Products & Services
                 </Link>
               </Button>
               <Button variant="outline" className="w-full justify-start" asChild>
                 <Link to="/reports">
                   <TrendingUp className="mr-2 h-4 w-4" />
-                  View Reports
+                  See Business Reports
                 </Link>
               </Button>
             </CardContent>
