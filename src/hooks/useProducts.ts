@@ -145,6 +145,7 @@ export function useProducts() {
     error: productsQuery.error,
     createProduct: createProductMutation.mutateAsync,
     updateProduct: updateProductMutation.mutate,
+    updateProductAsync: updateProductMutation.mutateAsync,
     deleteProduct: deleteProductMutation.mutate,
     isCreating: createProductMutation.isPending,
     isUpdating: updateProductMutation.isPending,
