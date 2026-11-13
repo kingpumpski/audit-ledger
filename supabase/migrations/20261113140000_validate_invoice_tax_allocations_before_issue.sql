@@ -10,8 +10,20 @@ AS $invoice_tax_issue_guard$
 DECLARE
   v_snapshot_tax_total numeric(15,2);
   v_invoice_tax_total numeric(15,2);
+  v_snapshot_count bigint;
 BEGIN
   IF OLD.status IS NOT DISTINCT FROM NEW.status OR NEW.status <> 'issued' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT COUNT(*) INTO v_snapshot_count
+  FROM public.invoice_item_taxes
+  WHERE invoice_id = NEW.id;
+
+  -- Preserve compatibility for drafts created before per-line snapshots existed.
+  -- Their aggregate invoice tax evidence remains usable for issuing, but those
+  -- invoices must be excluded from future line-level credit-note workflows.
+  IF v_snapshot_count = 0 THEN
     RETURN NEW;
   END IF;
 
