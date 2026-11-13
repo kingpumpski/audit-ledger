@@ -38,6 +38,14 @@ INSERT INTO public.taxes (
 SELECT 'TAX-SNAPSHOT-001','Tax snapshot VAT','vat',15,false,true,coa.id,CURRENT_DATE
 FROM public.chart_of_accounts coa WHERE coa.code='2100';
 
+INSERT INTO public.invoice_taxes (
+  invoice_id, tax_id, tax_rate, taxable_amount, tax_amount, liability_account_id
+)
+SELECT i.id, t.id, t.rate, 100, 15, t.liability_account_id
+FROM public.invoices i
+JOIN public.taxes t ON t.code='TAX-SNAPSHOT-001'
+WHERE i.invoice_number='INV-TAX-SNAPSHOT-001';
+
 SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
 
