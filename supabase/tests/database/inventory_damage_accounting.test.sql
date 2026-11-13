@@ -588,7 +588,7 @@ SELECT extensions.lives_ok(
        CURRENT_DATE, 'cash', 'Supplier returned petty cash expense',
        'PETTY-REFUND-001',
        'd0000000-0000-4000-8000-000000000201'
-     ) $,,
+     ) $$,
   'Accountant can reverse a petty-cash expense with a refund reference'
 );
 
@@ -640,7 +640,7 @@ SELECT extensions.throws_ok(
        CURRENT_DATE, 'cash', 'Duplicate reversal',
        'PETTY-REFUND-002',
        'd0000000-0000-4000-8000-000000000202'
-     ) $,,
+     ) $$,
   'P0001',
   'This petty-cash expense has already been reversed',
   'A petty-cash expense cannot be reversed twice'
@@ -649,7 +649,7 @@ SELECT extensions.throws_ok(
 SELECT extensions.throws_ok(
   $$ UPDATE public.petty_cash_expense_reversals
      SET reason = 'Changed after posting'
-     WHERE reference_number = 'PETTY-REFUND-001' $,,
+     WHERE reference_number = 'PETTY-REFUND-001' $$,
   'P0001',
   'Posted petty-cash expense reversals are immutable',
   'Petty-cash reversal evidence cannot be edited'
@@ -670,7 +670,7 @@ SELECT extensions.throws_ok(
        CURRENT_DATE, 'cash', 'Cashier must not reverse',
        'PETTY-REFUND-CASHIER',
        'd0000000-0000-4000-8000-000000000203'
-     ) $,,
+     ) $$,
   'P0001',
   'Only an admin or accountant can reverse petty-cash expenses',
   'Cashier cannot reverse petty-cash expenses'
@@ -685,7 +685,7 @@ SELECT extensions.throws_ok(
        CURRENT_DATE - 1, 'cash', 'Invalid earlier refund date',
        'PETTY-REFUND-EARLY',
        'd0000000-0000-4000-8000-000000000204'
-     ) $,,
+     ) $$,
   'P0001',
   'Refund date cannot be earlier than the original petty-cash expense date',
   'Petty-cash reversal cannot predate the original expense'
