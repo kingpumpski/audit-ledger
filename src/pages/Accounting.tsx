@@ -1,5 +1,5 @@
 import { csvCell } from '@/lib/reset-monitoring';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,23 @@ export default function Accounting() {
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('accounting-cash-flow-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['payments'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'receipts' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('monthly');
   const [isPettyCashOpen, setIsPettyCashOpen] = useState(false);
   const [pettyCashForm, setPettyCashForm] = useState({
