@@ -134,7 +134,7 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>Posted Trial Balance</CardTitle>
-          <CardDescription>Live posted balances from invoices, received payments and unapplied receipts.</CardDescription>
+          <CardDescription>Live posted balances across invoices, payments, receipts, inventory and recorded expenses.</CardDescription>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void journalQuery.refetch()} disabled={journalQuery.isFetching}>
@@ -203,7 +203,7 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
           </div>
         )}
         <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-          This is a partial ledger view for invoice, payment and unapplied-receipt postings. Petty cash expenses, stock purchases, cost of goods sold, opening balances and bank reconciliations are not yet journalised here, so this is not a complete set of financial statements.
+          This ledger includes posted invoice and payment activity, unapplied receipts, petty-cash and supplier expenses, stock purchases, verified cost of goods sold and inventory damage. It is not yet a complete set of financial statements: opening balances, bank reconciliations and an independently reconciled completeness attestation are still required. A balanced trial balance confirms debit/credit equality, not that every real-world transaction has been recorded.
         </p>
       </CardContent>
     </Card>
