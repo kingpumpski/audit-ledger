@@ -529,7 +529,7 @@ export default function InvoiceNew() {
                             setProductDialogTargetId(item.id);
                             setIsProductDialogOpen(true);
                           } else if (v === 'none') {
-                            updateItem(item.id, { product_id: undefined });
+                            updateItem(item.id, { product_id: undefined, tax_ids: generalTaxIds, taxes_manually_selected: false });
                             setProductSearchQuery('');
                           } else {
                             selectProduct(item.id, v);
