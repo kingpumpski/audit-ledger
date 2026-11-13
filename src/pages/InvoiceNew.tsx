@@ -318,7 +318,21 @@ export default function InvoiceNew() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Invoice Date *</Label>
-                  <Input type="date" value={format(issueDate, 'yyyy-MM-dd')} onChange={e => { const value = e.target.value; if (value) setIssueDate(new Date(`${value}T12:00:00`)); }} />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-start font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(issueDate, 'PPP')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={issueDate}
+                        onSelect={(date) => date && setIssueDate(date)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <p className="text-xs text-muted-foreground">You can record invoices for previous accounting periods.</p>
                 </div>
                 <div className="space-y-2">
