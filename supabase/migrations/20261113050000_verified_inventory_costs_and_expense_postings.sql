@@ -101,6 +101,144 @@ BEFORE INSERT OR UPDATE OF product_id, quantity ON public.invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION public.snapshot_invoice_item_cost();
 
+ALTER TABLE public.invoice_items
+  ADD COLUMN IF NOT EXISTS cost_verified_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS cost_verified_at timestamptz,
+  ADD COLUMN IF NOT EXISTS cost_reference text,
+  ADD COLUMN IF NOT EXISTS cost_notes text;
+
+-- Prevent direct client edits to the historical cost snapshot. The audited RPC
+-- below is the only route for correcting costs on already-issued invoices.
+CREATE OR REPLACE FUNCTION public.guard_invoice_item_cost_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $cost_change_guard$
+BEGIN
+  IF (NEW.unit_cost IS DISTINCT FROM OLD.unit_cost
+      OR NEW.cost_source IS DISTINCT FROM OLD.cost_source
+      OR NEW.cost_reference IS DISTINCT FROM OLD.cost_reference
+      OR NEW.cost_notes IS DISTINCT FROM OLD.cost_notes)
+     AND COALESCE(current_setting('app.historical_cost_rpc', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Historical item costs must be updated through the audited cost verification action';
+  END IF;
+  RETURN NEW;
+END;
+$cost_change_guard$;
+
+CREATE TRIGGER guard_invoice_item_cost_changes
+BEFORE UPDATE OF unit_cost, cost_source, cost_reference, cost_notes
+ON public.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_invoice_item_cost_changes();
+
+CREATE OR REPLACE FUNCTION public.set_historical_invoice_item_cost(
+  p_invoice_item_id uuid,
+  p_unit_cost numeric,
+  p_reference text,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $historical_cost$
+DECLARE
+  v_item public.invoice_items%ROWTYPE;
+  v_invoice public.invoices%ROWTYPE;
+  v_journal_id uuid;
+  v_cogs_account uuid;
+  v_inventory_account uuid;
+  v_cogs_total numeric(14,2);
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'Only an admin or accountant can verify historical product costs';
+  END IF;
+  IF p_unit_cost IS NULL OR p_unit_cost < 0 THEN
+    RAISE EXCEPTION 'Enter a valid historical unit cost';
+  END IF;
+  IF NULLIF(BTRIM(p_reference), '') IS NULL THEN
+    RAISE EXCEPTION 'A supplier invoice, receipt or other source reference is required';
+  END IF;
+
+  SELECT * INTO v_item
+  FROM public.invoice_items
+  WHERE id = p_invoice_item_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice line was not found';
+  END IF;
+
+  SELECT * INTO v_invoice
+  FROM public.invoices
+  WHERE id = v_item.invoice_id
+    AND deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND OR v_invoice.status NOT IN ('issued', 'partially_paid', 'paid', 'overdue') THEN
+    RAISE EXCEPTION 'Historical cost verification is available only for issued invoices';
+  END IF;
+
+  SELECT id INTO v_journal_id
+  FROM public.journal_entries
+  WHERE source_type = 'invoice' AND source_id = v_invoice.id;
+  IF v_journal_id IS NULL THEN
+    RAISE EXCEPTION 'The invoice has no posted journal entry to receive its cost-of-sales posting';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_lines jl
+    JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE jl.journal_entry_id = v_journal_id AND coa.code = '5000'
+  ) THEN
+    RAISE EXCEPTION 'Cost of goods sold is already posted for this invoice; reverse and repost through a controlled correction';
+  END IF;
+
+  PERFORM set_config('app.historical_cost_rpc', 'on', true);
+  UPDATE public.invoice_items
+  SET unit_cost = ROUND(p_unit_cost, 4),
+      cost_source = 'historical_verified',
+      cost_verified_by = auth.uid(),
+      cost_verified_at = now(),
+      cost_reference = NULLIF(BTRIM(p_reference), ''),
+      cost_notes = NULLIF(BTRIM(p_notes), '')
+  WHERE id = p_invoice_item_id;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.invoice_items
+    WHERE invoice_id = v_invoice.id AND unit_cost IS NULL
+  ) THEN
+    SELECT ROUND(COALESCE(SUM(quantity * unit_cost), 0), 2)
+      INTO v_cogs_total
+    FROM public.invoice_items
+    WHERE invoice_id = v_invoice.id;
+
+    IF v_cogs_total > 0 THEN
+      SELECT id INTO v_cogs_account FROM public.chart_of_accounts
+      WHERE code = '5000' AND account_type = 'expense' AND is_active LIMIT 1;
+      SELECT id INTO v_inventory_account FROM public.chart_of_accounts
+      WHERE code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
+      IF v_cogs_account IS NULL OR v_inventory_account IS NULL THEN
+        RAISE EXCEPTION 'Cost of Goods Sold or Inventory account is not configured';
+      END IF;
+
+      INSERT INTO public.journal_lines (
+        journal_entry_id, line_number, account_id, description, debit, credit
+      )
+      VALUES
+        (v_journal_id, 9998, v_cogs_account, 'Verified historical cost of goods sold - ' || v_invoice.invoice_number, v_cogs_total, 0),
+        (v_journal_id, 9999, v_inventory_account, 'Verified historical inventory relief - ' || v_invoice.invoice_number, 0, v_cogs_total);
+    END IF;
+  END IF;
+
+  RETURN p_invoice_item_id;
+END;
+$historical_cost$;
+
+REVOKE ALL ON FUNCTION public.guard_invoice_item_cost_changes() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.set_historical_invoice_item_cost(uuid, numeric, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_historical_invoice_item_cost(uuid, numeric, text, text) TO authenticated;
+
 -- A stock purchase is one atomic operation: inventory quantity/value, weighted
 -- average cost, purchase audit row, cash/AP and the journal all commit together.
 CREATE OR REPLACE FUNCTION public.record_stock_purchase(
