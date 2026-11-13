@@ -46,6 +46,7 @@ BEGIN
     SELECT * INTO v_existing_payment
     FROM public.payments
     WHERE id = v_payment_id
+      AND deleted_at IS NULL
     FOR UPDATE;
 
     IF NOT FOUND THEN
@@ -60,6 +61,16 @@ BEGIN
     END IF;
 
     v_invoice_id := v_existing_payment.invoice_id;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.receipts
+      WHERE payment_id = v_payment_id
+        AND status <> 'void'
+        AND deleted_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'A receipt has already been issued for this payment';
+    END IF;
   ELSIF v_invoice_id IS NOT NULL THEN
     v_payment_number := public.get_next_sequence('payment');
 
