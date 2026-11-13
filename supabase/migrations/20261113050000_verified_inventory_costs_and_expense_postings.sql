@@ -723,6 +723,18 @@ BEGIN
     RAISE EXCEPTION 'An authenticated user is required to change petty-cash records';
   END IF;
 
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.type = 'expense' AND EXISTS (
+      SELECT 1
+      FROM public.journal_entries
+      WHERE source_type = 'petty_cash_expense'
+        AND source_id = OLD.id
+    ) THEN
+      RAISE EXCEPTION 'An expense with a posted journal is immutable; record an audited reversal instead';
+    END IF;
+    RETURN OLD;
+  END IF;
+
   IF NEW.type IS DISTINCT FROM OLD.type THEN
     RAISE EXCEPTION 'A petty-cash record cannot be reclassified between income and expense; use a controlled correction';
   END IF;
@@ -734,10 +746,6 @@ BEGIN
       AND source_id = OLD.id
   ) THEN
     RAISE EXCEPTION 'An expense with a posted journal is immutable; record an audited reversal instead';
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
   END IF;
   RETURN NEW;
 END;
