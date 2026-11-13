@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +41,7 @@ import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { calculateLineAmounts, isTaxEffectiveOnDate } from '@/lib/tax-calculator';
 
 interface LineItem {
   id: string;
@@ -50,7 +51,8 @@ interface LineItem {
   unit_price: number;
   discount_type?: 'fixed' | 'percentage';
   discount_value?: number;
-  tax_rate?: number;
+  tax_ids?: string[];
+  taxes_manually_selected?: boolean;
 }
 
 export default function InvoiceNew() {
@@ -66,11 +68,12 @@ export default function InvoiceNew() {
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
   const [issueDate, setIssueDate] = useState<Date>(new Date());
+  const [pricesIncludeTax, setPricesIncludeTax] = useState(false);
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
   const [notes, setNotes] = useState('');
   const [terms, setTerms] = useState('Payment due within 30 days.');
   const [items, setItems] = useState<LineItem[]>([
-    { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_rate: 0 }
+    { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0 }
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
@@ -88,12 +91,28 @@ export default function InvoiceNew() {
   }, [products, productSearchQuery]);
 
   // Active taxes for dropdown
-  const activeTaxes = taxes.filter(t => t.is_active);
+  const activeTaxes = useMemo(() => taxes.filter(t =>
+    t.is_active && isTaxEffectiveOnDate(t, format(issueDate, 'yyyy-MM-dd'))
+  ), [taxes, issueDate]);
+
+  const generalTaxIds = activeTaxes.filter(t => !t.applies_to_category).map(t => t.id);
+
+  useEffect(() => {
+    setItems(current => current.map(item => {
+      if (item.taxes_manually_selected) return item;
+      const product = products.find(candidate => candidate.id === item.product_id);
+      const defaultTaxIds = activeTaxes.filter(tax =>
+        !tax.applies_to_category ||
+        tax.applies_to_category.toLowerCase() === (product?.category || '').toLowerCase()
+      ).map(tax => tax.id);
+      return { ...item, tax_ids: defaultTaxIds };
+    }));
+  }, [activeTaxes, products]);
 
   const addItem = () => {
     setItems([
       ...items,
-      { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_rate: 0 }
+      { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_ids: generalTaxIds, taxes_manually_selected: false }
     ]);
   };
 
@@ -115,40 +134,34 @@ export default function InvoiceNew() {
         product_id: productId,
         description: product.name,
         unit_price: product.current_price,
+        tax_ids: activeTaxes.filter(tax => !tax.applies_to_category || tax.applies_to_category.toLowerCase() === (product.category || '').toLowerCase()).map(tax => tax.id),
+        taxes_manually_selected: false,
       });
     }
   };
 
-  const calculateLineTotal = (item: LineItem) => {
-    const subtotal = item.quantity * item.unit_price;
-    let discount = 0;
-    if (item.discount_value) {
-      discount = item.discount_type === 'percentage' 
-        ? subtotal * (item.discount_value / 100) 
-        : item.discount_value;
-    }
-    const taxable = subtotal - discount;
-    const tax = item.tax_rate ? taxable * (item.tax_rate / 100) : 0;
-    return taxable + tax;
+  const getLineCalculation = (item: LineItem) => {
+    const product = products.find(p => p.id === item.product_id);
+    const applicableTaxes = activeTaxes.filter(tax =>
+      (item.tax_ids || []).includes(tax.id) &&
+      (!tax.applies_to_category || tax.applies_to_category.toLowerCase() === (product?.category || '').toLowerCase())
+    );
+    return calculateLineAmounts({
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount_type: item.discount_type,
+      discount_value: item.discount_value,
+      taxes: applicableTaxes,
+      pricesIncludeTax,
+    });
   };
 
-  const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-  const totalDiscount = items.reduce((sum, item) => {
-    if (!item.discount_value) return sum;
-    const lineSubtotal = item.quantity * item.unit_price;
-    return sum + (item.discount_type === 'percentage' 
-      ? lineSubtotal * (item.discount_value / 100) 
-      : item.discount_value);
-  }, 0);
-  const totalTax = items.reduce((sum, item) => {
-    const lineSubtotal = item.quantity * item.unit_price;
-    const lineDiscount = item.discount_value 
-      ? (item.discount_type === 'percentage' ? lineSubtotal * (item.discount_value / 100) : item.discount_value)
-      : 0;
-    const taxable = lineSubtotal - lineDiscount;
-    return sum + (item.tax_rate ? taxable * (item.tax_rate / 100) : 0);
-  }, 0);
-  const total = subtotal - totalDiscount + totalTax;
+  const calculateLineTotal = (item: LineItem) => getLineCalculation(item).line_total;
+  const calculations = items.map(getLineCalculation);
+  const subtotal = calculations.reduce((sum, calculation) => sum + calculation.subtotal, 0);
+  const totalDiscount = calculations.reduce((sum, calculation) => sum + calculation.discount_amount, 0);
+  const totalTax = calculations.reduce((sum, calculation) => sum + calculation.tax_amount, 0);
+  const total = pricesIncludeTax ? subtotal - totalDiscount : subtotal - totalDiscount + totalTax;
 
   const selectedCustomer = customers.find(c => c.id === customerId);
 
@@ -196,6 +209,7 @@ export default function InvoiceNew() {
         customer_id: customerId,
         issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
+        prices_include_tax: pricesIncludeTax,
         notes,
         terms,
         items: items.map(item => ({
@@ -205,7 +219,7 @@ export default function InvoiceNew() {
           unit_price: item.unit_price,
           discount_type: item.discount_type,
           discount_value: item.discount_value,
-          tax_rate: item.tax_rate,
+          tax_ids: item.tax_ids || [],
         })),
       });
 
@@ -235,6 +249,7 @@ export default function InvoiceNew() {
         customer_id: customerId,
         issue_date: format(issueDate, 'yyyy-MM-dd'),
         due_date: format(dueDate, 'yyyy-MM-dd'),
+        prices_include_tax: pricesIncludeTax,
         notes,
         terms,
         items: items.map(item => ({
@@ -244,7 +259,7 @@ export default function InvoiceNew() {
           unit_price: item.unit_price,
           discount_type: item.discount_type,
           discount_value: item.discount_value,
-          tax_rate: item.tax_rate,
+          tax_ids: item.tax_ids || [],
         })),
       });
 
@@ -303,7 +318,21 @@ export default function InvoiceNew() {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Invoice Date *</Label>
-                  <Input type="date" value={format(issueDate, 'yyyy-MM-dd')} onChange={e => { const value = e.target.value; if (value) setIssueDate(new Date(`${value}T12:00:00`)); }} />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-start font-normal">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(issueDate, 'PPP')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={issueDate}
+                        onSelect={(date) => date && setIssueDate(date)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <p className="text-xs text-muted-foreground">You can record invoices for previous accounting periods.</p>
                 </div>
                 <div className="space-y-2">
@@ -377,6 +406,13 @@ export default function InvoiceNew() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={pricesIncludeTax} onChange={e => setPricesIncludeTax(e.target.checked)} />
+                  Product prices already include tax
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">When enabled, configured tax components are extracted from the entered price instead of added on top. This setting is saved in each invoice's calculated tax breakdown.</p>
+              </div>
               {items.map((item, index) => (
                 <div key={item.id} className="p-4 border rounded-lg space-y-3">
                   <div className="flex items-center justify-between">
@@ -485,23 +521,25 @@ export default function InvoiceNew() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Tax Rate</Label>
-                      <Select 
-                        value={item.tax_rate?.toString() || '0'} 
-                        onValueChange={(v) => updateItem(item.id, { tax_rate: Number(v) })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select tax" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">No Tax (0%)</SelectItem>
-                          {activeTaxes.map(tax => (
-                            <SelectItem key={tax.id} value={tax.rate.toString()}>
-                              {tax.name} ({tax.rate}%)
-                            </SelectItem>
+                      <Label>Applicable taxes</Label>
+                      {activeTaxes.filter(tax => {
+                        const product = products.find(p => p.id === item.product_id);
+                        return !tax.applies_to_category || tax.applies_to_category.toLowerCase() === (product?.category || '').toLowerCase();
+                      }).length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No active tax rules apply to this item.</p>
+                      ) : (
+                        <div className="space-y-2 rounded-md border p-3">
+                          {activeTaxes.filter(tax => {
+                            const product = products.find(p => p.id === item.product_id);
+                            return !tax.applies_to_category || tax.applies_to_category.toLowerCase() === (product?.category || '').toLowerCase();
+                          }).map(tax => (
+                            <label key={tax.id} className="flex items-center justify-between gap-2 text-sm">
+                              <span>{tax.name} ({tax.rate}%){tax.is_compound ? ' · compound' : ''}</span>
+                              <input type="checkbox" checked={(item.tax_ids || []).includes(tax.id)} onChange={e => updateItem(item.id, { taxes_manually_selected: true, tax_ids: e.target.checked ? [...(item.tax_ids || []), tax.id] : (item.tax_ids || []).filter(id => id !== tax.id) })} />
+                            </label>
                           ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -531,7 +569,7 @@ export default function InvoiceNew() {
                 )}
                 {totalTax > 0 && (
                   <div className="flex justify-between text-sm">
-                    <span>Tax</span>
+                    <span>{pricesIncludeTax ? 'Tax included in price' : 'Tax'}</span>
                     <span>{currencySymbol}{totalTax.toFixed(2)}</span>
                   </div>
                 )}
@@ -590,7 +628,7 @@ export default function InvoiceNew() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Issue Date</p>
-                    <p className="font-medium">{format(new Date(), 'MMM d, yyyy')}</p>
+                    <p className="font-medium">{format(issueDate, 'MMM d, yyyy')}</p>
                     <p className="text-sm text-muted-foreground mt-2">Due Date</p>
                     <p className="font-medium">{format(dueDate, 'MMM d, yyyy')}</p>
                   </div>

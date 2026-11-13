@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Tables, TablesInsert } from '@/integrations/supabase/types';
+import { Tables } from '@/integrations/supabase/types';
+import { calculateLineAmounts, isTaxEffectiveOnDate, type TaxRule } from '@/lib/tax-calculator';
 
 type Invoice = Tables<'invoices'>;
 type InvoiceItem = Tables<'invoice_items'>;
@@ -16,6 +17,7 @@ interface CreateInvoiceData {
   customer_id: string;
   due_date?: string;
   issue_date?: string;
+  prices_include_tax?: boolean;
   notes?: string;
   terms?: string;
   items: {
@@ -25,7 +27,7 @@ interface CreateInvoiceData {
     unit_price: number;
     discount_type?: 'fixed' | 'percentage';
     discount_value?: number;
-    tax_rate?: number;
+    tax_ids?: string[];
   }[];
 }
 
@@ -62,41 +64,79 @@ export function useInvoices() {
 
       if (seqError) throw seqError;
 
-      // Calculate totals
+      // Load current tax definitions from the database; never trust tax rates sent by the browser.
+      const selectedTaxIds = [...new Set(invoiceData.items.flatMap(item => item.tax_ids || []))];
+      let taxRules: TaxRule[] = [];
+      if (selectedTaxIds.length > 0) {
+        const { data: taxRows, error: taxError } = await supabase
+          .from('taxes')
+          .select('id, name, code, rate, is_compound, applies_to_category, effective_from, effective_to')
+          .in('id', selectedTaxIds)
+          .eq('is_active', true);
+        if (taxError) throw taxError;
+        taxRules = (taxRows || []) as TaxRule[];
+      }
+
+      const productIds = [...new Set(invoiceData.items.map(item => item.product_id).filter((id): id is string => Boolean(id)))];
+      const productCategories = new Map<string, string | null>();
+      if (productIds.length > 0) {
+        const { data: productRows, error: productError } = await supabase
+          .from('products')
+          .select('id, category')
+          .in('id', productIds);
+        if (productError) throw productError;
+        (productRows || []).forEach(product => productCategories.set(product.id, product.category));
+      }
+
+      const invoiceDate = invoiceData.issue_date || new Date().toISOString().slice(0, 10);
       let subtotal = 0;
       let taxAmount = 0;
       let discountAmount = 0;
+      const taxTotals = new Map<string, { tax_id: string; tax_rate: number; taxable_amount: number; tax_amount: number }>();
 
       const processedItems = invoiceData.items.map((item, index) => {
-        const lineSubtotal = item.quantity * item.unit_price;
-        
-        // Calculate line discount
-        let lineDiscount = 0;
-        if (item.discount_value) {
-          lineDiscount = item.discount_type === 'percentage'
-            ? lineSubtotal * (item.discount_value / 100)
-            : item.discount_value;
-        }
-        
-        // Calculate line tax
-        const taxableAmount = lineSubtotal - lineDiscount;
-        const lineTax = item.tax_rate ? taxableAmount * (item.tax_rate / 100) : 0;
-        
-        const lineTotal = taxableAmount + lineTax;
+        const category = item.product_id ? productCategories.get(item.product_id) : null;
+        const applicableTaxes = taxRules.filter(tax =>
+          (item.tax_ids || []).includes(tax.id) &&
+          isTaxEffectiveOnDate(tax, invoiceDate) &&
+          (!tax.applies_to_category || tax.applies_to_category.toLowerCase() === (category || '').toLowerCase())
+        );
+        const calculation = calculateLineAmounts({
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          discount_type: item.discount_type,
+          discount_value: item.discount_value,
+          taxes: applicableTaxes,
+          pricesIncludeTax: Boolean(invoiceData.prices_include_tax),
+        });
 
-        subtotal += lineSubtotal;
-        discountAmount += lineDiscount;
-        taxAmount += lineTax;
+        subtotal += calculation.subtotal;
+        discountAmount += calculation.discount_amount;
+        taxAmount += calculation.tax_amount;
+        calculation.taxes.forEach(tax => {
+          const current = taxTotals.get(tax.tax_id) || {
+            tax_id: tax.tax_id, tax_rate: tax.rate, taxable_amount: 0, tax_amount: 0,
+          };
+          current.taxable_amount += tax.taxable_amount;
+          current.tax_amount += tax.tax_amount;
+          taxTotals.set(tax.tax_id, current);
+        });
 
         return {
           ...item,
-          line_total: lineTotal,
-          tax_amount: lineTax,
+          line_total: calculation.line_total,
+          tax_amount: calculation.tax_amount,
+          tax_rate: calculation.nominal_tax_rate,
           sort_order: index,
         };
       });
 
-      const totalAmount = subtotal - discountAmount + taxAmount;
+      subtotal = Math.round((subtotal + Number.EPSILON) * 100) / 100;
+      discountAmount = Math.round((discountAmount + Number.EPSILON) * 100) / 100;
+      taxAmount = Math.round((taxAmount + Number.EPSILON) * 100) / 100;
+      const totalAmount = invoiceData.prices_include_tax
+        ? Math.round((subtotal - discountAmount + Number.EPSILON) * 100) / 100
+        : Math.round((subtotal - discountAmount + taxAmount + Number.EPSILON) * 100) / 100;
 
       // Create invoice
       const { data: invoice, error: invoiceError } = await supabase
@@ -105,7 +145,7 @@ export function useInvoices() {
           invoice_number: invoiceNumber,
           customer_id: invoiceData.customer_id,
           due_date: invoiceData.due_date,
-          issue_date: invoiceData.issue_date,
+          issue_date: invoiceDate,
           notes: invoiceData.notes,
           terms: invoiceData.terms,
           subtotal,
@@ -141,6 +181,20 @@ export function useInvoices() {
         .insert(itemsToInsert);
 
       if (itemsError) throw itemsError;
+
+      const invoiceTaxRows = [...taxTotals.values()].map(tax => ({
+        invoice_id: invoice.id,
+        tax_id: tax.tax_id,
+        tax_rate: tax.tax_rate,
+        taxable_amount: Math.round((tax.taxable_amount + Number.EPSILON) * 100) / 100,
+        tax_amount: Math.round((tax.tax_amount + Number.EPSILON) * 100) / 100,
+      }));
+      if (invoiceTaxRows.length > 0) {
+        const { error: invoiceTaxesError } = await supabase
+          .from('invoice_taxes')
+          .insert(invoiceTaxRows);
+        if (invoiceTaxesError) throw invoiceTaxesError;
+      }
 
       return invoice;
     },
