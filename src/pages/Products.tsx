@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useProducts } from '@/hooks/useProducts';
+import { supabase } from '@/integrations/supabase/client';
 import { useSettings } from '@/hooks/useSettings';
 import { CSVImport } from '@/components/import/CSVImport';
 import { SeedProductsButton } from '@/components/admin/SeedProductsButton';
@@ -55,6 +57,29 @@ export default function Products() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isEditingProduct, setIsEditingProduct] = useState(false);
+  const {
+    data: selectedProductHasHistory = false,
+    isLoading: isProductHistoryLoading,
+    isError: isProductHistoryError,
+  } = useQuery({
+    queryKey: ['product-edit-history', selectedProduct?.id],
+    enabled: !!selectedProduct,
+    queryFn: async () => {
+      if (!selectedProduct) return false;
+      const [inventoryHistory, invoiceHistory] = await Promise.all([
+        supabase.from('inventory_transactions').select('id', { count: 'exact', head: true }).eq('product_id', selectedProduct.id),
+        supabase.from('invoice_items').select('id', { count: 'exact', head: true }).eq('product_id', selectedProduct.id),
+      ]);
+      if (inventoryHistory.error) throw inventoryHistory.error;
+      if (invoiceHistory.error) throw invoiceHistory.error;
+      return (inventoryHistory.count || 0) > 0 || (invoiceHistory.count || 0) > 0;
+    },
+  });
+  const productTypeLocked = Boolean(
+    selectedProduct &&
+    (isProductHistoryLoading || isProductHistoryError || selectedProductHasHistory ||
+      Number(selectedProduct.stock_quantity || 0) > 0)
+  );
   const [editFormData, setEditFormData] = useState({
     name: '', sku: '', description: '', category: '', current_price: 0,
     cost_price: 0, stock_quantity: 0, min_stock_level: 0, unit: 'piece',
@@ -89,8 +114,6 @@ export default function Products() {
         description: editFormData.description.trim() || null,
         category: editFormData.category.trim() || null,
         current_price: editFormData.current_price,
-        cost_price: editFormData.cost_price,
-        stock_quantity: editFormData.is_service ? null : editFormData.stock_quantity,
         min_stock_level: editFormData.is_service ? null : editFormData.min_stock_level,
         unit: editFormData.unit,
         is_service: editFormData.is_service,
@@ -624,13 +647,27 @@ export default function Products() {
                 <div className="space-y-2"><Label>Category</Label><Input value={editFormData.category} onChange={e => setEditFormData(v => ({ ...v, category: e.target.value }))} /></div>
                 <div className="space-y-2"><Label>Unit</Label><Input value={editFormData.unit} onChange={e => setEditFormData(v => ({ ...v, unit: e.target.value }))} /></div>
                 <div className="space-y-2"><Label>Selling Price ({currencySymbol})</Label><Input type="number" min="0" step="0.01" value={editFormData.current_price} onChange={e => setEditFormData(v => ({ ...v, current_price: Number(e.target.value) }))} /></div>
-                <div className="space-y-2"><Label>Cost Price ({currencySymbol})</Label><Input type="number" min="0" step="0.01" value={editFormData.cost_price} onChange={e => setEditFormData(v => ({ ...v, cost_price: Number(e.target.value) }))} /></div>
-                <div className="space-y-2"><Label>Stock Quantity</Label><Input type="number" min="0" disabled={editFormData.is_service} value={editFormData.stock_quantity} onChange={e => setEditFormData(v => ({ ...v, stock_quantity: Number(e.target.value) }))} /></div>
+                <div className="space-y-2">
+                  <Label>Verified Purchase Cost ({currencySymbol})</Label>
+                  <Input type="number" value={editFormData.cost_price} disabled readOnly />
+                  <p className="text-xs text-muted-foreground">Cost valuation is updated through evidenced stock purchases, not by editing catalogue details.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Stock Quantity</Label>
+                  <Input type="number" value={editFormData.stock_quantity} disabled readOnly />
+                  <p className="text-xs text-muted-foreground">Stock changes through purchases, issued invoices and audited inventory movements.</p>
+                </div>
                 <div className="space-y-2"><Label>Minimum Stock Level</Label><Input type="number" min="0" disabled={editFormData.is_service} value={editFormData.min_stock_level} onChange={e => setEditFormData(v => ({ ...v, min_stock_level: Number(e.target.value) }))} /></div>
               </div>
               <div className="space-y-2"><Label>Description</Label><Textarea rows={3} value={editFormData.description} onChange={e => setEditFormData(v => ({ ...v, description: e.target.value }))} /></div>
               <div className="flex flex-wrap gap-6">
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editFormData.is_service} onChange={e => setEditFormData(v => ({ ...v, is_service: e.target.checked }))} /> Service (no stock tracking)</label>
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={editFormData.is_service} disabled={productTypeLocked} onChange={e => setEditFormData(v => ({ ...v, is_service: e.target.checked }))} />
+                    Service (no stock tracking)
+                  </label>
+                  {productTypeLocked && <p className="text-xs text-muted-foreground">Product type is locked because stock or transaction history exists. This protects previously recorded sales and inventory.</p>}
+                </div>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editFormData.is_active} onChange={e => setEditFormData(v => ({ ...v, is_active: e.target.checked }))} /> Active</label>
               </div>
               <div className="flex justify-end gap-2 border-t pt-4">
