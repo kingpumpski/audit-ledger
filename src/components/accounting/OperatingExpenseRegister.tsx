@@ -22,6 +22,7 @@ type ExpenseRow = {
   expense_account: { code: string; name: string } | null;
   reversal: { id: string; reason: string; reference_number: string } | null;
   refunds: { id: string; amount: number | string; refunded_on: string; reference_number: string }[];
+  payments: { id: string; paid_on: string }[];
 };
 
 type ExpenseQuery = {
@@ -72,7 +73,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
     queryKey: ['operating-expenses'],
     queryFn: async (): Promise<ExpenseRow[]> => {
       const { data, error } = await expenseApi.from('operating_expenses')
-        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number), refunds:operating_expense_refunds(id, amount, refunded_on, reference_number)')
+        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number), refunds:operating_expense_refunds(id, amount, refunded_on, reference_number), payments:operating_expense_payments(id, paid_on)')
         .order('incurred_on', { ascending: false });
       if (error) throw error;
       return (data || []) as unknown as ExpenseRow[];
@@ -326,7 +327,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
           <DialogHeader><DialogTitle>Record Supplier Refund</DialogTitle><DialogDescription>{refund?.expense_number} · Maximum refundable {refund ? money(Math.max(0, Number(refund.amount_paid) - (refund.refunds || []).reduce((sum, item) => sum + Number(item.amount || 0), 0)), currencySymbol) : ''}. Record only funds actually received.</DialogDescription></DialogHeader>
           <div className="space-y-4 py-3">
             <div className="space-y-2"><Label>Refund amount</Label><Input type="number" min="0.01" step="0.01" value={refundForm.amount} onChange={e => setRefundForm({ ...refundForm, amount: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Funds received date</Label><Input type="date" min={refund?.incurred_on} value={refundForm.refundedOn} onChange={e => setRefundForm({ ...refundForm, refundedOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Funds received date</Label><Input type="date" min={refund ? (refund.payments || []).reduce((latest, item) => item.paid_on > latest ? item.paid_on : latest, refund.incurred_on) : undefined} value={refundForm.refundedOn} onChange={e => setRefundForm({ ...refundForm, refundedOn: e.target.value })} /></div>
             <div className="space-y-2"><Label>Received into</Label><Select value={refundForm.method} onValueChange={value => setRefundForm({ ...refundForm, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank</SelectItem><SelectItem value="mobile_payment">Mobile Money</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>Supplier refund / bank reference</Label><Input value={refundForm.reference} onChange={e => setRefundForm({ ...refundForm, reference: e.target.value })} /></div>
           </div>
