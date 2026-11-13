@@ -1,7 +1,22 @@
 -- Preserve four-decimal weighted-average cost; two-decimal storage loses cost precision.
+-- PostgreSQL does not permit changing a column type while UPDATE OF triggers
+-- depend on that column, so replace those triggers around the type alteration.
+DROP TRIGGER IF EXISTS invalidate_product_cost_verification ON public.products;
+DROP TRIGGER IF EXISTS guard_product_inventory_value_changes ON public.products;
+
 ALTER TABLE public.products
   ALTER COLUMN cost_price TYPE numeric(18,4)
   USING ROUND(cost_price,4);
+
+CREATE TRIGGER invalidate_product_cost_verification
+BEFORE UPDATE OF cost_price ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.invalidate_product_cost_verification();
+
+CREATE TRIGGER guard_product_inventory_value_changes
+BEFORE UPDATE OF stock_quantity, cost_price, cost_price_verified ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_product_inventory_value_changes();
 
 CREATE OR REPLACE FUNCTION public.invalidate_product_cost_verification()
 RETURNS trigger
