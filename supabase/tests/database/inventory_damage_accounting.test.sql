@@ -733,7 +733,7 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ UPDATE public.invoices SET status = 'issued'
+  $$ UPDATE public.invoices SET status = 'issued'
      WHERE invoice_number = 'INV-TEST-MIXED-001' $$,
   'Mixed physical-product and service invoice can be issued'
 );
