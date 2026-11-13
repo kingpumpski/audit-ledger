@@ -31,8 +31,9 @@ BEGIN
       OR NEW.cost_price_verified IS DISTINCT FROM OLD.cost_price_verified)
      AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
      AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on'
+     AND COALESCE(current_setting('app.inventory_adjustment_rpc', true), '') <> 'on'
      AND COALESCE(current_setting('app.credit_note_rpc', true), '') <> 'on' THEN
-    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase, invoice posting or credit-note return workflows';
+    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase, invoice posting, inventory adjustment or credit-note return workflows';
   END IF;
   RETURN NEW;
 END;
