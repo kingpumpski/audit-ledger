@@ -1243,3 +1243,224 @@ EXECUTE FUNCTION public.guard_posted_direct_invoice_cost_mutations();
 
 REVOKE ALL ON FUNCTION public.guard_posted_direct_invoice_cost_mutations() FROM PUBLIC, anon, authenticated;
 
+
+
+-- Mixed invoices may contain both physical products and service/manual lines.
+-- Only physical stock lines require a verified inventory unit cost for COGS.
+-- Service/manual costs are recorded independently and must not block physical COGS.
+CREATE OR REPLACE FUNCTION public.set_historical_invoice_item_cost(
+  p_invoice_item_id uuid,
+  p_unit_cost numeric,
+  p_reference text,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $historical_cost_v2$
+DECLARE
+  v_item public.invoice_items%ROWTYPE;
+  v_invoice public.invoices%ROWTYPE;
+  v_journal_id uuid;
+  v_cogs_account uuid;
+  v_inventory_account uuid;
+  v_cogs_total numeric(14,2);
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'Only an admin or accountant can verify historical product costs';
+  END IF;
+  IF p_unit_cost IS NULL OR p_unit_cost < 0 THEN
+    RAISE EXCEPTION 'Enter a valid historical unit cost';
+  END IF;
+  IF NULLIF(BTRIM(p_reference), '') IS NULL THEN
+    RAISE EXCEPTION 'A supplier invoice, receipt or other source reference is required';
+  END IF;
+
+  SELECT * INTO v_item
+  FROM public.invoice_items
+  WHERE id = p_invoice_item_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice line was not found';
+  END IF;
+
+  IF v_item.product_id IS NULL OR EXISTS (
+    SELECT 1 FROM public.products
+    WHERE id = v_item.product_id AND is_service = true
+  ) THEN
+    RAISE EXCEPTION 'Service and manual invoice lines require a separate evidenced direct-cost workflow; they cannot be credited against inventory';
+  END IF;
+
+  SELECT * INTO v_invoice
+  FROM public.invoices
+  WHERE id = v_item.invoice_id
+    AND deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND OR v_invoice.status NOT IN ('issued', 'partially_paid', 'paid', 'overdue') THEN
+    RAISE EXCEPTION 'Historical cost verification is available only for issued invoices';
+  END IF;
+
+  SELECT id INTO v_journal_id
+  FROM public.journal_entries
+  WHERE source_type = 'invoice' AND source_id = v_invoice.id;
+  IF v_journal_id IS NULL THEN
+    RAISE EXCEPTION 'The invoice has no posted journal entry to receive its cost-of-sales posting';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_lines jl
+    JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE jl.journal_entry_id = v_journal_id AND coa.code = '5000'
+  ) THEN
+    RAISE EXCEPTION 'Cost of goods sold is already posted for this invoice; reverse and repost through a controlled correction';
+  END IF;
+
+  PERFORM set_config('app.historical_cost_rpc', 'on', true);
+  UPDATE public.invoice_items
+  SET unit_cost = ROUND(p_unit_cost, 4),
+      cost_source = 'historical_verified',
+      cost_verified_by = auth.uid(),
+      cost_verified_at = now(),
+      cost_reference = NULLIF(BTRIM(p_reference), ''),
+      cost_notes = NULLIF(BTRIM(p_notes), '')
+  WHERE id = p_invoice_item_id;
+
+  -- Do not let service/manual lines with NULL unit_cost block physical COGS.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.invoice_items ii
+    JOIN public.products p ON p.id = ii.product_id
+    WHERE ii.invoice_id = v_invoice.id
+      AND COALESCE(p.is_service, false) = false
+      AND ii.unit_cost IS NULL
+  ) THEN
+    SELECT ROUND(COALESCE(SUM(ii.quantity * ii.unit_cost), 0), 2)
+      INTO v_cogs_total
+    FROM public.invoice_items ii
+    JOIN public.products p ON p.id = ii.product_id
+    WHERE ii.invoice_id = v_invoice.id
+      AND COALESCE(p.is_service, false) = false;
+
+    IF v_cogs_total > 0 THEN
+      SELECT id INTO v_cogs_account FROM public.chart_of_accounts
+      WHERE code = '5000' AND account_type = 'expense' AND is_active LIMIT 1;
+      SELECT id INTO v_inventory_account FROM public.chart_of_accounts
+      WHERE code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
+      IF v_cogs_account IS NULL OR v_inventory_account IS NULL THEN
+        RAISE EXCEPTION 'Cost of Goods Sold or Inventory account is not configured';
+      END IF;
+
+      INSERT INTO public.journal_lines (
+        journal_entry_id, line_number, account_id, description, debit, credit
+      )
+      VALUES
+        (v_journal_id, 9998, v_cogs_account, 'Verified historical cost of goods sold - ' || v_invoice.invoice_number, v_cogs_total, 0),
+        (v_journal_id, 9999, v_inventory_account, 'Verified historical inventory relief - ' || v_invoice.invoice_number, 0, v_cogs_total);
+    END IF;
+  END IF;
+
+  RETURN p_invoice_item_id;
+END;
+$historical_cost_v2$;
+
+CREATE OR REPLACE FUNCTION public.post_invoice_cogs_after_receivable_line()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $invoice_cogs_v2$
+DECLARE
+  v_invoice_id uuid;
+  v_cogs_account uuid;
+  v_inventory_account uuid;
+  v_cogs_total numeric(14,2);
+BEGIN
+  IF NEW.line_number <> 1 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT source_id INTO v_invoice_id
+  FROM public.journal_entries
+  WHERE id = NEW.journal_entry_id AND source_type = 'invoice';
+  IF v_invoice_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_lines jl
+    JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE jl.journal_entry_id = NEW.journal_entry_id AND coa.code = '5000'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.invoice_items ii
+    JOIN public.products p ON p.id = ii.product_id
+    WHERE ii.invoice_id = v_invoice_id
+      AND COALESCE(p.is_service, false) = false
+      AND ii.unit_cost IS NULL
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ROUND(COALESCE(SUM(ii.quantity * ii.unit_cost), 0), 2)
+    INTO v_cogs_total
+  FROM public.invoice_items ii
+  JOIN public.products p ON p.id = ii.product_id
+  WHERE ii.invoice_id = v_invoice_id
+    AND COALESCE(p.is_service, false) = false;
+
+  IF v_cogs_total <= 0 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT id INTO v_cogs_account FROM public.chart_of_accounts
+  WHERE code = '5000' AND account_type = 'expense' AND is_active LIMIT 1;
+  SELECT id INTO v_inventory_account FROM public.chart_of_accounts
+  WHERE code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
+  IF v_cogs_account IS NULL OR v_inventory_account IS NULL THEN
+    RAISE EXCEPTION 'Cost of Goods Sold or Inventory account is not configured';
+  END IF;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  )
+  VALUES
+    (NEW.journal_entry_id, 9998, v_cogs_account, 'Cost of goods sold - invoice ' || v_invoice_id, v_cogs_total, 0),
+    (NEW.journal_entry_id, 9999, v_inventory_account, 'Inventory relieved - invoice ' || v_invoice_id, 0, v_cogs_total);
+
+  RETURN NEW;
+END;
+$invoice_cogs_v2$;
+
+-- Never allow an issued invoice to be silently canceled while its revenue,
+-- receivable, payments and inventory movements remain posted. A future
+-- credit-note/reversal RPC may set this transaction-local flag after posting
+-- all required reversals atomically.
+CREATE OR REPLACE FUNCTION public.guard_issued_invoice_cancellation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $invoice_cancel_guard$
+BEGIN
+  IF NEW.status = 'canceled'
+     AND OLD.status IN ('issued', 'partially_paid', 'paid', 'overdue')
+     AND COALESCE(current_setting('app.invoice_reversal_rpc', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'An issued invoice cannot be canceled directly; create an audited credit note or reversal first';
+  END IF;
+  RETURN NEW;
+END;
+$invoice_cancel_guard$;
+
+DROP TRIGGER IF EXISTS guard_issued_invoice_cancellation ON public.invoices;
+CREATE TRIGGER guard_issued_invoice_cancellation
+BEFORE UPDATE OF status ON public.invoices
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_issued_invoice_cancellation();
+
+REVOKE ALL ON FUNCTION public.guard_issued_invoice_cancellation() FROM PUBLIC, anon, authenticated;
