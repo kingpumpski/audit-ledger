@@ -423,9 +423,9 @@ SELECT extensions.throws_ok(
 );
 
 SELECT extensions.throws_ok(
-  $ UPDATE public.operating_expense_refunds
+  $$ UPDATE public.operating_expense_refunds
      SET reference_number = 'ALTERED-REFUND'
-     WHERE reference_number = 'SUPPLIER-REFUND-001' $,
+     WHERE reference_number = 'SUPPLIER-REFUND-001' $$,
   'P0001',
   'Posted supplier refunds are immutable; record a separately approved correction',
   'Posted supplier refund evidence cannot be edited'
