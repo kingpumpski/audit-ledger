@@ -104,6 +104,16 @@ BEGIN
       RAISE EXCEPTION 'This receipt idempotency key was already used with different receipt details';
     END IF;
 
+    IF v_existing_receipt.payment_id IS NOT NULL THEN
+      SELECT * INTO v_existing_payment
+      FROM public.payments
+      WHERE id = v_existing_receipt.payment_id;
+
+      IF v_existing_payment.reference_number IS DISTINCT FROM NULLIF(BTRIM(p_reference_number), '') THEN
+        RAISE EXCEPTION 'This receipt idempotency key was already used with a different payment reference';
+      END IF;
+    END IF;
+
     RETURN v_existing_receipt.id;
   END IF;
 
