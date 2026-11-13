@@ -40,7 +40,7 @@ jobs:
           echo "migration_file=$migration_file" >> "$GITHUB_OUTPUT"
 
       - name: Upload CLI-generated accounting migration scaffold
-        if: github.head_ref == 'feat/ledger-postings-for-invoices-and-payments' || github.ref_name == 'feat/ledger-postings-for-invoices-and-payment-postings'
+        if: github.head_ref == 'feat/ledger-postings-for-invoices-and-payments' || github.ref_name == 'feat/ledger-postings-for-invoices-and-payments'
         uses: actions/upload-artifact@v4
         with:
           name: accounting-migration-scaffold
