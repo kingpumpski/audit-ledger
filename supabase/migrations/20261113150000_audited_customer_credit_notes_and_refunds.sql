@@ -921,14 +921,14 @@ BEGIN
   FROM public.credit_notes cn
   JOIN public.invoices i ON i.id=cn.invoice_id
   LEFT JOIN (
-    SELECT credit_note_id, SUM(amount) AS applied_amount
-    FROM public.customer_credit_applications
-    GROUP BY credit_note_id
+    SELECT cca.credit_note_id, SUM(cca.amount) AS applied_amount
+    FROM public.customer_credit_applications cca
+    GROUP BY cca.credit_note_id
   ) app ON app.credit_note_id=cn.id
   LEFT JOIN (
-    SELECT credit_note_id, SUM(amount) AS refunded_amount
-    FROM public.customer_credit_refunds
-    GROUP BY credit_note_id
+    SELECT ccr.credit_note_id, SUM(ccr.amount) AS refunded_amount
+    FROM public.customer_credit_refunds ccr
+    GROUP BY ccr.credit_note_id
   ) ref ON ref.credit_note_id=cn.id
   WHERE cn.customer_id=p_customer_id
     AND cn.customer_credit_amount > 0
