@@ -122,6 +122,26 @@ BEGIN
 END;
 $posted_inventory_guard_count$;
 
+-- Permit stock quantity changes only while the audited stock-count RPC is
+-- executing. Direct client updates remain blocked by the shared guard trigger.
+CREATE OR REPLACE FUNCTION public.guard_product_inventory_value_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $product_inventory_guard_count$
+BEGIN
+  IF (NEW.stock_quantity IS DISTINCT FROM OLD.stock_quantity
+      OR NEW.cost_price IS DISTINCT FROM OLD.cost_price
+      OR NEW.cost_price_verified IS DISTINCT FROM OLD.cost_price_verified)
+     AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on'
+     AND COALESCE(current_setting('app.inventory_adjustment_rpc', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase, invoice or stock-count workflows';
+  END IF;
+  RETURN NEW;
+END;
+$product_inventory_guard_count$;
+
 CREATE OR REPLACE FUNCTION public.record_stock_count_adjustment(
   p_product_id uuid,
   p_counted_quantity integer,
