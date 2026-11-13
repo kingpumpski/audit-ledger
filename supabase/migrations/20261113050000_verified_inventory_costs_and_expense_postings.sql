@@ -292,7 +292,8 @@ CREATE OR REPLACE FUNCTION public.record_stock_purchase(
   p_amount_paid numeric DEFAULT 0,
   p_payment_method public.payment_method DEFAULT 'cash',
   p_notes text DEFAULT NULL,
-  p_opening_unit_cost numeric DEFAULT NULL
+  p_opening_unit_cost numeric DEFAULT NULL,
+  p_idempotency_key uuid DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -301,6 +302,7 @@ SET search_path = ''
 AS $stock_purchase$
 DECLARE
   v_product public.products%ROWTYPE;
+  v_existing public.inventory_transactions%ROWTYPE;
   v_transaction_id uuid;
   v_journal_id uuid;
   v_entry_number text;
@@ -330,6 +332,31 @@ BEGIN
   END IF;
   IF NULLIF(BTRIM(p_reference_number), '') IS NULL THEN
     RAISE EXCEPTION 'A supplier invoice, receipt or purchase reference is required';
+  END IF;
+
+  IF p_idempotency_key IS NULL THEN
+    RAISE EXCEPTION 'An idempotency key is required to record a stock purchase';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+
+  SELECT * INTO v_existing
+  FROM public.inventory_transactions
+  WHERE idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_existing.type <> 'purchase'
+      OR v_existing.product_id <> p_product_id
+      OR v_existing.quantity <> p_quantity
+      OR v_existing.unit_cost IS DISTINCT FROM ROUND(p_unit_cost, 4)
+      OR v_existing.reference_number IS DISTINCT FROM BTRIM(p_reference_number)
+      OR v_existing.supplier_name IS DISTINCT FROM NULLIF(BTRIM(p_supplier_name), '')
+      OR v_existing.amount_paid IS DISTINCT FROM ROUND(COALESCE(p_amount_paid, 0), 2)
+      OR v_existing.payment_method IS DISTINCT FROM p_payment_method
+      OR v_existing.opening_unit_cost IS DISTINCT FROM p_opening_unit_cost THEN
+      RAISE EXCEPTION 'This stock-purchase idempotency key was already used with different details';
+    END IF;
+    RETURN v_existing.id;
   END IF;
 
   v_total_cost := ROUND(p_quantity * p_unit_cost, 2);
@@ -379,13 +406,15 @@ BEGIN
   INSERT INTO public.inventory_transactions (
     product_id, type, quantity, previous_quantity, new_quantity,
     unit_cost, total_cost, reference_type, supplier_name,
-    reference_number, payment_method, amount_paid, notes, performed_by
+    reference_number, payment_method, amount_paid, notes, performed_by,
+    idempotency_key, opening_unit_cost
   )
   VALUES (
     p_product_id, 'purchase', p_quantity, v_previous_quantity, v_new_quantity,
     ROUND(p_unit_cost, 4), v_total_cost, 'stock_purchase',
     NULLIF(BTRIM(p_supplier_name), ''), NULLIF(BTRIM(p_reference_number), ''),
-    p_payment_method, v_amount_paid, NULLIF(BTRIM(p_notes), ''), auth.uid()
+    p_payment_method, v_amount_paid, NULLIF(BTRIM(p_notes), ''), auth.uid(),
+    p_idempotency_key, p_opening_unit_cost
   )
   RETURNING id INTO v_transaction_id;
 
@@ -492,8 +521,8 @@ BEGIN
 END;
 $stock_purchase$;
 
-REVOKE ALL ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric) TO authenticated;
+REVOKE ALL ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric, uuid) TO authenticated;
 
 -- Attach cost of sales to the same balanced journal as the invoice revenue.
 -- No COGS is posted unless every invoice line has a verified cost snapshot.
@@ -1559,7 +1588,8 @@ REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, 
 -- Audited inventory damage/shrinkage: stock is relieved at verified weighted
 -- average cost and the same transaction posts Inventory Shrinkage expense.
 ALTER TABLE public.inventory_transactions
-  ADD COLUMN IF NOT EXISTS idempotency_key uuid;
+  ADD COLUMN IF NOT EXISTS idempotency_key uuid,
+  ADD COLUMN IF NOT EXISTS opening_unit_cost numeric(14,4);
 
 CREATE UNIQUE INDEX IF NOT EXISTS inventory_transactions_idempotency_key_uidx
   ON public.inventory_transactions(idempotency_key)
