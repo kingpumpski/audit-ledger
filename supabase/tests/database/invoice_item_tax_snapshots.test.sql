@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(6);
+SELECT extensions.plan(10);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -111,6 +111,56 @@ SELECT extensions.throws_ok(
   'Tax snapshot invoice line does not belong to the specified invoice',
   'A tax snapshot cannot attach another invoice line to a different invoice'
 );
+
+-- A line-level snapshot amount cannot be altered and then issued.
+UPDATE public.invoice_item_taxes SET tax_amount=14
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+SELECT extensions.throws_ok(
+  $ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  'P0001',
+  'Invoice line tax snapshots do not reconcile to invoice line tax amounts',
+  'An invoice cannot be issued when line tax evidence differs from the invoice line'
+);
+UPDATE public.invoice_item_taxes SET tax_amount=15
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+
+-- Tax order is material for compound tax calculations and must remain deterministic.
+UPDATE public.invoice_item_taxes SET tax_order=4
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+SELECT extensions.throws_ok(
+  $ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  'P0001',
+  'Invoice line tax snapshot order is invalid',
+  'An invoice cannot be issued with altered compound-tax ordering'
+);
+UPDATE public.invoice_item_taxes SET tax_order=0
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+
+-- Invoice-level tax totals used by the journal must reconcile to line snapshots.
+UPDATE public.invoice_taxes SET tax_amount=14
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+SELECT extensions.throws_ok(
+  $ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  'P0001',
+  'Invoice-level tax totals do not reconcile to per-line tax snapshots',
+  'An invoice cannot be issued when aggregated tax differs from line allocations'
+);
+UPDATE public.invoice_taxes SET tax_amount=15
+WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
+
+-- Tax definitions can change while a draft is being edited; issue must revalidate them.
+UPDATE public.taxes SET rate=16 WHERE code='TAX-SNAPSHOT-001';
+SELECT extensions.throws_ok(
+  $ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  'P0001',
+  'Invoice tax snapshot no longer matches the authoritative tax definition or issue date',
+  'An invoice cannot be issued with stale tax-definition evidence'
+);
+UPDATE public.taxes SET rate=15 WHERE code='TAX-SNAPSHOT-001';
 
 UPDATE public.invoices SET status='issued'
 WHERE invoice_number='INV-TAX-SNAPSHOT-001';
