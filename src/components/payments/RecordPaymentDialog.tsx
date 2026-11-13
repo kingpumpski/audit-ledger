@@ -122,6 +122,7 @@ export function RecordPaymentDialog({
           invoice_id: invoiceId,
           amount,
           payment_method: formData.payment_method,
+          reference_number: formData.reference_number || undefined,
           notes: formData.notes || `Payment for invoice ${invoiceNumber}`,
           idempotency_key: receiptIdempotencyKey,
         });
