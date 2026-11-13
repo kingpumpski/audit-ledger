@@ -129,6 +129,9 @@ BEGIN
   IF v_original_journal IS NULL THEN
     RAISE EXCEPTION 'The original petty-cash expense has no posted journal and cannot be reversed';
   END IF;
+  IF p_reversed_on < v_expense.date THEN
+    RAISE EXCEPTION 'Refund date cannot be earlier than the original petty-cash expense date';
+  END IF;
 
   IF EXISTS (
     SELECT 1 FROM public.petty_cash_expense_reversals
