@@ -258,7 +258,7 @@ FROM public.invoices i CROSS JOIN public.products p
 WHERE i.invoice_number='INV-CN-005' AND p.sku='TEST-CN-STOCK-001';
 
 SELECT extensions.lives_ok(
-  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005')) $,
+  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005')) $$,
   'Physical-goods invoice can issue using verified stock cost'
 );
 
@@ -380,7 +380,7 @@ JOIN public.taxes t ON t.code='CN-TAX-001'
 WHERE i.invoice_number='INV-CN-006';
 
 SELECT extensions.lives_ok(
-  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-006')) $,
+  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-006')) $$,
   'Invoice with exact line-level tax snapshots can be issued'
 );
 
