@@ -1,0 +1,261 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Plus, Wallet, RefreshCw } from 'lucide-react';
+import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+
+type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+type ExpenseAccount = { id: string; code: string; name: string };
+type ExpenseRow = {
+  id: string; expense_number: string; description: string; vendor_name: string;
+  reference_number: string; incurred_on: string; due_on: string | null;
+  amount: number | string; amount_paid: number | string; notes: string | null;
+  expense_account: { code: string; name: string } | null;
+};
+
+type ExpenseApi = {
+  from: (table: 'operating_expenses' | 'chart_of_accounts') => {
+    select: (columns: string) => {
+      eq?: (column: string, value: unknown) => unknown;
+      order?: (column: string, options?: { ascending?: boolean }) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+    };
+  };
+  rpc: (name: 'record_operating_expense' | 'pay_operating_expense', args: Record<string, unknown>) =>
+    PromiseLike<{ data: string | null; error: { message: string } | null }>;
+};
+
+const expenseApi = supabase as unknown as ExpenseApi;
+const today = () => format(new Date(), 'yyyy-MM-dd');
+const money = (value: number | string, currency: string) =>
+  `${currency}${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [settlement, setSettlement] = useState<ExpenseRow | null>(null);
+  const [form, setForm] = useState({
+    description: '', vendor: '', reference: '', accountId: '', incurredOn: today(),
+    dueOn: '', amount: '', amountPaid: '0', paymentMethod: 'cash' as PaymentMethod,
+    paymentReference: '', notes: '',
+  });
+  const [payment, setPayment] = useState({ amount: '', paidOn: today(), method: 'cash' as PaymentMethod, reference: '' });
+
+  const accountsQuery = useQuery({
+    queryKey: ['operating-expense-accounts'],
+    queryFn: async (): Promise<ExpenseAccount[]> => {
+      const { data, error } = await supabase.from('chart_of_accounts')
+        .select('id, code, name')
+        .eq('account_type', 'expense')
+        .eq('is_active', true)
+        .order('code');
+      if (error) throw error;
+      return (data || []) as ExpenseAccount[];
+    },
+  });
+
+  const expensesQuery = useQuery({
+    queryKey: ['operating-expenses'],
+    queryFn: async (): Promise<ExpenseRow[]> => {
+      const { data, error } = await supabase.from('operating_expenses')
+        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name)')
+        .order('incurred_on', { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as ExpenseRow[];
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    const channel = supabase.channel('operating-expense-register-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [queryClient]);
+
+  const refreshAccounting = () => {
+    void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+    void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+    void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+  };
+
+  const createExpense = useMutation({
+    mutationFn: async () => {
+      const amount = Number(form.amount);
+      const amountPaid = Number(form.amountPaid || 0);
+      if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > amount) {
+        throw new Error('Enter a valid total amount and an amount paid between zero and the total.');
+      }
+      if (!form.description.trim() || !form.vendor.trim() || !form.reference.trim() || !form.accountId || !form.incurredOn) {
+        throw new Error('Complete the description, supplier, source reference, expense account and incurred date.');
+      }
+      if (amountPaid > 0 && !form.paymentReference.trim()) {
+        throw new Error('A payment reference is required when an amount has already been paid.');
+      }
+      const { error } = await expenseApi.rpc('record_operating_expense', {
+        p_description: form.description.trim(),
+        p_vendor_name: form.vendor.trim(),
+        p_reference_number: form.reference.trim(),
+        p_expense_account_id: form.accountId,
+        p_incurred_on: form.incurredOn,
+        p_due_on: form.dueOn || null,
+        p_amount: amount,
+        p_amount_paid: amountPaid,
+        p_payment_method: form.paymentMethod,
+        p_payment_reference: form.paymentReference.trim() || null,
+        p_notes: form.notes.trim() || null,
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refreshAccounting();
+      toast({ title: 'Operating expense recorded', description: 'The expense and supplier payable have been posted. Any initial payment is recorded separately.' });
+      setOpen(false);
+      setForm({ description: '', vendor: '', reference: '', accountId: '', incurredOn: today(), dueOn: '', amount: '', amountPaid: '0', paymentMethod: 'cash', paymentReference: '', notes: '' });
+    },
+    onError: error => toast({ title: 'Could not record expense', description: error.message, variant: 'destructive' }),
+  });
+
+  const settleExpense = useMutation({
+    mutationFn: async () => {
+      if (!settlement) throw new Error('Select an expense to settle.');
+      const amount = Number(payment.amount);
+      if (!Number.isFinite(amount) || amount <= 0 || !payment.reference.trim()) {
+        throw new Error('Enter a positive payment amount and a payment reference.');
+      }
+      const { error } = await expenseApi.rpc('pay_operating_expense', {
+        p_expense_id: settlement.id,
+        p_amount: amount,
+        p_paid_on: payment.paidOn,
+        p_payment_method: payment.method,
+        p_reference_number: payment.reference.trim(),
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refreshAccounting();
+      toast({ title: 'Expense payment recorded', description: 'The supplier payable and cash/bank balance have been updated.' });
+      setSettlement(null);
+      setPayment({ amount: '', paidOn: today(), method: 'cash', reference: '' });
+    },
+    onError: error => toast({ title: 'Could not record payment', description: error.message, variant: 'destructive' }),
+  });
+
+  const totals = useMemo(() => (expensesQuery.data || []).reduce((result, expense) => {
+    result.incurred += Number(expense.amount || 0);
+    result.paid += Number(expense.amount_paid || 0);
+    return result;
+  }, { incurred: 0, paid: 0 }), [expensesQuery.data]);
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5" />Operating Expense Register</CardTitle>
+            <CardDescription>Record supplier and business expenses when incurred, then track partial or full settlement. Expense recognition and cash payment are posted separately.</CardDescription>
+          </div>
+          <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Record Expense</Button>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Expenses incurred</p><p className="text-xl font-semibold">{money(totals.incurred, currencySymbol)}</p></div>
+            <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Paid to date</p><p className="text-xl font-semibold">{money(totals.paid, currencySymbol)}</p></div>
+            <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Outstanding suppliers</p><p className="text-xl font-semibold">{money(totals.incurred - totals.paid, currencySymbol)}</p></div>
+          </div>
+          {expensesQuery.isLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> :
+            expensesQuery.isError ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">Could not load operating expenses. Check finance-role access and refresh.</div> :
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[850px] text-sm">
+                <thead><tr className="border-b text-left text-muted-foreground">
+                  <th className="p-2">Date / Reference</th><th className="p-2">Supplier / Description</th><th className="p-2">Account</th><th className="p-2 text-right">Amount</th><th className="p-2 text-right">Paid</th><th className="p-2 text-right">Balance</th><th className="p-2">Status</th><th className="p-2"></th>
+                </tr></thead>
+                <tbody>
+                  {(expensesQuery.data || []).map(expense => {
+                    const amount = Number(expense.amount || 0);
+                    const paid = Number(expense.amount_paid || 0);
+                    const outstanding = Math.max(0, amount - paid);
+                    return <tr key={expense.id} className="border-b">
+                      <td className="p-2"><div>{format(new Date(expense.incurred_on), 'dd MMM yyyy')}</div><div className="text-xs text-muted-foreground">{expense.expense_number} · {expense.reference_number}</div></td>
+                      <td className="p-2"><div className="font-medium">{expense.vendor_name}</div><div className="text-muted-foreground">{expense.description}</div></td>
+                      <td className="p-2">{expense.expense_account?.code} · {expense.expense_account?.name}</td>
+                      <td className="p-2 text-right">{money(amount, currencySymbol)}</td>
+                      <td className="p-2 text-right">{money(paid, currencySymbol)}</td>
+                      <td className="p-2 text-right font-medium">{money(outstanding, currencySymbol)}</td>
+                      <td className="p-2">{outstanding <= 0 ? <Badge>Paid</Badge> : paid > 0 ? <Badge variant="secondary">Part paid</Badge> : <Badge variant="outline">Unpaid</Badge>}</td>
+                      <td className="p-2 text-right">{outstanding > 0 && <Button size="sm" variant="outline" onClick={() => { setSettlement(expense); setPayment({ amount: outstanding.toFixed(2), paidOn: today(), method: 'cash', reference: '' }); }}>Settle</Button>}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+              {(expensesQuery.data || []).length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No operating expenses have been recorded.</p>}
+            </div>}
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Posted expenses and payments cannot be edited or deleted. Corrections require an audited reversal.</span>
+            <Button variant="ghost" size="sm" onClick={refreshAccounting}><RefreshCw className="mr-2 h-3 w-3" />Refresh</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Record Operating Expense</DialogTitle><DialogDescription>The expense is recognized on the incurred date. Any unpaid amount is posted to Accounts Payable.</DialogDescription></DialogHeader>
+          <div className="grid gap-4 py-3 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2"><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="e.g. Office rent for November" /></div>
+            <div className="space-y-2"><Label>Supplier / Payee</Label><Input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Supplier invoice / reference</Label><Input value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label>Expense account</Label>
+              <Select value={form.accountId} onValueChange={value => setForm({ ...form, accountId: value })}>
+                <SelectTrigger><SelectValue placeholder="Choose an expense account" /></SelectTrigger>
+                <SelectContent>{(accountsQuery.data || []).map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
+              </Select>
+              {accountsQuery.isError && <p className="text-xs text-destructive">Expense accounts could not be loaded.</p>}
+            </div>
+            <div className="space-y-2"><Label>Incurred date</Label><Input type="date" value={form.incurredOn} onChange={e => setForm({ ...form, incurredOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Due date (optional)</Label><Input type="date" min={form.incurredOn} value={form.dueOn} onChange={e => setForm({ ...form, dueOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Total expense amount</Label><Input type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Amount already paid</Label><Input type="number" min="0" step="0.01" max={form.amount || undefined} value={form.amountPaid} onChange={e => setForm({ ...form, amountPaid: e.target.value })} /></div>
+            {Number(form.amountPaid) > 0 && <>
+              <div className="space-y-2"><Label>Payment method</Label><Select value={form.paymentMethod} onValueChange={value => setForm({ ...form, paymentMethod: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank / Mobile Money</SelectItem><SelectItem value="credit_card">Credit card</SelectItem><SelectItem value="debit_card">Debit card</SelectItem><SelectItem value="check">Cheque</SelectItem><SelectItem value="mobile_payment">Mobile payment</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Payment reference</Label><Input value={form.paymentReference} onChange={e => setForm({ ...form, paymentReference: e.target.value })} /></div>
+            </>}
+            <div className="space-y-2 sm:col-span-2"><Label>Notes (optional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={createExpense.isPending || accountsQuery.isLoading} onClick={() => createExpense.mutate()}>{createExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Post Expense</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!settlement} onOpenChange={value => { if (!value) setSettlement(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Settle Supplier Expense</DialogTitle><DialogDescription>{settlement?.expense_number} · Outstanding {settlement ? money(Number(settlement.amount) - Number(settlement.amount_paid), currencySymbol) : ''}</DialogDescription></DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="space-y-2"><Label>Payment amount</Label><Input type="number" min="0.01" step="0.01" value={payment.amount} onChange={e => setPayment({ ...payment, amount: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Payment date</Label><Input type="date" value={payment.paidOn} onChange={e => setPayment({ ...payment, paidOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Payment method</Label><Select value={payment.method} onValueChange={value => setPayment({ ...payment, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank / Mobile Money</SelectItem><SelectItem value="credit_card">Credit card</SelectItem><SelectItem value="debit_card">Debit card</SelectItem><SelectItem value="check">Cheque</SelectItem><SelectItem value="mobile_payment">Mobile payment</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>Payment reference</Label><Input value={payment.reference} onChange={e => setPayment({ ...payment, reference: e.target.value })} /></div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSettlement(null)}>Cancel</Button><Button disabled={settleExpense.isPending} onClick={() => settleExpense.mutate()}>{settleExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Record Payment</Button></div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
