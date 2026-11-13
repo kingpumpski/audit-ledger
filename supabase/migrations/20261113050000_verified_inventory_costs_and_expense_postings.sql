@@ -353,7 +353,7 @@ BEGIN
       OR v_existing.supplier_name IS DISTINCT FROM NULLIF(BTRIM(p_supplier_name), '')
       OR v_existing.amount_paid IS DISTINCT FROM ROUND(COALESCE(p_amount_paid, 0), 2)
       OR v_existing.payment_method IS DISTINCT FROM p_payment_method
-      OR v_existing.opening_unit_cost IS DISTINCT FROM p_opening_unit_cost THEN
+      OR v_existing.opening_unit_cost IS DISTINCT FROM CASE WHEN p_opening_unit_cost IS NULL THEN NULL ELSE ROUND(p_opening_unit_cost, 4) END THEN
       RAISE EXCEPTION 'This stock-purchase idempotency key was already used with different details';
     END IF;
     RETURN v_existing.id;
