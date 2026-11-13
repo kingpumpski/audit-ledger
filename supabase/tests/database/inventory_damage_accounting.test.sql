@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(21);
+SELECT extensions.plan(31);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -29,6 +29,39 @@ VALUES
   ('TEST-DAMAGE-001', 'Damage workflow test product', 20, 8.25, true, 10, false, true),
   ('TEST-DAMAGE-002', 'Unverified damage test product', 20, 8.25, false, 10, false, true),
   ('TEST-PURCHASE-001', 'Stock purchase test product', 20, NULL, false, 0, false, true);
+
+INSERT INTO public.customers (code, name)
+VALUES ('TEST-CUSTOMER-001', 'Inventory test customer');
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date,
+  subtotal, tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TEST-STOCK-001', id, 'draft', CURRENT_DATE, 100, 0, 100, 100
+FROM public.customers WHERE code = 'TEST-CUSTOMER-001';
+
+INSERT INTO public.invoice_items (
+  invoice_id, product_id, description, quantity, unit_price, line_total
+)
+SELECT i.id, p.id, 'Two units from verified stock', 2, 50, 100
+FROM public.invoices i
+JOIN public.products p ON p.sku = 'TEST-PURCHASE-001'
+WHERE i.invoice_number = 'INV-TEST-STOCK-001';
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date,
+  subtotal, tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TEST-STOCK-002', id, 'draft', CURRENT_DATE, 250, 0, 250, 250
+FROM public.customers WHERE code = 'TEST-CUSTOMER-001';
+
+INSERT INTO public.invoice_items (
+  invoice_id, product_id, description, quantity, unit_price, line_total
+)
+SELECT i.id, p.id, 'Insufficient stock test line', 5, 50, 250
+FROM public.invoices i
+JOIN public.products p ON p.sku = 'TEST-PURCHASE-001'
+WHERE i.invoice_number = 'INV-TEST-STOCK-002';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
 
@@ -182,6 +215,99 @@ SELECT extensions.ok(
     HAVING round(sum(jl.debit - jl.credit), 2) <> 0
   ),
   'Every stock-purchase journal is balanced'
+);
+
+SELECT extensions.lives_ok(
+  $$ UPDATE public.invoices
+     SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-STOCK-001' $$,
+  'Invoice with available verified stock can be issued'
+);
+
+SELECT extensions.lives_ok(
+  $$ INSERT INTO public.journal_entries (
+       entry_number, entry_date, description, source_type, source_id, currency, created_by
+     )
+     SELECT public.get_next_sequence('journal'), CURRENT_DATE,
+            'Inventory integration test invoice', 'invoice', id, 'USD',
+            'd0000000-0000-4000-8000-000000000001'
+     FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001' $$,
+  'Issued invoice journal can be created'
+);
+
+SELECT extensions.lives_ok(
+  $$ INSERT INTO public.journal_lines (
+       journal_entry_id, line_number, account_id, description, debit, credit
+     )
+     SELECT je.id, 1, coa.id, 'Test accounts receivable', 100, 0
+     FROM public.journal_entries je
+     JOIN public.chart_of_accounts coa ON coa.code = '1100'
+     JOIN public.invoices i ON i.id = je.source_id
+     WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001' $$,
+  'Invoice receivable line posts stock relief and COGS trigger'
+);
+
+SELECT extensions.lives_ok(
+  $$ INSERT INTO public.journal_lines (
+       journal_entry_id, line_number, account_id, description, debit, credit
+     )
+     SELECT je.id, 2, coa.id, 'Test sales revenue', 0, 100
+     FROM public.journal_entries je
+     JOIN public.chart_of_accounts coa ON coa.code = '4000'
+     JOIN public.invoices i ON i.id = je.source_id
+     WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001' $$,
+  'Invoice revenue line posts successfully'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  4,
+  'Invoice journal reduces stock exactly once'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.inventory_transactions
+   WHERE type = 'sale' AND reference_type = 'invoice'
+     AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001')),
+  1,
+  'Invoice creates one linked stock-sale transaction'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   JOIN public.invoices i ON i.id = je.source_id
+   WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001'
+     AND coa.code = '5000'),
+  16.00::numeric,
+  'Invoice posts COGS from the verified weighted-average cost snapshot'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit - jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.invoices i ON i.id = je.source_id
+   WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001'),
+  0::numeric,
+  'Invoice revenue and COGS journal remains balanced'
+);
+
+SELECT extensions.throws_ok(
+  $$ UPDATE public.invoices
+     SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-STOCK-002' $$,
+  'P0001',
+  'Insufficient stock for Stock purchase test product. Available: 4, requested: 5',
+  'Invoice issue is rejected when stock is insufficient'
+);
+
+SELECT extensions.is(
+  (SELECT status::text FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-002'),
+  'draft',
+  'Rejected invoice issue leaves the invoice in draft'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
