@@ -261,7 +261,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
                     const outstanding = expense.reversal ? 0 : Math.max(0, amount - paid);
                     return <tr key={expense.id} className="border-b">
                       <td className="p-2"><div>{format(new Date(expense.incurred_on), 'dd MMM yyyy')}</div><div className="text-xs text-muted-foreground">{expense.expense_number} · {expense.reference_number}</div></td>
-                      <td className="p-2"><div className="font-medium">{expense.vendor_name}</div><div className="text-muted-foreground">{expense.description}</div></td>
+                      <td className="p-2"><div className="font-medium">{expense.vendor_name}</div><div className="text-muted-foreground">{expense.description}</div>{(expense.refunds || []).length > 0 && <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">{expense.refunds.map(item => <div key={item.id}>Refund {format(new Date(item.refunded_on), 'dd MMM yyyy')} · {item.reference_number} · {money(item.amount, currencySymbol)}</div>)}</div>}</td>
                       <td className="p-2">{expense.expense_account?.code} · {expense.expense_account?.name}</td>
                       <td className="p-2 text-right">{money(amount, currencySymbol)}</td>
                       <td className="p-2 text-right">{money(paid, currencySymbol)}</td>
