@@ -20,6 +20,7 @@ type ExpenseRow = {
   reference_number: string; incurred_on: string; due_on: string | null;
   amount: number | string; amount_paid: number | string; notes: string | null;
   expense_account: { code: string; name: string } | null;
+  reversal: { id: string; reason: string; reference_number: string } | null;
 };
 
 type ExpenseQuery = {
@@ -28,7 +29,7 @@ type ExpenseQuery = {
 };
 type ExpenseApi = {
   from: (table: string) => { select: (columns: string) => ExpenseQuery };
-  rpc: (name: 'record_operating_expense' | 'pay_operating_expense', args: Record<string, unknown>) =>
+  rpc: (name: 'record_operating_expense' | 'pay_operating_expense' | 'reverse_unpaid_operating_expense', args: Record<string, unknown>) =>
     PromiseLike<{ data: string | null; error: { message: string } | null }>;
 };
 
@@ -42,6 +43,8 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [settlement, setSettlement] = useState<ExpenseRow | null>(null);
+  const [reversal, setReversal] = useState<ExpenseRow | null>(null);
+  const [reversalForm, setReversalForm] = useState({ reason: '', reference: '' });
   const [form, setForm] = useState({
     description: '', vendor: '', reference: '', accountId: '', incurredOn: today(),
     dueOn: '', amount: '', amountPaid: '0', paymentMethod: 'cash' as PaymentMethod,
@@ -66,7 +69,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
     queryKey: ['operating-expenses'],
     queryFn: async (): Promise<ExpenseRow[]> => {
       const { data, error } = await expenseApi.from('operating_expenses')
-        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name)')
+        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number)')
         .order('incurred_on', { ascending: false });
       if (error) throw error;
       return (data || []) as unknown as ExpenseRow[];
@@ -159,6 +162,29 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
     onError: error => toast({ title: 'Could not record payment', description: error.message, variant: 'destructive' }),
   });
 
+  const reverseExpense = useMutation({
+    mutationFn: async () => {
+      if (!reversal) throw new Error('Select an expense to reverse.');
+      if (!reversalForm.reason.trim() || !reversalForm.reference.trim()) {
+        throw new Error('A reason and supporting reference are required.');
+      }
+      const { error } = await expenseApi.rpc('reverse_unpaid_operating_expense', {
+        p_expense_id: reversal.id,
+        p_reason: reversalForm.reason.trim(),
+        p_reference_number: reversalForm.reference.trim(),
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refreshAccounting();
+      toast({ title: 'Unpaid expense reversed', description: 'The original expense remains in history and an auditable reversing journal has been posted.' });
+      setReversal(null);
+      setReversalForm({ reason: '', reference: '' });
+    },
+    onError: error => toast({ title: 'Could not reverse expense', description: error.message, variant: 'destructive' }),
+  });
+
   const totals = useMemo(() => (expensesQuery.data || []).reduce((result, expense) => {
     result.incurred += Number(expense.amount || 0);
     result.paid += Number(expense.amount_paid || 0);
@@ -192,7 +218,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
                   {(expensesQuery.data || []).map(expense => {
                     const amount = Number(expense.amount || 0);
                     const paid = Number(expense.amount_paid || 0);
-                    const outstanding = Math.max(0, amount - paid);
+                    const outstanding = expense.reversal ? 0 : Math.max(0, amount - paid);
                     return <tr key={expense.id} className="border-b">
                       <td className="p-2"><div>{format(new Date(expense.incurred_on), 'dd MMM yyyy')}</div><div className="text-xs text-muted-foreground">{expense.expense_number} · {expense.reference_number}</div></td>
                       <td className="p-2"><div className="font-medium">{expense.vendor_name}</div><div className="text-muted-foreground">{expense.description}</div></td>
@@ -200,8 +226,8 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
                       <td className="p-2 text-right">{money(amount, currencySymbol)}</td>
                       <td className="p-2 text-right">{money(paid, currencySymbol)}</td>
                       <td className="p-2 text-right font-medium">{money(outstanding, currencySymbol)}</td>
-                      <td className="p-2">{outstanding <= 0 ? <Badge>Paid</Badge> : paid > 0 ? <Badge variant="secondary">Part paid</Badge> : <Badge variant="outline">Unpaid</Badge>}</td>
-                      <td className="p-2 text-right">{outstanding > 0 && <Button size="sm" variant="outline" onClick={() => { setSettlement(expense); setPayment({ amount: outstanding.toFixed(2), paidOn: today(), method: 'cash', reference: '' }); }}>Settle</Button>}</td>
+                      <td className="p-2">{expense.reversal ? <Badge variant="destructive">Reversed</Badge> : outstanding <= 0 ? <Badge>Paid</Badge> : paid > 0 ? <Badge variant="secondary">Part paid</Badge> : <Badge variant="outline">Unpaid</Badge>}</td>
+                      <td className="p-2 text-right">{outstanding > 0 && <div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setSettlement(expense); setPayment({ amount: outstanding.toFixed(2), paidOn: today(), method: 'cash', reference: '' }); }}>Settle</Button>{paid === 0 && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setReversal(expense); setReversalForm({ reason: '', reference: '' }); }}>Reverse</Button>}</div>}</td>
                     </tr>;
                   })}
                 </tbody>
@@ -240,6 +266,18 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
             <div className="space-y-2 sm:col-span-2"><Label>Notes (optional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button disabled={createExpense.isPending || accountsQuery.isLoading} onClick={() => createExpense.mutate()}>{createExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Post Expense</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reversal} onOpenChange={value => { if (!value) setReversal(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reverse Unpaid Expense</DialogTitle><DialogDescription>{reversal?.expense_number} · {reversal ? money(Number(reversal.amount), currencySymbol) : ''}. This creates a reversing journal entry; it does not delete the original record.</DialogDescription></DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">Only expenses with no recorded payments can be reversed here. Paid expenses require a supplier-refund workflow and cannot be reversed through this action.</div>
+            <div className="space-y-2"><Label>Reason for reversal *</Label><Textarea value={reversalForm.reason} onChange={e => setReversalForm({ ...reversalForm, reason: e.target.value })} placeholder="Explain why this expense is being reversed" /></div>
+            <div className="space-y-2"><Label>Supporting document / approval reference *</Label><Input value={reversalForm.reference} onChange={e => setReversalForm({ ...reversalForm, reference: e.target.value })} placeholder="Credit note, cancellation or approval reference" /></div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setReversal(null)}>Cancel</Button><Button variant="destructive" disabled={reverseExpense.isPending || !reversalForm.reason.trim() || !reversalForm.reference.trim()} onClick={() => reverseExpense.mutate()}>{reverseExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Post Reversal</Button></div>
         </DialogContent>
       </Dialog>
 
