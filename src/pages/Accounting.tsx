@@ -103,21 +103,26 @@ export default function Accounting() {
   const currencySymbol = settings?.currency_symbol || '$';
 
   // Fetch petty cash
+  const fetchPettyCashPage = async (from: number, to: number) => {
+    const { data, error } = await supabase
+      .from('petty_cash_transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data || [];
+  };
+
   const { data: pettyCash = [], isError: pettyCashError, isLoading: pettyCashLoading } = useQuery({
     queryKey: ['petty-cash'],
     queryFn: async () => {
-      const rows: Array<(typeof pettyCash)[number]> = [];
+      const rows: Awaited<ReturnType<typeof fetchPettyCashPage>> = [];
       let offset = 0;
       const pageSize = 1000;
       while (true) {
-        const { data, error } = await supabase
-          .from('petty_cash_transactions')
-          .select('*')
-          .order('date', { ascending: false })
-          .range(offset, offset + pageSize - 1);
-        if (error) throw error;
-        rows.push(...(data || []));
-        if (!data || data.length < pageSize) break;
+        const data = await fetchPettyCashPage(offset, offset + pageSize - 1);
+        rows.push(...data);
+        if (data.length < pageSize) break;
         offset += pageSize;
       }
       return rows;
