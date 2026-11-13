@@ -224,24 +224,24 @@ SELECT extensions.throws_ok(
 
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_operating_expense(
+  $$ SELECT public.record_operating_expense(
     'Cancelled office service', 'Example Telecom', 'OPEX-REVERSAL-001',
     (SELECT id FROM public.chart_of_accounts
      WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500') ORDER BY code LIMIT 1),
     CURRENT_DATE, CURRENT_DATE + 7, 75.00, 0,
     NULL, NULL, 'Service cancelled before payment',
     'e0000000-0000-4000-8000-000000000105'
-  ) $,
+  ) $$,
   'An unpaid expense can be recorded before reversal'
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.reverse_unpaid_operating_expense(
+  $$ SELECT public.reverse_unpaid_operating_expense(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001'),
     'Supplier cancelled the service',
     'CANCEL-APPROVAL-001',
     'e0000000-0000-4000-8000-000000000106'
-  ) $,
+  ) $$,
   'Accountant can reverse a fully unpaid expense with a reason and evidence reference'
 );
 
@@ -270,12 +270,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.reverse_unpaid_operating_expense(
+  $$ SELECT public.reverse_unpaid_operating_expense(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001'),
     'Supplier cancelled the service',
     'CANCEL-APPROVAL-001',
     'e0000000-0000-4000-8000-000000000106'
-  ) $,
+  ) $$,
   'Retrying the same reversal request is idempotent'
 );
 
@@ -288,12 +288,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.reverse_unpaid_operating_expense(
+  $$ SELECT public.reverse_unpaid_operating_expense(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     'Attempt reversal after supplier payment',
     'CANCEL-APPROVAL-PAID-001',
     'e0000000-0000-4000-8000-000000000107'
-  ) $,
+  ) $$,
   'P0001',
   'An expense with any recorded payment cannot be reversed until the supplier-refund workflow is available',
   'Paid expenses are blocked until supplier refunds can be accounted for'
