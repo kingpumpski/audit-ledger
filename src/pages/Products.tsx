@@ -575,6 +575,13 @@ export default function Products() {
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            openProductDetails(product);
+                            setIsEditingProduct(true);
+                          }}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Product
+                          </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => updateProduct({ 
                               id: product.id, 
