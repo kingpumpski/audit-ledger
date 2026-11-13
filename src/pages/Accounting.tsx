@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useReceipts } from '@/hooks/useReceipts';
+import { usePayments } from '@/hooks/usePayments';
 import { useSettings } from '@/hooks/useSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -40,6 +41,7 @@ type TimeFrame = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'ye
 export default function Accounting() {
   const { invoices } = useInvoices();
   const { receipts } = useReceipts();
+  const { payments } = usePayments();
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -97,7 +99,13 @@ export default function Accounting() {
     const totalInvoiced = invoices.reduce((s, i) => s + (i.total_amount || 0), 0);
     const totalTax = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.tax_amount || 0), 0);
     const totalDiscounts = invoices.reduce((s, i) => s + (i.discount_amount || 0), 0);
-    const totalReceived = receipts.filter(r => r.status === 'issued').reduce((s, r) => s + r.amount, 0);
+    // Payments are the accounting source of truth for invoice-linked receipts.
+    // Add only standalone receipts to avoid counting a payment and its receipt twice.
+    const invoicePaymentsReceived = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const standaloneReceiptsReceived = receipts
+      .filter(receipt => receipt.status === 'issued' && !receipt.payment_id)
+      .reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0);
+    const totalReceived = invoicePaymentsReceived + standaloneReceiptsReceived;
     const outstanding = invoices.filter(i => ['issued', 'overdue', 'partially_paid'].includes(i.status))
       .reduce((s, i) => s + (i.balance_due || 0), 0);
     const operatingExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
@@ -106,7 +114,7 @@ export default function Accounting() {
     // Do not estimate cost of goods or present a profit figure. Purchase costs
     // are not reliably linked to sales across the current data model.
     return { totalRevenue, totalInvoiced, totalTax, totalDiscounts, totalReceived, outstanding, operatingExpenses, pettyCashIncome };
-  }, [invoices, receipts, pettyCash]);
+  }, [invoices, receipts, payments, pettyCash]);
 
   // Revenue trend data
   const trendData = useMemo(() => {
@@ -153,12 +161,16 @@ export default function Accounting() {
 
   const paymentMethodData = useMemo(() => {
     const methods: Record<string, number> = {};
-    receipts.filter(r => r.status === 'issued').forEach(r => {
-      const m = r.payment_method.replace(/_/g, ' ');
-      methods[m] = (methods[m] || 0) + r.amount;
+    payments.forEach(payment => {
+      const method = payment.payment_method.replace(/_/g, ' ');
+      methods[method] = (methods[method] || 0) + Number(payment.amount || 0);
+    });
+    receipts.filter(receipt => receipt.status === 'issued' && !receipt.payment_id).forEach(receipt => {
+      const method = receipt.payment_method.replace(/_/g, ' ');
+      methods[method] = (methods[method] || 0) + Number(receipt.amount || 0);
     });
     return Object.entries(methods).map(([name, value]) => ({ name, value }));
-  }, [receipts]);
+  }, [payments, receipts]);
 
   const exportReport = (type: string) => {
     let csv = '';
@@ -293,7 +305,7 @@ export default function Accounting() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between py-2 border-b"><span>Money received on receipts</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Money received (payments + standalone receipts)</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Unpaid invoice balances</span><span>{currencySymbol}{financials.outstanding.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Other income entries</span><span>{currencySymbol}{financials.pettyCashIncome.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Recorded petty cash expenses</span><span>{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
