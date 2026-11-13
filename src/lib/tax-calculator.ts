@@ -17,6 +17,8 @@ export interface LineTaxBreakdown {
   rate: number;
   taxable_amount: number;
   tax_amount: number;
+  is_compound: boolean;
+  tax_order: number;
 }
 
 export interface LineCalculation {
@@ -67,13 +69,15 @@ export function calculateLineAmounts(input: {
     ? (totalTaxFactor > 0 ? amountAfterDiscount / (1 + totalTaxFactor) : amountAfterDiscount)
     : amountAfterDiscount;
 
-  const taxes = taxFactors.map(({ tax, taxableFactor, taxFactor }) => ({
+  const taxes = taxFactors.map(({ tax, taxableFactor, taxFactor }, taxOrder) => ({
     tax_id: tax.id,
     name: tax.name,
     code: tax.code,
     rate: Number(tax.rate),
     taxable_amount: roundMoney(taxableBase * taxableFactor),
     tax_amount: roundMoney(taxableBase * taxFactor),
+    is_compound: Boolean(tax.is_compound),
+    tax_order: taxOrder,
   }));
   const taxAmount = roundMoney(taxes.reduce((sum, tax) => sum + tax.tax_amount, 0));
   const lineTotal = input.pricesIncludeTax
