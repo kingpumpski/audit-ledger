@@ -848,7 +848,8 @@ RETURNS TABLE (
   credit_amount numeric(15,2),
   applied_amount numeric(15,2),
   refunded_amount numeric(15,2),
-  remaining_amount numeric(15,2)
+  remaining_amount numeric(15,2),
+  can_manage boolean
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -876,7 +877,8 @@ BEGIN
     GREATEST(
       cn.customer_credit_amount - COALESCE(app.applied_amount,0) - COALESCE(ref.refunded_amount,0),
       0
-    )::numeric(15,2)
+    )::numeric(15,2),
+    public.has_any_role(ARRAY['admin','accountant'])
   FROM public.credit_notes cn
   JOIN public.invoices i ON i.id=cn.invoice_id
   LEFT JOIN (
@@ -890,6 +892,7 @@ BEGIN
     GROUP BY credit_note_id
   ) ref ON ref.credit_note_id=cn.id
   WHERE cn.customer_id=p_customer_id
+    AND cn.customer_credit_amount > 0
   ORDER BY cn.credit_note_date DESC, cn.created_at DESC;
 END;
 $get_customer_credit_balances$;
