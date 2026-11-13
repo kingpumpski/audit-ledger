@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(41);
+SELECT extensions.plan(44);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -269,6 +269,24 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
+  $ SELECT public.record_stock_purchase(
+    (SELECT id FROM public.products WHERE sku='TEST-CN-STOCK-001'),
+    2,20,'Second credit note supplier','CN-STOCK-PURCHASE-002',40,
+    'cash','Second purchase at a different verified unit cost',NULL,
+    'c1000000-0000-4000-8000-000000000703'
+  ) $,
+  'A later purchase updates weighted-average inventory cost before the customer return'
+);
+
+SELECT extensions.is(
+  (SELECT cost_price FROM public.products WHERE sku='TEST-CN-STOCK-001'),
+  14.0000::numeric,
+  'Weighted-average cost reflects the later purchase before the return'
+);
+
+
+
+SELECT extensions.lives_ok(
   $$ SELECT public.record_invoice_credit_note(
     (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005'),
     jsonb_build_array(jsonb_build_object(
@@ -283,7 +301,7 @@ SELECT extensions.lives_ok(
 
 SELECT extensions.is(
   (SELECT stock_quantity FROM public.products WHERE sku='TEST-CN-STOCK-001'),
-  4,
+  6,
   'Physical return restores one unit to stock'
 );
 
@@ -293,6 +311,14 @@ SELECT extensions.is(
   10.00::numeric,
   'Credit note stores the original verified inventory cost for the returned quantity'
 );
+
+SELECT extensions.is(
+  (SELECT cost_price FROM public.products WHERE sku='TEST-CN-STOCK-001'),
+  13.3333::numeric,
+  'Returning goods at original cost recomputes the current weighted-average inventory valuation'
+);
+
+
 
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.inventory_transactions
@@ -308,7 +334,7 @@ SELECT extensions.is(
    WHERE reference_type='credit_note'
      AND reference_id=(SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-STOCK-001')
      AND type='return'),
-  3,
+  5,
   'Inventory return audit preserves the stock quantity before the return'
 );
 
@@ -317,7 +343,7 @@ SELECT extensions.is(
    WHERE reference_type='credit_note'
      AND reference_id=(SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-STOCK-001')
      AND type='return'),
-  4,
+  6,
   'Inventory return audit preserves the stock quantity after the return'
 );
 
