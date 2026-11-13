@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/popover';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useCustomers } from '@/hooks/useCustomers';
-import { useProducts } from '@/hooks/useProducts';
+import { useProducts, type Product } from '@/hooks/useProducts';
 import { useTaxes } from '@/hooks/useTaxes';
 import { useSettings } from '@/hooks/useSettings';
 import { 
@@ -130,8 +130,8 @@ export default function InvoiceNew() {
     ));
   };
 
-  const selectProduct = (itemId: string, productId: string) => {
-    const product = products.find(p => p.id === productId);
+  const selectProduct = (itemId: string, productId: string, productOverride?: Product) => {
+    const product = productOverride || products.find(p => p.id === productId);
     if (product) {
       updateItem(itemId, {
         product_id: productId,
@@ -323,7 +323,7 @@ export default function InvoiceNew() {
                   is_service: false,
                   is_active: true,
                 });
-                selectProduct(productDialogTargetId, created.id);
+                selectProduct(productDialogTargetId, created.id, created);
                 setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
                 setProductSearchQuery('');
                 setProductDialogTargetId(null);
