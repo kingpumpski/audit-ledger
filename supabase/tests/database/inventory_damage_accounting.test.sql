@@ -371,19 +371,19 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ UPDATE public.inventory_transactions
+  $$ UPDATE public.inventory_transactions
      SET quantity = quantity + 1
      WHERE type = 'sale' AND reference_type = 'invoice'
-       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $,
+       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $$,
   'P0001',
   'An inventory transaction with a posted journal is immutable; record an audited reversal instead',
   'Invoice-linked stock-sale movement cannot be edited after posting'
 );
 
 SELECT extensions.throws_ok(
-  $ DELETE FROM public.inventory_transactions
+  $$ DELETE FROM public.inventory_transactions
      WHERE type = 'sale' AND reference_type = 'invoice'
-       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $,
+       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $$,
   'P0001',
   'An inventory transaction with a posted journal is immutable; record an audited reversal instead',
   'Invoice-linked stock-sale movement cannot be deleted after posting'
@@ -560,22 +560,22 @@ SELECT extensions.lives_ok(
        CURRENT_DATE, 'Test petty cash expense', 12.50, 'expense',
        'Office', 'PETTY-IMMUTABLE-001',
        'd0000000-0000-4000-8000-000000000001', 'cash'
-     ) $,
+     ) $$,
   'Accountant can record an evidenced petty-cash expense'
 );
 
 SELECT extensions.throws_ok(
-  $ UPDATE public.petty_cash_transactions
+  $$ UPDATE public.petty_cash_transactions
      SET amount = 15.00
-     WHERE reference_number = 'PETTY-IMMUTABLE-001' $,
+     WHERE reference_number = 'PETTY-IMMUTABLE-001' $$,
   'P0001',
   'An expense with a posted journal is immutable; record an audited reversal instead',
   'Posted petty-cash expense cannot be edited'
 );
 
 SELECT extensions.throws_ok(
-  $ DELETE FROM public.petty_cash_transactions
-     WHERE reference_number = 'PETTY-IMMUTABLE-001' $,
+  $$ DELETE FROM public.petty_cash_transactions
+     WHERE reference_number = 'PETTY-IMMUTABLE-001' $$,
   'P0001',
   'An expense with a posted journal is immutable; record an audited reversal instead',
   'Posted petty-cash expense cannot be deleted'
