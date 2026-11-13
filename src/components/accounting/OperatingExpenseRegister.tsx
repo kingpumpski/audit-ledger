@@ -310,13 +310,26 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
 
       <Dialog open={!!reversal} onOpenChange={value => { if (!value) setReversal(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Reverse Unpaid Expense</DialogTitle><DialogDescription>{reversal?.expense_number} · {reversal ? money(Number(reversal.amount), currencySymbol) : ''}. This creates a reversing journal entry; it does not delete the original record.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Reverse Supplier Expense</DialogTitle><DialogDescription>{reversal?.expense_number} · {reversal ? money(Number(reversal.amount), currencySymbol) : ''}. The full expense is reversed against Accounts Payable; amounts already paid remain due from the supplier until actually refunded.</DialogDescription></DialogHeader>
           <div className="space-y-4 py-3">
-            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">Only expenses with no recorded payments can be reversed here. Paid expenses require a supplier-refund workflow and cannot be reversed through this action.</div>
+            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">This does not fabricate a refund or erase payments. Record each supplier refund separately only after funds are received, using its actual cash/bank method and reference.</div>
             <div className="space-y-2"><Label>Reason for reversal *</Label><Textarea value={reversalForm.reason} onChange={e => setReversalForm({ ...reversalForm, reason: e.target.value })} placeholder="Explain why this expense is being reversed" /></div>
             <div className="space-y-2"><Label>Supporting document / approval reference *</Label><Input value={reversalForm.reference} onChange={e => setReversalForm({ ...reversalForm, reference: e.target.value })} placeholder="Credit note, cancellation or approval reference" /></div>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setReversal(null)}>Cancel</Button><Button variant="destructive" disabled={reverseExpense.isPending || !reversalForm.reason.trim() || !reversalForm.reference.trim()} onClick={() => reverseExpense.mutate()}>{reverseExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Post Reversal</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!refund} onOpenChange={value => { if (!value) setRefund(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Record Supplier Refund</DialogTitle><DialogDescription>{refund?.expense_number} · Maximum refundable {refund ? money(Math.max(0, Number(refund.amount_paid) - (refund.refunds || []).reduce((sum, item) => sum + Number(item.amount || 0), 0)), currencySymbol) : ''}. Record only funds actually received.</DialogDescription></DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="space-y-2"><Label>Refund amount</Label><Input type="number" min="0.01" step="0.01" value={refundForm.amount} onChange={e => setRefundForm({ ...refundForm, amount: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Funds received date</Label><Input type="date" min={refund?.incurred_on} value={refundForm.refundedOn} onChange={e => setRefundForm({ ...refundForm, refundedOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Received into</Label><Select value={refundForm.method} onValueChange={value => setRefundForm({ ...refundForm, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank</SelectItem><SelectItem value="mobile_payment">Mobile Money</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>Supplier refund / bank reference</Label><Input value={refundForm.reference} onChange={e => setRefundForm({ ...refundForm, reference: e.target.value })} /></div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setRefund(null)}>Cancel</Button><Button disabled={recordRefund.isPending} onClick={() => recordRefund.mutate()}>{recordRefund.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Post Refund</Button></div>
         </DialogContent>
       </Dialog>
 
