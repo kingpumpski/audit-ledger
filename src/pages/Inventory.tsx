@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useProducts } from '@/hooks/useProducts';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -25,7 +26,9 @@ import { format } from 'date-fns';
 import { type Product } from '@/hooks/useProducts';
 
 export default function Inventory() {
-  const { products, updateProduct, isUpdating } = useProducts();
+  const { products } = useProducts();
+  const { roles } = useAuth();
+  const canRecordInventoryDamage = roles.includes('admin') || roles.includes('accountant');
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -238,7 +241,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
@@ -305,7 +308,7 @@ export default function Inventory() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="purchase">Record stock purchase</SelectItem>
-                  <SelectItem value="damage">Record stock damage / shrinkage</SelectItem>
+                  {canRecordInventoryDamage && <SelectItem value="damage">Record stock damage / shrinkage</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
