@@ -19,6 +19,7 @@ interface CreatePaymentData {
   payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
   reference_number?: string;
   notes?: string;
+  idempotency_key: string;
 }
 
 export function usePayments() {
@@ -53,6 +54,7 @@ export function usePayments() {
         p_payment_method: paymentData.payment_method,
         p_reference_number: paymentData.reference_number || null,
         p_notes: paymentData.notes || null,
+        p_idempotency_key: paymentData.idempotency_key,
       });
 
       if (paymentError) throw paymentError;
