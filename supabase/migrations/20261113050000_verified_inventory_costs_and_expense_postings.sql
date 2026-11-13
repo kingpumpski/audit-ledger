@@ -12,7 +12,9 @@ ALTER TABLE public.inventory_transactions
   ADD COLUMN IF NOT EXISTS supplier_name text,
   ADD COLUMN IF NOT EXISTS reference_number text,
   ADD COLUMN IF NOT EXISTS payment_method public.payment_method,
-  ADD COLUMN IF NOT EXISTS amount_paid numeric(14,2) NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS amount_paid numeric(14,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS idempotency_key uuid,
+  ADD COLUMN IF NOT EXISTS opening_unit_cost numeric(14,4);
 
 ALTER TABLE public.petty_cash_transactions
   ADD COLUMN IF NOT EXISTS payment_method public.payment_method NOT NULL DEFAULT 'cash';
@@ -1588,10 +1590,6 @@ REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, 
 
 -- Audited inventory damage/shrinkage: stock is relieved at verified weighted
 -- average cost and the same transaction posts Inventory Shrinkage expense.
-ALTER TABLE public.inventory_transactions
-  ADD COLUMN IF NOT EXISTS idempotency_key uuid,
-  ADD COLUMN IF NOT EXISTS opening_unit_cost numeric(14,4);
-
 CREATE UNIQUE INDEX IF NOT EXISTS inventory_transactions_idempotency_key_uidx
   ON public.inventory_transactions(idempotency_key)
   WHERE idempotency_key IS NOT NULL;
