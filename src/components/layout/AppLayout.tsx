@@ -1,6 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
+import { getSidebarItems } from '@/config/sidebarConfig';
 import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -24,23 +25,23 @@ interface AppLayoutProps {
   actions?: ReactNode;
 }
 
-const featureLinks = [
-  { label: 'Dashboard', description: 'Overview and business metrics', href: '/dashboard', terms: 'home overview' },
-  { label: 'Sales & Invoices', description: 'Record sales and manage customer invoices', href: '/invoices', terms: 'billing sales money owed' },
-  { label: 'Money Received', description: 'Record and review customer payments', href: '/receipts', terms: 'payments collections cash mobile money' },
-  { label: 'Customers', description: 'Keep customer names and contact details', href: '/customers', terms: 'clients contacts people who owe' },
-  { label: 'Products & Services', description: 'Manage what your business sells', href: '/products', terms: 'catalog goods items services' },
-  { label: 'Stock', description: 'See what you have and what needs restocking', href: '/inventory', terms: 'inventory warehouse quantity' },
-  { label: 'Accounting Tools', description: 'Detailed accounting tools for finance staff', href: '/accounting', terms: 'ledger chart accounts journals' },
-  { label: 'Taxes', description: 'Tax configuration and records', href: '/taxes', terms: 'vat tax' },
-  { label: 'Discounts', description: 'Manage discounts', href: '/discounts', terms: 'offers promotions' },
-  { label: 'Business Reports', description: 'Understand sales, spending and business performance', href: '/reports', terms: 'analytics statements profit loss' },
-  { label: 'Activity History', description: 'See who changed important business records', href: '/audit-logs', terms: 'audit logs activity history' },
-];
+const featureDetails: Record<string, { description: string; terms: string }> = {
+  '/dashboard': { description: 'Overview and business metrics', terms: 'home overview' },
+  '/invoices': { description: 'Record sales and manage customer invoices', terms: 'billing sales money owed' },
+  '/receipts': { description: 'Record and review customer payments', terms: 'payments collections cash mobile money' },
+  '/customers': { description: 'Keep customer names and contact details', terms: 'clients contacts people who owe' },
+  '/products': { description: 'Manage what your business sells', terms: 'catalog goods items services' },
+  '/accounting': { description: 'Detailed accounting tools for finance staff', terms: 'ledger chart accounts journals' },
+  '/inventory': { description: 'See what you have and what needs restocking', terms: 'inventory warehouse quantity' },
+  '/taxes': { description: 'Tax configuration and records', terms: 'vat tax' },
+  '/discounts': { description: 'Manage discounts', terms: 'offers promotions' },
+  '/reports': { description: 'Understand sales, spending and business performance', terms: 'analytics statements profit loss' },
+  '/audit-logs': { description: 'See who changed important business records', terms: 'audit logs activity history' },
+};
 
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { profile, roles, signOut } = useAuth();
+  const { profile, roles, signOut, userPersona } = useAuth();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -57,10 +58,17 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
   const matchingFeatures = useMemo(() => {
     const query = featureQuery.trim().toLowerCase();
     if (!query) return [];
-    return featureLinks.filter((item) =>
-      `${item.label} ${item.description} ${item.terms}`.toLowerCase().includes(query)
-    );
-  }, [featureQuery]);
+    return getSidebarItems(userPersona)
+      .filter((item) => !item.roles || roles.some((role) => item.roles?.includes(role)))
+      .map((item) => ({
+        label: item.name,
+        href: item.path,
+        ...featureDetails[item.path],
+      }))
+      .filter((item) =>
+        `${item.label} ${item.description} ${item.terms}`.toLowerCase().includes(query)
+      );
+  }, [featureQuery, roles, userPersona]);
 
   const openFeature = (href: string) => {
     navigate(href);
