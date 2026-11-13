@@ -1,0 +1,99 @@
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+BEGIN;
+SELECT extensions.plan(4);
+
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data
+) VALUES
+  ('f1000000-0000-4000-8000-000000000001','authenticated','authenticated',
+   'tax-snapshot-accountant@example.invalid','',now(),'{}'::jsonb,'{}'::jsonb),
+  ('f1000000-0000-4000-8000-000000000002','authenticated','authenticated',
+   'tax-snapshot-cashier@example.invalid','',now(),'{}'::jsonb,'{}'::jsonb);
+
+INSERT INTO public.user_roles(user_id, role) VALUES
+  ('f1000000-0000-4000-8000-000000000001','accountant'),
+  ('f1000000-0000-4000-8000-000000000002','cashier');
+
+INSERT INTO public.customers(code,name)
+VALUES ('TAX-SNAPSHOT-CUSTOMER','Tax snapshot test customer');
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date, subtotal,
+  tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TAX-SNAPSHOT-001', id, 'draft', CURRENT_DATE, 100, 15, 115, 115
+FROM public.customers WHERE code='TAX-SNAPSHOT-CUSTOMER';
+
+INSERT INTO public.invoice_items (
+  invoice_id, description, quantity, unit_price, tax_rate, tax_amount, line_total
+)
+SELECT id, 'Tax snapshot test line', 1, 100, 15, 15, 115
+FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001';
+
+INSERT INTO public.taxes (
+  code, name, type, rate, is_compound, is_active,
+  liability_account_id, effective_from
+)
+SELECT 'TAX-SNAPSHOT-001','Tax snapshot VAT','vat',15,false,true,coa.id,CURRENT_DATE
+FROM public.chart_of_accounts coa WHERE coa.code='2100';
+
+SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+
+INSERT INTO public.invoice_item_taxes (
+  invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
+  tax_rate, is_compound, tax_order, taxable_amount, tax_amount,
+  liability_account_id
+)
+SELECT i.id, ii.id, t.id, t.name, t.code, t.rate, t.is_compound,
+       0, 100, 15, t.liability_account_id
+FROM public.invoices i
+JOIN public.invoice_items ii ON ii.invoice_id=i.id
+JOIN public.taxes t ON t.code='TAX-SNAPSHOT-001'
+WHERE i.invoice_number='INV-TAX-SNAPSHOT-001';
+
+SELECT extensions.is(
+  (SELECT round(sum(tax_amount),2) FROM public.invoice_item_taxes
+   WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001')),
+  15.00::numeric,
+  'Invoice line preserves its exact tax amount and liability allocation'
+);
+
+UPDATE public.invoices SET status='issued'
+WHERE invoice_number='INV-TAX-SNAPSHOT-001';
+
+SELECT extensions.throws_ok(
+  $$ UPDATE public.invoice_item_taxes SET tax_amount=14
+     WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001') $$,
+  'P0001',
+  'Tax snapshots are immutable after an invoice is issued',
+  'Issued invoice tax snapshots cannot be edited'
+);
+
+SELECT extensions.throws_ok(
+  $$ INSERT INTO public.invoice_item_taxes (
+       invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
+       tax_rate, is_compound, tax_order, taxable_amount, tax_amount,
+       liability_account_id
+     )
+     SELECT i.id, ii.id, t.id, t.name, t.code, t.rate, false,
+            1, 100, 15, t.liability_account_id
+     FROM public.invoices i
+     JOIN public.invoice_items ii ON ii.invoice_id=i.id
+     JOIN public.taxes t ON t.code='TAX-SNAPSHOT-001'
+     WHERE i.invoice_number='INV-TAX-SNAPSHOT-001' $$,
+  'P0001',
+  'Tax snapshots are immutable after an invoice is issued',
+  'Issued invoice cannot receive additional tax snapshot rows'
+);
+
+SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000002',true);
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.invoice_item_taxes),
+  0,
+  'Cashier cannot read finance-only tax allocation snapshots'
+);
+
+SELECT * FROM extensions.finish();
+ROLLBACK;
