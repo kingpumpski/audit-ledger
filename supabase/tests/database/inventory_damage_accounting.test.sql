@@ -553,7 +553,7 @@ SELECT extensions.throws_ok(
 
 
 SELECT extensions.lives_ok(
-  $ INSERT INTO public.petty_cash_transactions (
+  $$ INSERT INTO public.petty_cash_transactions (
        date, description, amount, type, category, reference_number,
        recorded_by, payment_method
      ) VALUES (
