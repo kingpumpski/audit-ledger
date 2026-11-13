@@ -1065,3 +1065,181 @@ BEGIN
 END;
 $snapshot_cost$;
 
+
+
+-- Evidenced direct costs for service/manual invoice lines. These debit COGS
+-- directly and credit Cash/Bank; they never touch Inventory.
+CREATE TABLE IF NOT EXISTS public.invoice_item_direct_costs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_item_id uuid NOT NULL UNIQUE REFERENCES public.invoice_items(id) ON DELETE RESTRICT,
+  amount numeric(14,2) NOT NULL CHECK (amount > 0),
+  source_reference text NOT NULL CHECK (length(btrim(source_reference)) > 0),
+  incurred_on date NOT NULL,
+  payment_method public.payment_method NOT NULL,
+  notes text,
+  recorded_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  journal_entry_id uuid NOT NULL UNIQUE REFERENCES public.journal_entries(id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.journal_entries
+  DROP CONSTRAINT IF EXISTS journal_entries_source_type_check;
+ALTER TABLE public.journal_entries
+  ADD CONSTRAINT journal_entries_source_type_check
+  CHECK (source_type = ANY (ARRAY[
+    'invoice'::text, 'payment'::text, 'receipt'::text, 'receipt_void'::text,
+    'stock_purchase'::text, 'opening_stock_valuation'::text,
+    'petty_cash_expense'::text, 'direct_invoice_cost'::text
+  ]));
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_invoice_cost_journal_source
+  ON public.journal_entries(source_type, source_id)
+  WHERE source_type = 'direct_invoice_cost';
+
+ALTER TABLE public.invoice_item_direct_costs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY invoice_item_direct_costs_finance_read
+  ON public.invoice_item_direct_costs
+  FOR SELECT TO authenticated
+  USING (public.has_any_role(ARRAY['admin', 'accountant', 'cashier']));
+GRANT SELECT ON public.invoice_item_direct_costs TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.record_invoice_item_direct_cost(
+  p_invoice_item_id uuid,
+  p_amount numeric,
+  p_reference text,
+  p_incurred_on date,
+  p_payment_method public.payment_method,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $direct_invoice_cost$
+DECLARE
+  v_item public.invoice_items%ROWTYPE;
+  v_invoice public.invoices%ROWTYPE;
+  v_product public.products%ROWTYPE;
+  v_cost_account uuid;
+  v_payment_account uuid;
+  v_journal_id uuid;
+  v_entry_number text;
+  v_currency text;
+  v_cost_id uuid;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'You are not authorized to record direct invoice costs';
+  END IF;
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Direct cost must be greater than zero';
+  END IF;
+  IF NULLIF(BTRIM(p_reference), '') IS NULL THEN
+    RAISE EXCEPTION 'A supplier, payroll or other supporting cost reference is required';
+  END IF;
+  IF p_incurred_on IS NULL OR p_payment_method IS NULL THEN
+    RAISE EXCEPTION 'Cost date and payment method are required';
+  END IF;
+
+  SELECT * INTO v_item
+  FROM public.invoice_items
+  WHERE id = p_invoice_item_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice line not found';
+  END IF;
+
+  SELECT * INTO v_invoice
+  FROM public.invoices
+  WHERE id = v_item.invoice_id AND deleted_at IS NULL;
+  IF NOT FOUND OR v_invoice.status NOT IN ('issued', 'partially_paid', 'paid', 'overdue') THEN
+    RAISE EXCEPTION 'Direct costs can only be recorded against issued invoices';
+  END IF;
+
+  IF v_item.product_id IS NOT NULL THEN
+    SELECT * INTO v_product FROM public.products WHERE id = v_item.product_id;
+    IF FOUND AND NOT COALESCE(v_product.is_service, false) THEN
+      RAISE EXCEPTION 'Physical products must use verified purchase cost or historical cost verification, not direct service cost';
+    END IF;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.invoice_item_direct_costs
+    WHERE invoice_item_id = p_invoice_item_id
+  ) OR EXISTS (
+    SELECT 1 FROM public.journal_entries
+    WHERE source_type = 'direct_invoice_cost' AND source_id = p_invoice_item_id
+  ) THEN
+    RAISE EXCEPTION 'A direct cost has already been recorded for this invoice line';
+  END IF;
+
+  SELECT id INTO v_cost_account
+  FROM public.chart_of_accounts
+  WHERE code = '5000' AND account_type = 'expense' AND is_active
+  LIMIT 1;
+  IF p_payment_method = 'cash' THEN
+    SELECT id INTO v_payment_account FROM public.chart_of_accounts
+    WHERE code = '1000' AND account_type = 'asset' AND is_active LIMIT 1;
+  ELSE
+    SELECT id INTO v_payment_account FROM public.chart_of_accounts
+    WHERE code = '1010' AND account_type = 'asset' AND is_active LIMIT 1;
+  END IF;
+  IF v_cost_account IS NULL OR v_payment_account IS NULL THEN
+    RAISE EXCEPTION 'Cost of sales or payment account is not configured';
+  END IF;
+
+  v_entry_number := public.get_next_sequence('journal');
+  SELECT COALESCE(currency_code, 'USD') INTO v_currency
+  FROM public.company_settings ORDER BY created_at LIMIT 1;
+  v_currency := COALESCE(v_currency, 'USD');
+
+  INSERT INTO public.journal_entries (
+    entry_number, entry_date, description, source_type, source_id, currency, created_by
+  )
+  VALUES (
+    v_entry_number, p_incurred_on,
+    'Direct service cost - invoice ' || v_invoice.invoice_number || ' - ' || v_item.description,
+    'direct_invoice_cost', p_invoice_item_id, v_currency, auth.uid()
+  )
+  RETURNING id INTO v_journal_id;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  )
+  VALUES
+    (v_journal_id, 1, v_cost_account, 'Direct cost - ' || v_item.description, ROUND(p_amount, 2), 0),
+    (v_journal_id, 2, v_payment_account, 'Direct cost paid - ' || v_item.description, 0, ROUND(p_amount, 2));
+
+  INSERT INTO public.invoice_item_direct_costs (
+    invoice_item_id, amount, source_reference, incurred_on,
+    payment_method, notes, recorded_by, journal_entry_id
+  )
+  VALUES (
+    p_invoice_item_id, ROUND(p_amount, 2), BTRIM(p_reference), p_incurred_on,
+    p_payment_method, NULLIF(BTRIM(p_notes), ''), auth.uid(), v_journal_id
+  )
+  RETURNING id INTO v_cost_id;
+
+  RETURN v_cost_id;
+END;
+$direct_invoice_cost$;
+
+REVOKE ALL ON FUNCTION public.record_invoice_item_direct_cost(uuid, numeric, text, date, public.payment_method, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_invoice_item_direct_cost(uuid, numeric, text, date, public.payment_method, text) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.guard_posted_direct_invoice_cost_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $direct_cost_guard$
+BEGIN
+  RAISE EXCEPTION 'A posted direct invoice cost is immutable; correct it through an audited reversal';
+END;
+$direct_cost_guard$;
+
+CREATE TRIGGER guard_posted_direct_invoice_cost_mutations
+BEFORE UPDATE OR DELETE ON public.invoice_item_direct_costs
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_posted_direct_invoice_cost_mutations();
+
+REVOKE ALL ON FUNCTION public.guard_posted_direct_invoice_cost_mutations() FROM PUBLIC, anon, authenticated;
+
