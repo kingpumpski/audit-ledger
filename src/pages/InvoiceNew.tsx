@@ -68,7 +68,7 @@ export default function InvoiceNew() {
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogTargetId, setProductDialogTargetId] = useState<string | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', unit: 'piece', current_price: 0 });
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
   const [issueDate, setIssueDate] = useState<Date>(new Date());
   const [pricesIncludeTax, setPricesIncludeTax] = useState(false);
@@ -327,15 +327,15 @@ export default function InvoiceNew() {
                   category: newProduct.category.trim() || null,
                   unit: newProduct.unit.trim() || 'piece',
                   current_price: Number(newProduct.current_price),
-                  cost_price: Number(newProduct.cost_price),
-                  stock_quantity: Number(newProduct.stock_quantity),
+                  cost_price: null,
+                  stock_quantity: 0,
                   min_stock_level: 0,
                   description: null,
                   is_service: false,
                   is_active: true,
                 });
                 selectProduct(productDialogTargetId, created.id, created);
-                setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
+                setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0 });
                 setProductSearchQuery('');
                 setProductDialogTargetId(null);
                 setIsProductDialogOpen(false);
@@ -366,14 +366,9 @@ export default function InvoiceNew() {
                 <Label htmlFor="invoice-new-product-price">Selling Price ({currencySymbol}) *</Label>
                 <Input id="invoice-new-product-price" type="number" min="0" step="0.01" value={newProduct.current_price} onChange={e => setNewProduct(v => ({ ...v, current_price: Number(e.target.value) }))} required />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="invoice-new-product-cost">Cost Price ({currencySymbol})</Label>
-                <Input id="invoice-new-product-cost" type="number" min="0" step="0.01" value={newProduct.cost_price} onChange={e => setNewProduct(v => ({ ...v, cost_price: Number(e.target.value) }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invoice-new-product-stock">Opening Stock</Label>
-                <Input id="invoice-new-product-stock" type="number" min="0" step="0.01" value={newProduct.stock_quantity} onChange={e => setNewProduct(v => ({ ...v, stock_quantity: Number(e.target.value) }))} />
-              </div>
+              <p className="text-sm text-muted-foreground sm:col-span-2">
+                New products start with zero stock and no verified purchase cost. Record the actual stock purchase in Inventory before issuing an invoice; this keeps inventory valuation and profit reporting accurate.
+              </p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsProductDialogOpen(false)}>Cancel</Button>
