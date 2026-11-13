@@ -107,6 +107,11 @@ export default function Accounting() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_transactions' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_expense_reversals' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['operating-expenses-summary'] });
       })
