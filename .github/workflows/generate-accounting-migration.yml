@@ -1,0 +1,39 @@
+name: Generate accounting ledger migration
+
+on:
+  push:
+    branches:
+      - feat/ledger-postings-for-invoices-and-payments
+
+permissions:
+  contents: write
+
+jobs:
+  generate-migration:
+    if: github.event.head_commit.message != 'chore(db): generate accounting ledger migration scaffold'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Generate migration using Supabase CLI
+        run: supabase migration new accounting_ledger_and_payment_postings
+
+      - name: Commit CLI-generated migration scaffold
+        shell: bash
+        run: |
+          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_accounting_ledger_and_payment_postings.sql' | sort | tail -n 1)"
+          test -n "$migration_file"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$migration_file"
+          git commit -m "chore(db): generate accounting ledger migration scaffold"
+          git push origin "HEAD:${{ github.ref_name }}"
