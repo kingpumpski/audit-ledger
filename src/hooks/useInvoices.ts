@@ -276,6 +276,7 @@ export function useInvoices() {
     error: invoicesQuery.error,
     createInvoice: createInvoiceMutation.mutateAsync,
     issueInvoice: issueInvoiceMutation.mutate,
+    issueInvoiceAsync: issueInvoiceMutation.mutateAsync,
     isCreating: createInvoiceMutation.isPending,
     isIssuing: issueInvoiceMutation.isPending,
   };
