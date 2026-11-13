@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/popover';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useCustomers } from '@/hooks/useCustomers';
-import { useProducts } from '@/hooks/useProducts';
+import { useProducts, type Product } from '@/hooks/useProducts';
 import { useTaxes } from '@/hooks/useTaxes';
 import { useSettings } from '@/hooks/useSettings';
 import { 
@@ -60,12 +60,15 @@ export default function InvoiceNew() {
   const { toast } = useToast();
   const { createInvoice, issueInvoice, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
-  const { products, isLoading: productsLoading } = useProducts();
+  const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
+  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
+  const [productDialogTargetId, setProductDialogTargetId] = useState<string | null>(null);
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
   const [issueDate, setIssueDate] = useState<Date>(new Date());
   const [pricesIncludeTax, setPricesIncludeTax] = useState(false);
@@ -127,8 +130,8 @@ export default function InvoiceNew() {
     ));
   };
 
-  const selectProduct = (itemId: string, productId: string) => {
-    const product = products.find(p => p.id === productId);
+  const selectProduct = (itemId: string, productId: string, productOverride?: Product) => {
+    const product = productOverride || products.find(p => p.id === productId);
     if (product) {
       updateItem(itemId, {
         product_id: productId,
@@ -295,6 +298,83 @@ export default function InvoiceNew() {
         </div>
       }
     >
+      <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Product</DialogTitle>
+            <DialogDescription>Create a product and return to this invoice with it selected automatically.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (!newProduct.name.trim() || !productDialogTargetId) return;
+              try {
+                const created = await createProduct({
+                  name: newProduct.name.trim(),
+                  sku: newProduct.sku.trim() || undefined,
+                  category: newProduct.category.trim() || null,
+                  unit: newProduct.unit.trim() || 'piece',
+                  current_price: Number(newProduct.current_price),
+                  cost_price: Number(newProduct.cost_price),
+                  stock_quantity: Number(newProduct.stock_quantity),
+                  min_stock_level: 0,
+                  description: null,
+                  is_service: false,
+                  is_active: true,
+                });
+                selectProduct(productDialogTargetId, created.id, created);
+                setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
+                setProductSearchQuery('');
+                setProductDialogTargetId(null);
+                setIsProductDialogOpen(false);
+                toast({ title: 'Product added', description: 'The new product has been selected for this invoice.' });
+              } catch (error) {
+                console.error('Failed to create product from invoice:', error);
+              }
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="invoice-new-product-name">Product Name *</Label>
+              <Input id="invoice-new-product-name" value={newProduct.name} onChange={e => setNewProduct(v => ({ ...v, name: e.target.value }))} required autoFocus />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-sku">SKU (optional)</Label>
+                <Input id="invoice-new-product-sku" value={newProduct.sku} onChange={e => setNewProduct(v => ({ ...v, sku: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-category">Category</Label>
+                <Input id="invoice-new-product-category" value={newProduct.category} onChange={e => setNewProduct(v => ({ ...v, category: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-unit">Unit</Label>
+                <Input id="invoice-new-product-unit" value={newProduct.unit} onChange={e => setNewProduct(v => ({ ...v, unit: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-price">Selling Price ({currencySymbol}) *</Label>
+                <Input id="invoice-new-product-price" type="number" min="0" step="0.01" value={newProduct.current_price} onChange={e => setNewProduct(v => ({ ...v, current_price: Number(e.target.value) }))} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-cost">Cost Price ({currencySymbol})</Label>
+                <Input id="invoice-new-product-cost" type="number" min="0" step="0.01" value={newProduct.cost_price} onChange={e => setNewProduct(v => ({ ...v, cost_price: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoice-new-product-stock">Opening Stock</Label>
+                <Input id="invoice-new-product-stock" type="number" min="0" step="0.01" value={newProduct.stock_quantity} onChange={e => setNewProduct(v => ({ ...v, stock_quantity: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsProductDialogOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={isCreatingProduct || !newProduct.name.trim()}>
+                {isCreatingProduct && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create and Select Product
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add a customer</DialogTitle><DialogDescription>Create the missing customer and return to this invoice automatically.</DialogDescription></DialogHeader>
@@ -434,7 +514,14 @@ export default function InvoiceNew() {
                       <Label>Product (Optional)</Label>
                       <Select 
                         value={item.product_id || 'none'} 
-                        onValueChange={(v) => v !== 'none' && selectProduct(item.id, v)}
+                        onValueChange={(v) => {
+                          if (v === '__add_product__') {
+                            setProductDialogTargetId(item.id);
+                            setIsProductDialogOpen(true);
+                          } else if (v !== 'none') {
+                            selectProduct(item.id, v);
+                          }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select product or enter manually" />
@@ -460,6 +547,7 @@ export default function InvoiceNew() {
                               </div>
                             </SelectItem>
                           ))}
+                          <SelectItem value="__add_product__">+ Add new product…</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
