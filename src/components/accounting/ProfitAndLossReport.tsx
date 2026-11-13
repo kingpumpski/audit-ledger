@@ -287,7 +287,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
             <p className="font-medium">Why profit is not displayed</p>
             <p className="mt-1 text-muted-foreground">
-              Historical invoice lines are not assigned today's product cost. Verify each missing cost against its original purchase evidence above. Future invoices automatically snapshot the current purchase-weighted average cost.
+              Historical physical-product lines must be verified against original purchase evidence; today's product price is never substituted. Service and manual invoice lines need a separate evidenced direct-cost workflow and remain uncosted until that workflow is available. Future physical-product invoices automatically snapshot the verified purchase-weighted average cost.
             </p>
           </div>
         )}
