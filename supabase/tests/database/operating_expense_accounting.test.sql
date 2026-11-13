@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(27);
+SELECT extensions.plan(40);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -287,16 +287,134 @@ SELECT extensions.is(
   'Expense reversal is recorded only once'
 );
 
-SELECT extensions.throws_ok(
-  $$ SELECT public.reverse_unpaid_operating_expense(
+SELECT extensions.lives_ok(
+  $ SELECT public.reverse_unpaid_operating_expense(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
-    'Attempt reversal after supplier payment',
+    'Supplier contract cancelled after payment',
     'CANCEL-APPROVAL-PAID-001',
     'e0000000-0000-4000-8000-000000000107'
-  ) $$,
+  ) $,
+  'A partially or fully paid expense can be reversed without erasing its payment history'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'operating_expense_reversal'
+     AND je.source_id = (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001')
+     AND coa.code = '2000'),
+  100.00::numeric,
+  'Paid expense reversal recognizes the full supplier credit in Accounts Payable'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    25.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-001',
+    'e0000000-0000-4000-8000-000000000108'
+  ) $,
+  'Accountant can record an evidenced partial supplier refund after expense reversal'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expense_refunds r
+   JOIN public.operating_expenses e ON e.id = r.operating_expense_id
+   WHERE e.reference_number = 'OPEX-TEST-001'),
+  1,
+  'Supplier refund is retained as a separate immutable record'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'operating_expense_refund'
+     AND je.source_id = (SELECT id FROM public.operating_expense_refunds WHERE reference_number = 'SUPPLIER-REFUND-001')
+     AND coa.code = '1000'),
+  25.00::numeric,
+  'Cash refund receipt debits Cash'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'operating_expense_refund'
+     AND je.source_id = (SELECT id FROM public.operating_expense_refunds WHERE reference_number = 'SUPPLIER-REFUND-001')
+     AND coa.code = '2000'),
+  25.00::numeric,
+  'Supplier refund credits Accounts Payable to clear the debit balance'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit - jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   WHERE je.source_type IN ('operating_expense', 'operating_expense_payment', 'operating_expense_reversal', 'operating_expense_refund')
+     AND je.source_id IN (
+       (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+       (SELECT id FROM public.operating_expense_reversals WHERE operating_expense_id =
+         (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001')),
+       (SELECT id FROM public.operating_expense_payments WHERE operating_expense_id =
+         (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001')),
+       (SELECT id FROM public.operating_expense_refunds WHERE reference_number = 'SUPPLIER-REFUND-001')
+     )),
+  0::numeric,
+  'Expense recognition, payments, reversal and supplier refund journals remain balanced'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    25.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-001',
+    'e0000000-0000-4000-8000-000000000108'
+  ) $,
+  'Retrying the same supplier refund is idempotent'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expense_refunds r
+   JOIN public.operating_expenses e ON e.id = r.operating_expense_id
+   WHERE e.reference_number = 'OPEX-TEST-001'),
+  1,
+  'Idempotent supplier refund retry does not duplicate cash or journal entries'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    76.00, CURRENT_DATE, 'bank_transfer', 'SUPPLIER-REFUND-OVER-001',
+    'e0000000-0000-4000-8000-000000000109'
+  ) $,
   'P0001',
-  'An expense with any recorded payment cannot be reversed until the supplier-refund workflow is available',
-  'Paid expenses are blocked until supplier refunds can be accounted for'
+  'Refund exceeds the amount actually paid to the supplier and not yet refunded',
+  'Supplier refunds cannot exceed the amount actually paid and not already refunded'
+);
+
+SELECT extensions.throws_ok(
+  $ UPDATE public.operating_expense_refunds
+     SET reference_number = 'ALTERED-REFUND'
+     WHERE reference_number = 'SUPPLIER-REFUND-001' $,
+  'P0001',
+  'Posted supplier refunds are immutable; record a separately approved correction',
+  'Posted supplier refund evidence cannot be edited'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000002', true);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    1.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-UNAUTH-001',
+    'e0000000-0000-4000-8000-000000000110'
+  ) $,
+  'P0001',
+  'Only an admin or accountant can record supplier refunds',
+  'Cashier cannot record supplier refunds'
 );
 
 SELECT extensions.finish();
