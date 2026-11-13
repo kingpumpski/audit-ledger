@@ -59,82 +59,60 @@ export function useReceipts() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // An invoice-linked receipt represents money received, so create the payment
-      // through the same atomic payment-and-ledger workflow when no payment exists yet.
-      let paymentId = receiptData.payment_id || null;
-      if (receiptData.invoice_id && !paymentId) {
-        const { data: createdPaymentId, error: paymentError } = await supabase.rpc('record_invoice_payment', {
-          p_invoice_id: receiptData.invoice_id,
-          p_customer_id: receiptData.customer_id,
-          p_amount: receiptData.amount,
-          p_payment_method: receiptData.payment_method,
-          p_reference_number: null,
-          p_notes: receiptData.notes || null,
-        });
-        if (paymentError) throw paymentError;
-        if (!createdPaymentId) throw new Error('Payment was not created');
-        paymentId = createdPaymentId;
-      }
-
-      // Get user profile for issuer name
+      // Prepare the integrity values before the RPC. The database creates any
+      // invoice payment and the receipt together, so a failed receipt cannot
+      // leave behind an unreceipted payment.
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
         .eq('id', user.id)
         .single();
 
-      // Get next receipt number
-      const { data: receiptNumber, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'receipt' });
-
-      if (seqError) throw seqError;
-
-      // Generate checksum for immutability verification
+      const issuedAt = new Date().toISOString();
       const checksumData = JSON.stringify({
-        receiptNumber,
         amount: receiptData.amount,
         customerId: receiptData.customer_id,
         paymentMethod: receiptData.payment_method,
         issuedBy: user.id,
-        timestamp: new Date().toISOString(),
+        timestamp: issuedAt,
       });
       const checksum = await generateChecksum(checksumData);
 
-      // Generate signature hash if signature provided
       let signatureHash: string | null = null;
       if (receiptData.signature_data) {
         signatureHash = await generateChecksum(receiptData.signature_data + user.id);
       }
 
-      // Create receipt
-      const { data: receipt, error: receiptError } = await supabase
+      const { data: receiptId, error: createError } = await supabase.rpc('create_receipt_with_payment', {
+        p_customer_id: receiptData.customer_id,
+        p_invoice_id: receiptData.invoice_id || null,
+        p_payment_id: receiptData.payment_id || null,
+        p_amount: receiptData.amount,
+        p_payment_method: receiptData.payment_method,
+        p_notes: receiptData.notes || null,
+        p_signature_data: receiptData.signature_data || null,
+        p_signature_hash: signatureHash,
+        p_checksum: checksum,
+        p_issuer_name: profile?.full_name || user.email || 'Unknown',
+      });
+
+      if (createError) throw createError;
+      if (!receiptId) throw new Error('Receipt was not created');
+
+      const { data: receipt, error: fetchError } = await supabase
         .from('receipts')
-        .insert({
-          receipt_number: receiptNumber,
-          customer_id: receiptData.customer_id,
-          invoice_id: receiptData.invoice_id || null,
-          payment_id: paymentId,
-          amount: receiptData.amount,
-          payment_method: receiptData.payment_method,
-          notes: receiptData.notes,
-          signature_data: receiptData.signature_data,
-          signature_hash: signatureHash,
-          checksum,
-          issued_by: user.id,
-          issuer_name: profile?.full_name || user.email || 'Unknown',
-          status: 'issued',
-          is_locked: true,
-        })
-        .select()
+        .select('*')
+        .eq('id', receiptId)
         .single();
 
-      if (receiptError) throw receiptError;
-
+      if (fetchError) throw fetchError;
       return receipt;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       toast({ title: 'Receipt issued successfully' });
     },
     onError: (error) => {
