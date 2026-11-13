@@ -1337,6 +1337,18 @@ export type Database = {
         Returns: number
       }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
+      issue_invoice: { Args: { p_invoice_id: string }; Returns: string }
+      record_invoice_payment: {
+        Args: {
+          p_invoice_id: string
+          p_customer_id: string
+          p_amount: number
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_reference_number?: string | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
