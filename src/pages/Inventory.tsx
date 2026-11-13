@@ -25,6 +25,15 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { type Product } from '@/hooks/useProducts';
 
+type PurchaseForReversal = {
+  id: string;
+  reference_number: string | null;
+  amount_paid: number | null;
+  total_cost: number | null;
+  supplier_name: string | null;
+  product?: { name: string; sku: string } | null;
+};
+
 export default function Inventory() {
   const { products } = useProducts();
   const { roles } = useAuth();
@@ -44,6 +53,15 @@ export default function Inventory() {
   });
   const [adjustIdempotencyKey, setAdjustIdempotencyKey] = useState(() => crypto.randomUUID());
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isPurchaseReversalOpen, setIsPurchaseReversalOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseForReversal | null>(null);
+  const [purchaseReversalKey, setPurchaseReversalKey] = useState(() => crypto.randomUUID());
+  const [purchaseReversalForm, setPurchaseReversalForm] = useState({
+    reversedOn: format(new Date(), 'yyyy-MM-dd'),
+    refundPaymentMethod: 'bank_transfer' as 'cash' | 'bank_transfer' | 'mobile_payment',
+    reason: '',
+    referenceNumber: '',
+  });
   const [adjustForm, setAdjustForm] = useState({
     type: 'purchase' as 'purchase' | 'damage',
     quantity: 0,
@@ -125,6 +143,38 @@ export default function Inventory() {
       setCountIdempotencyKey(crypto.randomUUID());
     },
     onError: error => toast({ title: 'Stock count was not posted', description: error.message, variant: 'destructive' }),
+  });
+
+  const reverseStockPurchase = useMutation({
+    mutationFn: async () => {
+      if (!selectedPurchase) throw new Error('Select an original stock purchase.');
+      if (!canRecordInventoryDamage) throw new Error('Only an admin or accountant can reverse stock purchases.');
+      if (!purchaseReversalForm.reason.trim() || !purchaseReversalForm.referenceNumber.trim()) {
+        throw new Error('A reversal reason and supplier credit/refund reference are required.');
+      }
+      const paidAmount = Number(selectedPurchase.amount_paid || 0);
+      const { error } = await supabase.rpc('reverse_stock_purchase', {
+        p_purchase_transaction_id: selectedPurchase.id,
+        p_reversed_on: purchaseReversalForm.reversedOn,
+        p_refund_payment_method: paidAmount > 0 ? purchaseReversalForm.refundPaymentMethod : null,
+        p_reason: purchaseReversalForm.reason.trim(),
+        p_reference_number: purchaseReversalForm.referenceNumber.trim(),
+        p_idempotency_key: purchaseReversalKey,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: 'Stock purchase reversed', description: 'The supplier return, stock valuation and cash/payable reversal were recorded in the audit trail.' });
+      setIsPurchaseReversalOpen(false);
+      setSelectedPurchase(null);
+      setPurchaseReversalForm({ reversedOn: format(new Date(), 'yyyy-MM-dd'), refundPaymentMethod: 'bank_transfer', reason: '', referenceNumber: '' });
+      setPurchaseReversalKey(crypto.randomUUID());
+    },
+    onError: error => toast({ title: 'Purchase reversal was not posted', description: error.message, variant: 'destructive' }),
   });
 
   const recordAdjustment = useMutation({
@@ -335,6 +385,21 @@ export default function Inventory() {
                   <p className="text-xs text-muted-foreground capitalize">{tx.type}: {tx.quantity} units</p>
                   <p className="text-xs text-muted-foreground">{format(new Date(tx.created_at), 'MMM d, h:mm a')}</p>
                 </div>
+                {canRecordInventoryDamage && tx.type === 'purchase' && tx.reference_type === 'stock_purchase' && (
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setSelectedPurchase(tx);
+                    setPurchaseReversalForm({
+                      reversedOn: format(new Date(), 'yyyy-MM-dd'),
+                      refundPaymentMethod: 'bank_transfer',
+                      reason: '',
+                      referenceNumber: '',
+                    });
+                    setPurchaseReversalKey(crypto.randomUUID());
+                    setIsPurchaseReversalOpen(true);
+                  }}>
+                    Reverse
+                  </Button>
+                )}
               </div>
             ))}
             {transactions.length === 0 && (
@@ -343,6 +408,66 @@ export default function Inventory() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isPurchaseReversalOpen} onOpenChange={setIsPurchaseReversalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse Stock Purchase</DialogTitle>
+            <DialogDescription>
+              {selectedPurchase?.product?.name || 'Selected product'} — original reference {selectedPurchase?.reference_number || 'not supplied'}.
+              This action is allowed only when no later inventory movement has occurred.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+              <p>Original purchase value: <strong>{currencySymbol}{Number(selectedPurchase?.total_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></p>
+              <p>Previously paid: <strong>{currencySymbol}{Number(selectedPurchase?.amount_paid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></p>
+              <p className="text-muted-foreground">The paid amount must already have been refunded by the supplier. Any unpaid balance will be reversed against Accounts Payable.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Reversal date *</Label>
+              <Input type="date" max={format(new Date(), 'yyyy-MM-dd')} value={purchaseReversalForm.reversedOn}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, reversedOn: e.target.value })} />
+            </div>
+            {Number(selectedPurchase?.amount_paid || 0) > 0 && (
+              <div className="space-y-2">
+                <Label>Actual supplier refund received through *</Label>
+                <Select value={purchaseReversalForm.refundPaymentMethod}
+                  onValueChange={(value: 'cash' | 'bank_transfer' | 'mobile_payment') => setPurchaseReversalForm({ ...purchaseReversalForm, refundPaymentMethod: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                    <SelectItem value="mobile_payment">Mobile payment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Supplier credit note / refund reference *</Label>
+              <Input value={purchaseReversalForm.referenceNumber}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, referenceNumber: e.target.value })}
+                placeholder="Supplier credit note or refund receipt number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason for reversal *</Label>
+              <Textarea rows={3} value={purchaseReversalForm.reason}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, reason: e.target.value })}
+                placeholder="Explain the supplier return and approval..." />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsPurchaseReversalOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reverseStockPurchase.mutate()} disabled={
+                reverseStockPurchase.isPending || !purchaseReversalForm.reversedOn ||
+                !purchaseReversalForm.reason.trim() || !purchaseReversalForm.referenceNumber.trim()
+              }>
+                {reverseStockPurchase.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm Purchase Reversal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isCountOpen} onOpenChange={setIsCountOpen}>
         <DialogContent>
