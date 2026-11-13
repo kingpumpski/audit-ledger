@@ -373,7 +373,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
           <p className="font-medium text-warning">Final net profit is not yet available</p>
           <p className="mt-1 text-muted-foreground">
-            The current expense workflow captures petty-cash expenses, not every supplier and operating expense or unpaid expense liability. Unrecorded expenses are therefore missing from the ledger. This report shows recorded expense totals for transparency but deliberately withholds final net profit until a complete expense-entry and payment/reconciliation workflow is implemented. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
+            The Operating Expenses register now records supplier and business costs when incurred, recognizes unpaid balances in Accounts Payable, and posts each cash/bank settlement separately. Petty-cash expenses remain supported. However, the system cannot independently prove that every real-world expense has been entered, and controlled reversal plus reconciliation workflows are still pending. This report therefore shows all recorded expense postings but continues to withhold final net profit until expense completeness can be attested and reconciled. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
           </p>
         </div>
       </CardContent>
