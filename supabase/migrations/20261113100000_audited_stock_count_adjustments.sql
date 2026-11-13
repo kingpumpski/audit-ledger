@@ -310,3 +310,83 @@ $record_stock_count$;
 
 REVOKE ALL ON FUNCTION public.record_stock_count_adjustment(uuid, integer, date, text, text, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_stock_count_adjustment(uuid, integer, date, text, text, uuid) TO authenticated;
+
+
+-- Calculate COGS only for physical inventory lines. Service/manual lines do not
+-- consume stock and must not suppress verified COGS on physical lines.
+CREATE OR REPLACE FUNCTION public.post_invoice_cogs_after_receivable_line()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $invoice_cogs$
+DECLARE
+  v_invoice_id uuid;
+  v_cogs_account uuid;
+  v_inventory_account uuid;
+  v_cogs_total numeric(14,2);
+BEGIN
+  IF NEW.line_number <> 1 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT source_id INTO v_invoice_id
+  FROM public.journal_entries
+  WHERE id = NEW.journal_entry_id AND source_type = 'invoice';
+
+  IF v_invoice_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  -- Make the posting idempotent if an invoice journal is repaired or replayed.
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_lines jl
+    JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE jl.journal_entry_id = NEW.journal_entry_id
+      AND coa.code = '5000'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.invoice_items ii
+    JOIN public.products p ON p.id = ii.product_id
+    WHERE ii.invoice_id = v_invoice_id
+      AND COALESCE(p.is_service, false) = false
+      AND ii.unit_cost IS NULL
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ROUND(COALESCE(SUM(ii.quantity * ii.unit_cost), 0), 2)
+    INTO v_cogs_total
+  FROM public.invoice_items ii
+  JOIN public.products p ON p.id = ii.product_id
+  WHERE ii.invoice_id = v_invoice_id
+    AND COALESCE(p.is_service, false) = false;
+
+  IF v_cogs_total <= 0 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT id INTO v_cogs_account FROM public.chart_of_accounts
+  WHERE code = '5000' AND account_type = 'expense' AND is_active LIMIT 1;
+  SELECT id INTO v_inventory_account FROM public.chart_of_accounts
+  WHERE code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
+
+  IF v_cogs_account IS NULL OR v_inventory_account IS NULL THEN
+    RAISE EXCEPTION 'Cost of Goods Sold or Inventory account is not configured';
+  END IF;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  )
+  VALUES
+    (NEW.journal_entry_id, 9998, v_cogs_account, 'Cost of goods sold - invoice ' || v_invoice_id, v_cogs_total, 0),
+    (NEW.journal_entry_id, 9999, v_inventory_account, 'Inventory relieved - invoice ' || v_invoice_id, 0, v_cogs_total);
+
+  RETURN NEW;
+END;
+$invoice_cogs$;
