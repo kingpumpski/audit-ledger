@@ -72,27 +72,28 @@ SECURITY DEFINER
 SET search_path = ''
 AS $expense_immutable$
 BEGIN
-  IF TG_TABLE_NAME = 'operating_expenses'
-     AND COALESCE(current_setting('app.expense_settlement_rpc', true), '') = 'on'
-     AND NEW.id = OLD.id
-     AND NEW.amount = OLD.amount
-     AND NEW.description = OLD.description
-     AND NEW.vendor_name = OLD.vendor_name
-     AND NEW.reference_number = OLD.reference_number
-     AND NEW.expense_account_id = OLD.expense_account_id
-     AND NEW.incurred_on = OLD.incurred_on
-     AND NEW.due_on IS NOT DISTINCT FROM OLD.due_on
-     AND NEW.initial_amount_paid = OLD.initial_amount_paid
-     AND NEW.initial_payment_method IS NOT DISTINCT FROM OLD.initial_payment_method
-     AND NEW.initial_payment_reference IS NOT DISTINCT FROM OLD.initial_payment_reference
-     AND NEW.notes IS NOT DISTINCT FROM OLD.notes
-     AND NEW.idempotency_key = OLD.idempotency_key
-     AND NEW.recorded_by IS NOT DISTINCT FROM OLD.recorded_by
-     AND NEW.created_at = OLD.created_at
-     AND NEW.amount_paid >= OLD.amount_paid
-     AND NEW.amount_paid <= NEW.amount
-     AND NEW.updated_at > OLD.updated_at THEN
-    RETURN NEW;
+  IF TG_TABLE_NAME = 'operating_expenses' THEN
+    IF COALESCE(current_setting('app.expense_settlement_rpc', true), '') = 'on'
+       AND NEW.id = OLD.id
+       AND NEW.amount = OLD.amount
+       AND NEW.description = OLD.description
+       AND NEW.vendor_name = OLD.vendor_name
+       AND NEW.reference_number = OLD.reference_number
+       AND NEW.expense_account_id = OLD.expense_account_id
+       AND NEW.incurred_on = OLD.incurred_on
+       AND NEW.due_on IS NOT DISTINCT FROM OLD.due_on
+       AND NEW.initial_amount_paid = OLD.initial_amount_paid
+       AND NEW.initial_payment_method IS NOT DISTINCT FROM OLD.initial_payment_method
+       AND NEW.initial_payment_reference IS NOT DISTINCT FROM OLD.initial_payment_reference
+       AND NEW.notes IS NOT DISTINCT FROM OLD.notes
+       AND NEW.idempotency_key = OLD.idempotency_key
+       AND NEW.recorded_by IS NOT DISTINCT FROM OLD.recorded_by
+       AND NEW.created_at = OLD.created_at
+       AND NEW.amount_paid >= OLD.amount_paid
+       AND NEW.amount_paid <= NEW.amount
+       AND NEW.updated_at > OLD.updated_at THEN
+      RETURN NEW;
+    END IF;
   END IF;
   RAISE EXCEPTION 'Posted operating expenses and payments are immutable; use a controlled reversal workflow';
 END;
