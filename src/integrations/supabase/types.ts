@@ -1478,6 +1478,16 @@ export type Database = {
         }
         Returns: string
       }
+      record_inventory_damage: {
+        Args: {
+          p_product_id: string
+          p_quantity: number
+          p_reference_number: string
+          p_idempotency_key: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       set_historical_invoice_item_cost: {
         Args: {
           p_invoice_item_id: string
