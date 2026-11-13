@@ -214,58 +214,67 @@ GRANT EXECUTE ON FUNCTION public.create_receipt_with_payment(
   uuid, uuid, uuid, numeric, public.payment_method, uuid, text, text, text, text, text, text
 ) TO authenticated;
 
-CREATE OR REPLACE FUNCTION public.post_unapplied_receipt_journal()
-RETURNS trigger
+CREATE OR REPLACE FUNCTION public.post_receipt_journal_by_id(p_receipt_id uuid)
+RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_receipt public.receipts%ROWTYPE;
   v_cash_account uuid;
-  v_deposit_account uuid;
+  v_credit_account uuid;
   v_journal_id uuid;
   v_entry_number text;
   v_currency text;
   v_customer_name text;
+  v_credit_description text;
 BEGIN
-  -- A receipt backed by an invoice payment is already posted by the payment
-  -- trigger. Do not create a second journal entry for the same money.
-  IF NEW.status <> 'issued' OR NEW.payment_id IS NOT NULL OR NEW.invoice_id IS NOT NULL THEN
-    RETURN NEW;
-  END IF;
+  SELECT * INTO v_receipt
+  FROM public.receipts
+  WHERE id = p_receipt_id;
 
-  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
-    RAISE EXCEPTION 'You are not authorized to post standalone receipts';
+  IF NOT FOUND OR v_receipt.status <> 'issued' OR v_receipt.payment_id IS NOT NULL THEN
+    RETURN;
   END IF;
 
   SELECT id INTO v_cash_account
   FROM public.chart_of_accounts
-  WHERE code = CASE WHEN NEW.payment_method = 'cash' THEN '1000' ELSE '1010' END
+  WHERE code = CASE WHEN v_receipt.payment_method = 'cash' THEN '1000' ELSE '1010' END
     AND account_type = 'asset'
     AND is_active = true
   LIMIT 1;
 
-  SELECT id INTO v_deposit_account
-  FROM public.chart_of_accounts
-  WHERE code = '2200'
-    AND account_type = 'liability'
-    AND is_active = true
-  LIMIT 1;
+  IF v_receipt.invoice_id IS NOT NULL THEN
+    -- Legacy invoice receipts without a linked payment settle Accounts Receivable.
+    SELECT id INTO v_credit_account
+    FROM public.chart_of_accounts
+    WHERE code = '1100' AND account_type = 'asset' AND is_active = true
+    LIMIT 1;
+    v_credit_description := 'Accounts receivable settled - ' || v_receipt.receipt_number;
+  ELSE
+    -- An unapplied customer receipt is a liability until allocated to an invoice.
+    SELECT id INTO v_credit_account
+    FROM public.chart_of_accounts
+    WHERE code = '2200' AND account_type = 'liability' AND is_active = true
+    LIMIT 1;
+    v_credit_description := 'Customer deposits / unapplied receipts - ' || v_receipt.receipt_number;
+  END IF;
 
-  IF v_cash_account IS NULL OR v_deposit_account IS NULL THEN
-    RAISE EXCEPTION 'Cash/bank or customer-deposit accounts are not configured';
+  IF v_cash_account IS NULL OR v_credit_account IS NULL THEN
+    RAISE EXCEPTION 'Required cash/bank, receivable or customer-deposit accounts are not configured';
   END IF;
 
   IF EXISTS (
     SELECT 1 FROM public.journal_entries
-    WHERE source_type = 'receipt' AND source_id = NEW.id
+    WHERE source_type = 'receipt' AND source_id = v_receipt.id
   ) THEN
-    RETURN NEW;
+    RETURN;
   END IF;
 
   SELECT name INTO v_customer_name
   FROM public.customers
-  WHERE id = NEW.customer_id;
+  WHERE id = v_receipt.customer_id;
 
   v_entry_number := public.get_next_sequence('journal');
   SELECT COALESCE(currency_code, 'USD') INTO v_currency
@@ -279,12 +288,16 @@ BEGIN
   )
   VALUES (
     v_entry_number,
-    COALESCE(NEW.issue_date::date, CURRENT_DATE),
-    'Unapplied receipt ' || NEW.receipt_number || ' received from ' || COALESCE(v_customer_name, 'customer'),
+    COALESCE(v_receipt.issue_date::date, CURRENT_DATE),
+    CASE
+      WHEN v_receipt.invoice_id IS NOT NULL
+        THEN 'Direct receipt ' || v_receipt.receipt_number || ' received from ' || COALESCE(v_customer_name, 'customer')
+      ELSE 'Unapplied receipt ' || v_receipt.receipt_number || ' received from ' || COALESCE(v_customer_name, 'customer')
+    END,
     'receipt',
-    NEW.id,
+    v_receipt.id,
     v_currency,
-    NEW.issued_by
+    v_receipt.issued_by
   )
   RETURNING id INTO v_journal_id;
 
@@ -292,9 +305,27 @@ BEGIN
     journal_entry_id, line_number, account_id, description, debit, credit
   )
   VALUES
-    (v_journal_id, 1, v_cash_account, 'Cash/bank received - ' || NEW.receipt_number, ROUND(NEW.amount, 2), 0),
-    (v_journal_id, 2, v_deposit_account, 'Customer deposits / unapplied receipts - ' || NEW.receipt_number, 0, ROUND(NEW.amount, 2));
+    (v_journal_id, 1, v_cash_account, 'Cash/bank received - ' || v_receipt.receipt_number, ROUND(v_receipt.amount, 2), 0),
+    (v_journal_id, 2, v_credit_account, v_credit_description, 0, ROUND(v_receipt.amount, 2));
+END;
+$$;
 
+CREATE OR REPLACE FUNCTION public.post_unapplied_receipt_journal()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.status <> 'issued' OR NEW.payment_id IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
+    RAISE EXCEPTION 'You are not authorized to post standalone receipts';
+  END IF;
+
+  PERFORM public.post_receipt_journal_by_id(NEW.id);
   RETURN NEW;
 END;
 $$;
@@ -303,6 +334,25 @@ CREATE TRIGGER post_unapplied_receipt_journal_after_insert
 AFTER INSERT ON public.receipts
 FOR EACH ROW
 EXECUTE FUNCTION public.post_unapplied_receipt_journal();
+
+-- Backfill already-issued receipts that were not linked to a payment. This
+-- includes standalone/unapplied receipts and legacy invoice receipts without
+-- payment rows, so the ledger is complete from the migration onward.
+DO $$
+DECLARE
+  v_receipt record;
+BEGIN
+  FOR v_receipt IN
+    SELECT id
+    FROM public.receipts
+    WHERE status = 'issued'
+      AND payment_id IS NULL
+    ORDER BY issue_date, created_at, id
+  LOOP
+    PERFORM public.post_receipt_journal_by_id(v_receipt.id);
+  END LOOP;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.reverse_unapplied_receipt_journal()
 RETURNS trigger
@@ -317,7 +367,7 @@ DECLARE
   v_line record;
 BEGIN
   IF OLD.status <> 'issued' OR NEW.status <> 'void'
-    OR OLD.payment_id IS NOT NULL OR OLD.invoice_id IS NOT NULL THEN
+    OR OLD.payment_id IS NOT NULL THEN
     RETURN NEW;
   END IF;
 
@@ -381,6 +431,7 @@ AFTER UPDATE OF status ON public.receipts
 FOR EACH ROW
 EXECUTE FUNCTION public.reverse_unapplied_receipt_journal();
 
+REVOKE ALL ON FUNCTION public.post_receipt_journal_by_id(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.post_unapplied_receipt_journal() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.reverse_unapplied_receipt_journal() FROM PUBLIC, anon;
 
