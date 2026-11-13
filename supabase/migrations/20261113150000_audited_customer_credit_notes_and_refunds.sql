@@ -18,6 +18,26 @@ BEFORE UPDATE OF stock_quantity, cost_price, cost_price_verified ON public.produ
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_product_inventory_value_changes();
 
+-- A physical return changes stock and weighted-average cost only inside
+-- the locked, audited credit-note RPC.
+CREATE OR REPLACE FUNCTION public.guard_product_inventory_value_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $credit_note_product_inventory_guard$
+BEGIN
+  IF (NEW.stock_quantity IS DISTINCT FROM OLD.stock_quantity
+      OR NEW.cost_price IS DISTINCT FROM OLD.cost_price
+      OR NEW.cost_price_verified IS DISTINCT FROM OLD.cost_price_verified)
+     AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on'
+     AND COALESCE(current_setting('app.credit_note_rpc', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase, invoice posting or credit-note return workflows';
+  END IF;
+  RETURN NEW;
+END;
+$credit_note_product_inventory_guard$;
+
 CREATE OR REPLACE FUNCTION public.invalidate_product_cost_verification()
 RETURNS trigger
 LANGUAGE plpgsql
