@@ -59,7 +59,8 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    IF v_existing_payment.invoice_id IS DISTINCT FROM p_invoice_id
+    IF v_existing_payment.processed_by IS DISTINCT FROM auth.uid()
+      OR v_existing_payment.invoice_id IS DISTINCT FROM p_invoice_id
       OR v_existing_payment.customer_id IS DISTINCT FROM p_customer_id
       OR ROUND(v_existing_payment.amount, 2) IS DISTINCT FROM ROUND(p_amount, 2)
       OR v_existing_payment.payment_method IS DISTINCT FROM p_payment_method
@@ -164,7 +165,8 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    IF v_existing_receipt.customer_id IS DISTINCT FROM p_customer_id
+    IF v_existing_receipt.issued_by IS DISTINCT FROM v_user_id
+      OR v_existing_receipt.customer_id IS DISTINCT FROM p_customer_id
       OR ROUND(v_existing_receipt.amount, 2) IS DISTINCT FROM ROUND(p_amount, 2)
       OR v_existing_receipt.payment_method IS DISTINCT FROM p_payment_method
       OR (p_payment_id IS NOT NULL AND v_existing_receipt.payment_id IS DISTINCT FROM p_payment_id)
