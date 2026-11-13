@@ -1851,3 +1851,41 @@ FOR EACH ROW
 EXECUTE FUNCTION public.guard_product_service_type_changes();
 
 REVOKE ALL ON FUNCTION public.guard_product_service_type_changes() FROM PUBLIC, anon, authenticated;
+
+
+-- New catalogue rows must not introduce unrecorded opening stock or guessed
+-- purchase costs. All authenticated stock entry must go through the evidenced
+-- stock-purchase RPC so inventory and the general ledger move together.
+CREATE OR REPLACE FUNCTION public.guard_product_opening_inventory()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $product_opening_inventory_guard$
+BEGIN
+  IF COALESCE(auth.role(), '') IN ('authenticated', 'anon') THEN
+    IF NEW.is_service THEN
+      NEW.stock_quantity := NULL;
+      NEW.cost_price := NULL;
+      NEW.cost_price_verified := false;
+    ELSE
+      IF COALESCE(NEW.stock_quantity, 0) <> 0
+         OR COALESCE(NEW.cost_price, 0) <> 0
+         OR COALESCE(NEW.cost_price_verified, false) THEN
+        RAISE EXCEPTION 'New products must start with zero stock and no purchase cost; record an evidenced stock purchase in Inventory';
+      END IF;
+      NEW.stock_quantity := 0;
+      NEW.cost_price := NULL;
+      NEW.cost_price_verified := false;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$product_opening_inventory_guard$;
+
+CREATE TRIGGER guard_product_opening_inventory
+BEFORE INSERT ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_product_opening_inventory();
+
+REVOKE ALL ON FUNCTION public.guard_product_opening_inventory() FROM PUBLIC, anon, authenticated;
