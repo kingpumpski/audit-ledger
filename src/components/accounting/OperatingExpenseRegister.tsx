@@ -22,13 +22,12 @@ type ExpenseRow = {
   expense_account: { code: string; name: string } | null;
 };
 
+type ExpenseQuery = {
+  eq: (column: string, value: unknown) => ExpenseQuery;
+  order: (column: string, options?: { ascending?: boolean }) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
+};
 type ExpenseApi = {
-  from: (table: 'operating_expenses' | 'chart_of_accounts') => {
-    select: (columns: string) => {
-      eq?: (column: string, value: unknown) => unknown;
-      order?: (column: string, options?: { ascending?: boolean }) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  from: (table: string) => { select: (columns: string) => ExpenseQuery };
   rpc: (name: 'record_operating_expense' | 'pay_operating_expense', args: Record<string, unknown>) =>
     PromiseLike<{ data: string | null; error: { message: string } | null }>;
 };
@@ -53,7 +52,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const accountsQuery = useQuery({
     queryKey: ['operating-expense-accounts'],
     queryFn: async (): Promise<ExpenseAccount[]> => {
-      const { data, error } = await supabase.from('chart_of_accounts')
+      const { data, error } = await expenseApi.from('chart_of_accounts')
         .select('id, code, name')
         .eq('account_type', 'expense')
         .eq('is_active', true)
@@ -66,7 +65,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const expensesQuery = useQuery({
     queryKey: ['operating-expenses'],
     queryFn: async (): Promise<ExpenseRow[]> => {
-      const { data, error } = await supabase.from('operating_expenses')
+      const { data, error } = await expenseApi.from('operating_expenses')
         .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name)')
         .order('incurred_on', { ascending: false });
       if (error) throw error;
@@ -235,7 +234,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
             <div className="space-y-2"><Label>Total expense amount</Label><Input type="number" min="0.01" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} /></div>
             <div className="space-y-2"><Label>Amount already paid</Label><Input type="number" min="0" step="0.01" max={form.amount || undefined} value={form.amountPaid} onChange={e => setForm({ ...form, amountPaid: e.target.value })} /></div>
             {Number(form.amountPaid) > 0 && <>
-              <div className="space-y-2"><Label>Payment method</Label><Select value={form.paymentMethod} onValueChange={value => setForm({ ...form, paymentMethod: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank / Mobile Money</SelectItem><SelectItem value="credit_card">Credit card</SelectItem><SelectItem value="debit_card">Debit card</SelectItem><SelectItem value="check">Cheque</SelectItem><SelectItem value="mobile_payment">Mobile payment</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Payment method</Label><Select value={form.paymentMethod} onValueChange={value => setForm({ ...form, paymentMethod: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank transfer</SelectItem><SelectItem value="mobile_payment">Mobile Money</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label>Payment reference</Label><Input value={form.paymentReference} onChange={e => setForm({ ...form, paymentReference: e.target.value })} /></div>
             </>}
             <div className="space-y-2 sm:col-span-2"><Label>Notes (optional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
@@ -250,7 +249,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
           <div className="space-y-4 py-3">
             <div className="space-y-2"><Label>Payment amount</Label><Input type="number" min="0.01" step="0.01" value={payment.amount} onChange={e => setPayment({ ...payment, amount: e.target.value })} /></div>
             <div className="space-y-2"><Label>Payment date</Label><Input type="date" value={payment.paidOn} onChange={e => setPayment({ ...payment, paidOn: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Payment method</Label><Select value={payment.method} onValueChange={value => setPayment({ ...payment, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank / Mobile Money</SelectItem><SelectItem value="credit_card">Credit card</SelectItem><SelectItem value="debit_card">Debit card</SelectItem><SelectItem value="check">Cheque</SelectItem><SelectItem value="mobile_payment">Mobile payment</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label>Payment method</Label><Select value={payment.method} onValueChange={value => setPayment({ ...payment, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank transfer</SelectItem><SelectItem value="mobile_payment">Mobile Money</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>Payment reference</Label><Input value={payment.reference} onChange={e => setPayment({ ...payment, reference: e.target.value })} /></div>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSettlement(null)}>Cancel</Button><Button disabled={settleExpense.isPending} onClick={() => settleExpense.mutate()}>{settleExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Record Payment</Button></div>
