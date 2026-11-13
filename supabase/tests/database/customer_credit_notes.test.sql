@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(39);
+SELECT extensions.plan(41);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -301,6 +301,24 @@ SELECT extensions.is(
      AND type='return' AND quantity=1),
   1,
   'Stock return creates one immutable inventory return movement'
+);
+
+SELECT extensions.is(
+  (SELECT previous_quantity FROM public.inventory_transactions
+   WHERE reference_type='credit_note'
+     AND reference_id=(SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-STOCK-001')
+     AND type='return'),
+  3,
+  'Inventory return audit preserves the stock quantity before the return'
+);
+
+SELECT extensions.is(
+  (SELECT new_quantity FROM public.inventory_transactions
+   WHERE reference_type='credit_note'
+     AND reference_id=(SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-STOCK-001')
+     AND type='return'),
+  4,
+  'Inventory return audit preserves the stock quantity after the return'
 );
 
 SELECT extensions.is(
