@@ -269,12 +269,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku='TEST-CN-STOCK-001'),
     2,20,'Second credit note supplier','CN-STOCK-PURCHASE-002',40,
     'cash','Second purchase at a different verified unit cost',NULL,
     'c1000000-0000-4000-8000-000000000703'
-  ) $,
+  ) $$,
   'A later purchase updates weighted-average inventory cost before the customer return'
 );
 
