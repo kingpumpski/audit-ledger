@@ -100,6 +100,7 @@ export function useCustomers() {
     error: customersQuery.error,
     createCustomer: createCustomerMutation.mutateAsync,
     updateCustomer: updateCustomerMutation.mutate,
+    updateCustomerAsync: updateCustomerMutation.mutateAsync,
     deleteCustomer: deleteCustomerMutation.mutate,
     isCreating: createCustomerMutation.isPending,
     isUpdating: updateCustomerMutation.isPending,
