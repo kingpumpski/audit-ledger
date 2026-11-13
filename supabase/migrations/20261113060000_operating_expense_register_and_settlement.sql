@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS public.operating_expenses (
   due_on date,
   amount numeric(14,2) NOT NULL CHECK (amount > 0),
   amount_paid numeric(14,2) NOT NULL DEFAULT 0 CHECK (amount_paid >= 0 AND amount_paid <= amount),
+  initial_amount_paid numeric(14,2) NOT NULL DEFAULT 0 CHECK (initial_amount_paid >= 0 AND initial_amount_paid <= amount),
+  initial_payment_method public.payment_method,
+  initial_payment_reference text,
   notes text,
   idempotency_key uuid NOT NULL UNIQUE,
   recorded_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -68,6 +71,22 @@ SECURITY DEFINER
 SET search_path = ''
 AS $expense_immutable$
 BEGIN
+  IF TG_TABLE_NAME = 'operating_expenses'
+     AND COALESCE(current_setting('app.expense_settlement_rpc', true), '') = 'on'
+     AND NEW.id = OLD.id
+     AND NEW.amount = OLD.amount
+     AND NEW.description = OLD.description
+     AND NEW.vendor_name = OLD.vendor_name
+     AND NEW.reference_number = OLD.reference_number
+     AND NEW.expense_account_id = OLD.expense_account_id
+     AND NEW.incurred_on = OLD.incurred_on
+     AND NEW.due_on IS NOT DISTINCT FROM OLD.due_on
+     AND NEW.initial_amount_paid = OLD.initial_amount_paid
+     AND NEW.amount_paid >= OLD.amount_paid
+     AND NEW.amount_paid <= NEW.amount
+     AND NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'Posted operating expenses and payments are immutable; use a controlled reversal workflow';
 END;
 $expense_immutable$;
@@ -101,7 +120,7 @@ DECLARE
   v_journal_id uuid;
   v_entry_number text;
   v_currency text;
-  v_payment_id uuid;
+  v_payment_id uuid := gen_random_uuid();
 BEGIN
   IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
     RAISE EXCEPTION 'Only an admin or accountant can settle operating expenses';
@@ -156,7 +175,7 @@ BEGIN
   ) VALUES (
     v_entry_number, p_paid_on,
     'Settlement - ' || v_expense.expense_number || ' - ' || v_expense.vendor_name,
-    'operating_expense_payment', gen_random_uuid(), v_currency, auth.uid()
+    'operating_expense_payment', v_payment_id, v_currency, auth.uid()
   ) RETURNING id INTO v_journal_id;
 
   INSERT INTO public.journal_lines (
@@ -173,13 +192,10 @@ BEGIN
     p_idempotency_key, v_journal_id, auth.uid()
   ) RETURNING id INTO v_payment_id;
 
+  PERFORM set_config('app.expense_settlement_rpc', 'on', true);
   UPDATE public.operating_expenses
   SET amount_paid = amount_paid + ROUND(p_amount, 2), updated_at = now()
   WHERE id = p_expense_id;
-
-  UPDATE public.journal_entries
-  SET source_id = v_payment_id
-  WHERE id = v_journal_id;
 
   RETURN v_payment_id;
 END;
@@ -239,7 +255,11 @@ BEGIN
        OR v_existing.expense_account_id <> p_expense_account_id
        OR v_existing.incurred_on <> p_incurred_on
        OR v_existing.due_on IS DISTINCT FROM p_due_on
-       OR v_existing.amount <> ROUND(p_amount, 2) THEN
+       OR v_existing.amount <> ROUND(p_amount, 2)
+       OR v_existing.initial_amount_paid <> ROUND(p_amount_paid, 2)
+       OR v_existing.initial_payment_method IS DISTINCT FROM CASE WHEN p_amount_paid > 0 THEN p_payment_method ELSE NULL END
+       OR v_existing.initial_payment_reference IS DISTINCT FROM CASE WHEN p_amount_paid > 0 THEN BTRIM(p_payment_reference) ELSE NULL END
+       OR v_existing.notes IS DISTINCT FROM NULLIF(BTRIM(p_notes), '') THEN
       RAISE EXCEPTION 'This expense idempotency key was already used with different details';
     END IF;
     RETURN v_existing.id;
@@ -256,16 +276,15 @@ BEGIN
   v_expense_number := 'EXP-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10));
   INSERT INTO public.operating_expenses (
     expense_number, description, vendor_name, reference_number, expense_account_id,
-    incurred_on, due_on, amount, amount_paid, notes, idempotency_key, recorded_by
+    incurred_on, due_on, amount, amount_paid, initial_amount_paid,
+    initial_payment_method, initial_payment_reference, notes, idempotency_key, recorded_by
   ) VALUES (
-    BTRIM(p_description), BTRIM(p_vendor_name), BTRIM(p_reference_number), p_expense_account_id,
-    p_incurred_on, p_due_on, ROUND(p_amount, 2), 0, NULLIF(BTRIM(p_notes), ''),
-    p_idempotency_key, auth.uid()
+    v_expense_number, BTRIM(p_description), BTRIM(p_vendor_name), BTRIM(p_reference_number), p_expense_account_id,
+    p_incurred_on, p_due_on, ROUND(p_amount, 2), 0, ROUND(p_amount_paid, 2),
+    CASE WHEN p_amount_paid > 0 THEN p_payment_method ELSE NULL END,
+    CASE WHEN p_amount_paid > 0 THEN BTRIM(p_payment_reference) ELSE NULL END,
+    NULLIF(BTRIM(p_notes), ''), p_idempotency_key, auth.uid()
   ) RETURNING id INTO v_expense_id;
-
-  UPDATE public.operating_expenses
-  SET expense_number = v_expense_number
-  WHERE id = v_expense_id;
 
   v_entry_number := public.get_next_sequence('journal');
   SELECT COALESCE(currency_code, 'USD') INTO v_currency
