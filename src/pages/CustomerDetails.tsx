@@ -36,8 +36,9 @@ export default function CustomerDetails() {
   const navigate = useNavigate();
   const { customers, updateCustomer, isUpdating } = useCustomers();
   const { settings } = useSettings();
-  const currencySymbol = settings?.currency_symbol || '
-  
+  const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);
+  const customer = customers.find(c => c.id === id);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
