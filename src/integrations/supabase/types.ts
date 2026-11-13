@@ -477,6 +477,83 @@ export type Database = {
           },
         ]
       }
+      invoice_item_taxes: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string
+          invoice_item_id: string
+          is_compound: boolean
+          liability_account_id: string
+          tax_amount: number
+          tax_code: string
+          tax_id: string
+          tax_name: string
+          tax_order: number
+          tax_rate: number
+          taxable_amount: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id: string
+          invoice_item_id: string
+          is_compound?: boolean
+          liability_account_id: string
+          tax_amount: number
+          tax_code: string
+          tax_id: string
+          tax_name: string
+          tax_order: number
+          tax_rate: number
+          taxable_amount: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          invoice_item_id?: string
+          is_compound?: boolean
+          liability_account_id?: string
+          tax_amount?: number
+          tax_code?: string
+          tax_id?: string
+          tax_name?: string
+          tax_order?: number
+          tax_rate?: number
+          taxable_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_item_taxes_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_invoice_item_id_fkey"
+            columns: ["invoice_item_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_tax_id_fkey"
+            columns: ["tax_id"]
+            isOneToOne: false
+            referencedRelation: "taxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_liability_account_id_fkey"
+            columns: ["liability_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_taxes: {
         Row: {
           created_at: string
