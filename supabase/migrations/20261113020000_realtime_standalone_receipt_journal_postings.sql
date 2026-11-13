@@ -488,7 +488,7 @@ $invoice_backfill$;
 -- Backfill already-issued receipts that were not linked to a payment. This
 -- includes standalone/unapplied receipts and legacy invoice receipts without
 -- payment rows, so the ledger is complete from the migration onward.
-DO $
+DO $receipt_backfill$
 DECLARE
   v_receipt record;
 BEGIN
@@ -502,7 +502,7 @@ BEGIN
     PERFORM public.post_receipt_journal_by_id(v_receipt.id);
   END LOOP;
 END;
-$$;
+$receipt_backfill$;
 
 CREATE OR REPLACE FUNCTION public.reverse_unapplied_receipt_journal()
 RETURNS trigger
