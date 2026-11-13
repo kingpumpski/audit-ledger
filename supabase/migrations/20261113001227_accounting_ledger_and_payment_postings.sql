@@ -294,7 +294,7 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF v_tax_total - v_tax_snapshot_total > 0.01 THEN
+  IF v_tax_total - v_tax_snapshot_total > 0 THEN
     INSERT INTO public.journal_lines (
       journal_entry_id, line_number, account_id, description, debit, credit
     )
@@ -303,7 +303,7 @@ BEGIN
       'Unallocated tax payable - ' || v_invoice.invoice_number,
       0, ROUND(v_tax_total - v_tax_snapshot_total, 2)
     );
-  ELSIF v_tax_snapshot_total - v_tax_total > 0.01 THEN
+  ELSIF v_tax_snapshot_total - v_tax_total > 0 THEN
     RAISE EXCEPTION 'Invoice tax snapshots do not reconcile to the invoice tax total';
   END IF;
 
