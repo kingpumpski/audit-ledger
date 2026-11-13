@@ -106,47 +106,13 @@ export default function Inventory() {
         return;
       }
 
-      const prevQty = selectedProduct.stock_quantity || 0;
-      let newQty: number;
-
-      if (adjustForm.type === 'purchase' || adjustForm.type === 'return') {
-        newQty = prevQty + adjustForm.quantity;
-      } else if (adjustForm.type === 'sale' || adjustForm.type === 'damage') {
-        newQty = prevQty - adjustForm.quantity;
-      } else {
-        newQty = adjustForm.quantity; // direct adjustment sets absolute value
-      }
-
-      // Record transaction
-      const { error: txError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          product_id: selectedProduct.id,
-          type: adjustForm.type,
-          quantity: adjustForm.quantity,
-          previous_quantity: prevQty,
-          new_quantity: newQty,
-          unit_cost: selectedProduct.cost_price || selectedProduct.current_price,
-          total_cost: adjustForm.quantity * (selectedProduct.cost_price || selectedProduct.current_price),
-          notes: adjustForm.notes,
-          performed_by: user.id,
-        });
-
-      if (txError) throw txError;
-
-      // Update product stock
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ stock_quantity: Math.max(0, newQty) })
-        .eq('id', selectedProduct.id);
-
-      if (updateError) throw updateError;
+      throw new Error('Manual stock changes are temporarily disabled. Use a documented stock purchase; sales must be recorded through invoices, and returns/losses require an audited inventory workflow.');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      toast({ title: adjustForm.type === 'purchase' ? 'Stock purchase recorded with verified actual cost' : 'Stock updated successfully' });
+      toast({ title: 'Stock purchase recorded with verified actual cost' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
       setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
@@ -317,27 +283,17 @@ export default function Inventory() {
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Adjust Stock - {selectedProduct?.name}</DialogTitle>
+            <DialogTitle>Record Stock Purchase - {selectedProduct?.name}</DialogTitle>
             <DialogDescription>
               Current stock: {selectedProduct?.stock_quantity ?? 0} units
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-4 pr-2">
-            <div className="space-y-2">
-              <Label>Transaction Type</Label>
-              <Select value={adjustForm.type} onValueChange={v => setAdjustForm({ ...adjustForm, type: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="purchase">Purchase (Add Stock)</SelectItem>
-                  <SelectItem value="sale">Sale (Remove Stock)</SelectItem>
-                  <SelectItem value="return">Return (Add Stock)</SelectItem>
-                  <SelectItem value="damage">Damage/Loss (Remove Stock)</SelectItem>
-                  <SelectItem value="adjustment">Manual Adjustment (Set Exact)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+              Only evidenced stock purchases can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Returns, damage and count adjustments will be enabled after their audited accounting workflows are implemented.
             </div>
             <div className="space-y-2">
-              <Label>{adjustForm.type === 'adjustment' ? 'New Quantity' : 'Quantity'}</Label>
+              <Label>Purchase Quantity</Label>
               <Input
                 type="number"
                 min="0"
@@ -400,7 +356,7 @@ export default function Inventory() {
               <Textarea
                 value={adjustForm.notes}
                 onChange={e => setAdjustForm({ ...adjustForm, notes: e.target.value })}
-                placeholder="Reason for adjustment..."
+                placeholder="Purchase details and supporting notes..."
                 rows={2}
               />
             </div>
@@ -416,7 +372,7 @@ export default function Inventory() {
                 ))
               }>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Adjustment
+                Record Purchase
               </Button>
             </div>
           </div>
