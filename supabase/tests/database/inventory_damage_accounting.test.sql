@@ -159,12 +159,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
     4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
     'cash', 'Initial test purchase', NULL,
     'd0000000-0000-4000-8000-000000000201'
-  ) $,
+  ) $$,
   'Accountant can record an evidenced stock purchase'
 );
 
@@ -186,12 +186,12 @@ SELECT extensions.ok(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
     4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
     'cash', 'Initial test purchase', NULL,
     'd0000000-0000-4000-8000-000000000201'
-  ) $,
+  ) $$,
   'Retry with the same stock-purchase idempotency key is accepted'
 );
 
@@ -209,12 +209,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
     2, 9.00, 'Test supplier', 'PURCHASE-TEST-002', 18.00,
     'bank_transfer', 'Second test purchase', NULL,
     'd0000000-0000-4000-8000-000000000202'
-  ) $,
+  ) $$,
   'A subsequent stock purchase is posted successfully'
 );
 
