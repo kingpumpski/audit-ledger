@@ -413,6 +413,10 @@ export type Database = {
           unit_price: number
           unit_cost: number | null
           cost_source: string | null
+          cost_verified_by: string | null
+          cost_verified_at: string | null
+          cost_reference: string | null
+          cost_notes: string | null
         }
         Insert: {
           created_at?: string
@@ -430,6 +434,10 @@ export type Database = {
           unit_price: number
           unit_cost?: number | null
           cost_source?: string | null
+          cost_verified_by?: string | null
+          cost_verified_at?: string | null
+          cost_reference?: string | null
+          cost_notes?: string | null
         }
         Update: {
           created_at?: string
@@ -447,6 +455,10 @@ export type Database = {
           unit_price?: number
           unit_cost?: number | null
           cost_source?: string | null
+          cost_verified_by?: string | null
+          cost_verified_at?: string | null
+          cost_reference?: string | null
+          cost_notes?: string | null
         }
         Relationships: [
           {
@@ -1463,6 +1475,15 @@ export type Database = {
           p_payment_method?: Database["public"]["Enums"]["payment_method"]
           p_notes?: string | null
           p_opening_unit_cost?: number | null
+        }
+        Returns: string
+      }
+      set_historical_invoice_item_cost: {
+        Args: {
+          p_invoice_item_id: string
+          p_unit_cost: number
+          p_reference: string
+          p_notes?: string | null
         }
         Returns: string
       }
