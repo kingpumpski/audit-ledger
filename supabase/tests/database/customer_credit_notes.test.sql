@@ -236,12 +236,12 @@ INSERT INTO public.products(
 ) VALUES('TEST-CN-STOCK-001','Credit note stock return item',30,NULL,false,0,false,true);
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku='TEST-CN-STOCK-001'),
     5,10,'Credit note supplier','CN-STOCK-PURCHASE-001',50,
     'cash','Purchase fixture for stock-return credit note',NULL,
     'c1000000-0000-4000-8000-000000000701'
-  ) $,
+  ) $$,
   'A physical product receives verified stock before invoice issue'
 );
 
@@ -258,7 +258,7 @@ FROM public.invoices i CROSS JOIN public.products p
 WHERE i.invoice_number='INV-CN-005' AND p.sku='TEST-CN-STOCK-001';
 
 SELECT extensions.lives_ok(
-  $ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005')) $,
+  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005')) $,
   'Physical-goods invoice can issue using verified stock cost'
 );
 
@@ -269,7 +269,7 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_invoice_credit_note(
+  $$ SELECT public.record_invoice_credit_note(
     (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-005'),
     jsonb_build_array(jsonb_build_object(
       'invoice_item_id',(SELECT id FROM public.invoice_items WHERE description='Physical stock line'),
@@ -277,7 +277,7 @@ SELECT extensions.lives_ok(
     )),
     CURRENT_DATE,'One physical unit returned','RETURN-REF-CN-STOCK-001',
     'c1000000-0000-4000-8000-000000000702'
-  ) $,
+  ) $$,
   'A physical-goods credit note restores stock at the original verified cost'
 );
 
@@ -362,12 +362,12 @@ JOIN public.taxes t ON t.code='CN-TAX-001'
 WHERE i.invoice_number='INV-CN-006';
 
 SELECT extensions.lives_ok(
-  $ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-006')) $,
+  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-006')) $,
   'Invoice with exact line-level tax snapshots can be issued'
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_invoice_credit_note(
+  $$ SELECT public.record_invoice_credit_note(
     (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-006'),
     jsonb_build_array(jsonb_build_object(
       'invoice_item_id',(SELECT id FROM public.invoice_items WHERE description='Taxed credit note line'),
@@ -375,7 +375,7 @@ SELECT extensions.lives_ok(
     )),
     CURRENT_DATE,'Half of taxed line returned','RETURN-REF-CN-TAX-001',
     'c1000000-0000-4000-8000-000000000801'
-  ) $,
+  ) $$,
   'Partial taxed credit note uses the original per-line tax snapshot'
 );
 
