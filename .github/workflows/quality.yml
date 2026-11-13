@@ -30,22 +30,6 @@ jobs:
         with:
           version: latest
 
-      - name: Generate accounting migration scaffold with Supabase CLI
-        if: github.head_ref == 'feat/ledger-postings-for-invoices-and-payments' || github.ref_name == 'feat/ledger-postings-for-invoices-and-payments'
-        id: accounting_migration_scaffold
-        run: |
-          supabase migration new accounting_ledger_and_payment_postings
-          migration_file="$(find supabase/migrations -maxdepth 1 -type f -name '*_accounting_ledger_and_payment_postings.sql' | sort | tail -n 1)"
-          test -n "$migration_file"
-          echo "migration_file=$migration_file" >> "$GITHUB_OUTPUT"
-
-      - name: Upload CLI-generated accounting migration scaffold
-        if: github.head_ref == 'feat/ledger-postings-for-invoices-and-payments' || github.ref_name == 'feat/ledger-postings-for-invoices-and-payments'
-        uses: actions/upload-artifact@v4
-        with:
-          name: accounting-migration-scaffold
-          path: ${{ steps.accounting_migration_scaffold.outputs.migration_file }}
-
       - name: Assign isolated database ports
         run: |
           # Avoid collisions with services prebound on GitHub-hosted runners.
