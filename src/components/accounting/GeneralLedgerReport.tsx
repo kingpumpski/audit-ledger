@@ -92,7 +92,7 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
     const rows = trialBalance.map(row => [
       row.code, row.name, row.accountType, row.debit.toFixed(2), row.credit.toFixed(2), row.netBalance.toFixed(2),
     ]);
-    const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\\n');
+    const csv = [headers, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
