@@ -456,6 +456,7 @@ export type Database = {
           created_at: string
           id: string
           invoice_id: string
+          liability_account_id: string
           tax_amount: number
           tax_id: string
           tax_rate: number
@@ -465,6 +466,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_id: string
+          liability_account_id: string
           tax_amount: number
           tax_id: string
           tax_rate: number
@@ -474,6 +476,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_id?: string
+          liability_account_id?: string
           tax_amount?: number
           tax_id?: string
           tax_rate?: number
@@ -492,6 +495,90 @@ export type Database = {
             columns: ["tax_id"]
             isOneToOne: false
             referencedRelation: "taxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_entries: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string
+          entry_date: string
+          entry_number: string
+          id: string
+          source_id: string
+          source_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description: string
+          entry_date: string
+          entry_number: string
+          id?: string
+          source_id: string
+          source_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string
+          entry_date?: string
+          entry_number?: string
+          id?: string
+          source_id?: string
+          source_type?: string
+        }
+        Relationships: []
+      }
+      journal_lines: {
+        Row: {
+          account_id: string
+          created_at: string
+          credit: number
+          debit: number
+          description: string
+          id: string
+          journal_entry_id: string
+          line_number: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          description: string
+          id?: string
+          journal_entry_id: string
+          line_number: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          credit?: number
+          debit?: number
+          description?: string
+          id?: string
+          journal_entry_id?: string
+          line_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_lines_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_lines_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -1220,6 +1307,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_compound: boolean | null
+          liability_account_id: string | null
           name: string
           rate: number
           type: Database["public"]["Enums"]["tax_type"]
@@ -1235,6 +1323,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_compound?: boolean | null
+          liability_account_id?: string | null
           name: string
           rate: number
           type: Database["public"]["Enums"]["tax_type"]
@@ -1250,6 +1339,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_compound?: boolean | null
+          liability_account_id?: string | null
           name?: string
           rate?: number
           type?: Database["public"]["Enums"]["tax_type"]
@@ -1337,6 +1427,18 @@ export type Database = {
         Returns: number
       }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
+      issue_invoice: { Args: { p_invoice_id: string }; Returns: string }
+      record_invoice_payment: {
+        Args: {
+          p_invoice_id: string
+          p_customer_id: string
+          p_amount: number
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_reference_number?: string | null
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]

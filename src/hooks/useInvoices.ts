@@ -70,7 +70,7 @@ export function useInvoices() {
       if (selectedTaxIds.length > 0) {
         const { data: taxRows, error: taxError } = await supabase
           .from('taxes')
-          .select('id, name, code, rate, is_compound, applies_to_category, effective_from, effective_to')
+          .select('id, name, code, rate, is_compound, applies_to_category, effective_from, effective_to, liability_account_id')
           .in('id', selectedTaxIds)
           .eq('is_active', true);
         if (taxError) throw taxError;
@@ -92,7 +92,7 @@ export function useInvoices() {
       let subtotal = 0;
       let taxAmount = 0;
       let discountAmount = 0;
-      const taxTotals = new Map<string, { tax_id: string; tax_rate: number; taxable_amount: number; tax_amount: number }>();
+      const taxTotals = new Map<string, { tax_id: string; tax_rate: number; taxable_amount: number; tax_amount: number; liability_account_id: string }>();
 
       const processedItems = invoiceData.items.map((item, index) => {
         const category = item.product_id ? productCategories.get(item.product_id) : null;
@@ -114,8 +114,16 @@ export function useInvoices() {
         discountAmount += calculation.discount_amount;
         taxAmount += calculation.tax_amount;
         calculation.taxes.forEach(tax => {
+          const rule = taxRules.find(candidate => candidate.id === tax.tax_id);
+          if (!rule?.liability_account_id) {
+            throw new Error(`Tax ${tax.code} has no liability account configured`);
+          }
           const current = taxTotals.get(tax.tax_id) || {
-            tax_id: tax.tax_id, tax_rate: tax.rate, taxable_amount: 0, tax_amount: 0,
+            tax_id: tax.tax_id,
+            tax_rate: tax.rate,
+            taxable_amount: 0,
+            tax_amount: 0,
+            liability_account_id: rule.liability_account_id,
           };
           current.taxable_amount += tax.taxable_amount;
           current.tax_amount += tax.tax_amount;
@@ -188,6 +196,7 @@ export function useInvoices() {
         tax_rate: tax.tax_rate,
         taxable_amount: Math.round((tax.taxable_amount + Number.EPSILON) * 100) / 100,
         tax_amount: Math.round((tax.tax_amount + Number.EPSILON) * 100) / 100,
+        liability_account_id: tax.liability_account_id,
       }));
       if (invoiceTaxRows.length > 0) {
         const { error: invoiceTaxesError } = await supabase
@@ -209,19 +218,10 @@ export function useInvoices() {
 
   const issueInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string): Promise<{ requiresDomainVerification?: boolean }> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('invoices')
-        .update({
-          status: 'issued',
-          issued_at: new Date().toISOString(),
-          issued_by: user.id,
-          is_locked: true,
-        })
-        .eq('id', invoiceId)
-        .eq('status', 'draft');
+      // Issuing the invoice and posting its balanced journal entry happen in one database transaction.
+      const { error } = await supabase.rpc('issue_invoice', {
+        p_invoice_id: invoiceId,
+      });
 
       if (error) throw error;
 

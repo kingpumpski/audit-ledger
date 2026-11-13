@@ -43,6 +43,7 @@ type TaxFormData = {
   type: TaxType;
   is_compound: boolean;
   applies_to_category: string;
+  liability_account_id: string;
 };
 
 function isTaxType(value: string): value is TaxType {
@@ -60,7 +61,24 @@ export default function Taxes() {
     type: 'vat' as TaxType,
     is_compound: false,
     applies_to_category: '',
+    liability_account_id: '',
   });
+
+  const liabilityAccountsQuery = useQuery({
+    queryKey: ['tax-liability-accounts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('chart_of_accounts')
+        .select('id, code, name')
+        .eq('account_type', 'liability')
+        .eq('is_active', true)
+        .order('code');
+      if (error) throw error;
+      return data;
+    },
+  });
+  const liabilityAccounts = liabilityAccountsQuery.data || [];
+  const defaultLiabilityAccountId = liabilityAccounts.find(account => account.code === '2100')?.id || liabilityAccounts[0]?.id || '';
 
   const resetForm = () => {
     setFormData({
@@ -70,6 +88,7 @@ export default function Taxes() {
       type: 'vat',
       is_compound: false,
       applies_to_category: '',
+      liability_account_id: defaultLiabilityAccountId,
     });
     setEditingTax(null);
   };
@@ -84,6 +103,7 @@ export default function Taxes() {
         type: tax.type,
         is_compound: tax.is_compound || false,
         applies_to_category: tax.applies_to_category || '',
+        liability_account_id: tax.liability_account_id || defaultLiabilityAccountId,
       });
     } else {
       resetForm();
@@ -101,6 +121,7 @@ export default function Taxes() {
       type: formData.type,
       is_compound: formData.is_compound,
       applies_to_category: formData.applies_to_category || null,
+      liability_account_id: formData.liability_account_id || defaultLiabilityAccountId,
     };
 
     if (editingTax) {
@@ -272,6 +293,26 @@ export default function Taxes() {
                   placeholder="e.g. Electronics, Services"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Tax Payable Account *</Label>
+                <Select
+                  value={formData.liability_account_id}
+                  onValueChange={(value) => setFormData(current => ({ ...current, liability_account_id: value }))}
+                  disabled={liabilityAccountsQuery.isLoading || liabilityAccounts.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select liability account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {liabilityAccounts.map(account => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.code} — {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Invoice tax collected is credited to this liability account when the invoice is issued.</p>
+              </div>
 
               <div className="flex items-center space-x-2">
                 <Switch
@@ -286,7 +327,7 @@ export default function Taxes() {
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isCreating || isUpdating}>
+                <Button type="submit" disabled={isCreating || isUpdating || !formData.liability_account_id}>
                   {(isCreating || isUpdating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {editingTax ? 'Update Tax' : 'Create Tax'}
                 </Button>

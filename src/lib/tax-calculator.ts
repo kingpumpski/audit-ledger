@@ -7,6 +7,7 @@ export interface TaxRule {
   applies_to_category?: string | null;
   effective_from?: string | null;
   effective_to?: string | null;
+  liability_account_id?: string | null;
 }
 
 export interface LineTaxBreakdown {

@@ -31,6 +31,7 @@ import {
 import { format, subDays, subMonths, subWeeks, startOfDay, startOfWeek, startOfMonth, startOfQuarter, startOfYear } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ChartOfAccounts } from '@/components/accounting/ChartOfAccounts';
+import { GeneralLedgerReport } from '@/components/accounting/GeneralLedgerReport';
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
 
@@ -231,6 +232,7 @@ export default function Accounting() {
       <Tabs defaultValue="pl" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="coa">Chart of Accounts</TabsTrigger>
+          <TabsTrigger value="ledger">General Ledger</TabsTrigger>
           <TabsTrigger value="pl">Recorded Income & Expenses</TabsTrigger>
           <TabsTrigger value="balance">Business Balances</TabsTrigger>
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
@@ -241,6 +243,7 @@ export default function Accounting() {
         <TabsContent value="coa">
           <ChartOfAccounts />
         </TabsContent>
+        <TabsContent value="ledger"><GeneralLedgerReport currencySymbol={currencySymbol} /></TabsContent>
         {/* Recorded income & expenses */}
         <TabsContent value="pl">
           <div className="grid gap-6 lg:grid-cols-2">

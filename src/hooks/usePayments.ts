@@ -45,64 +45,34 @@ export function usePayments() {
 
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: CreatePaymentData) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Get next payment number
-      const { data: paymentNumber, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'payment' });
-
-      if (seqError) throw seqError;
-
-      // Create payment
-      const { data: payment, error: paymentError } = await supabase
-        .from('payments')
-        .insert({
-          payment_number: paymentNumber,
-          invoice_id: paymentData.invoice_id,
-          customer_id: paymentData.customer_id,
-          amount: paymentData.amount,
-          payment_method: paymentData.payment_method,
-          reference_number: paymentData.reference_number || null,
-          notes: paymentData.notes || null,
-          processed_by: user.id,
-          payment_date: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      // Payment, invoice balance update and journal posting are committed atomically by Postgres.
+      const { data: paymentId, error: paymentError } = await supabase.rpc('record_invoice_payment', {
+        p_invoice_id: paymentData.invoice_id,
+        p_customer_id: paymentData.customer_id,
+        p_amount: paymentData.amount,
+        p_payment_method: paymentData.payment_method,
+        p_reference_number: paymentData.reference_number || null,
+        p_notes: paymentData.notes || null,
+      });
 
       if (paymentError) throw paymentError;
+      if (!paymentId) throw new Error('Payment was not created');
 
-      // Update invoice balance
-      const { data: invoice } = await supabase
-        .from('invoices')
-        .select('total_amount, amount_paid, balance_due')
-        .eq('id', paymentData.invoice_id)
+      const { data: payment, error: fetchError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', paymentId)
         .single();
 
-      if (invoice) {
-        const newAmountPaid = (invoice.amount_paid || 0) + paymentData.amount;
-        const newBalanceDue = (invoice.total_amount || 0) - newAmountPaid;
-        const newStatus = newBalanceDue <= 0 ? 'paid' : 'partially_paid';
+      if (fetchError) throw fetchError;
 
-        await supabase
-          .from('invoices')
-          .update({
-            amount_paid: newAmountPaid,
-            balance_due: Math.max(0, newBalanceDue),
-            status: newStatus,
-          })
-          .eq('id', paymentData.invoice_id);
-      }
-
-      // Send payment confirmation email
+      // Email is secondary; a delivery failure must not undo a successfully recorded payment.
       try {
         await supabase.functions.invoke('send-payment-confirmation', {
           body: { paymentId: payment.id },
         });
       } catch (emailError) {
         console.error('Failed to send payment confirmation email:', emailError);
-        // Don't throw - payment was recorded successfully, email is secondary
       }
 
       return payment;
@@ -110,7 +80,7 @@ export function usePayments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast({ title: 'Payment recorded successfully', description: 'Confirmation email sent to customer.' });
+      toast({ title: 'Payment recorded successfully' });
     },
     onError: (error) => {
       toast({ title: 'Failed to record payment', description: error.message, variant: 'destructive' });
