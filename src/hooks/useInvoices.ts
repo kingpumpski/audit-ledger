@@ -251,8 +251,9 @@ export function useInvoices() {
 
       return { requiresDomainVerification: false };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, invoiceId) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
 
       if (result?.requiresDomainVerification) {
