@@ -34,6 +34,14 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [isCountOpen, setIsCountOpen] = useState(false);
+  const [countIdempotencyKey, setCountIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [countForm, setCountForm] = useState({
+    countedQuantity: 0,
+    countedOn: format(new Date(), 'yyyy-MM-dd'),
+    reason: '',
+    referenceNumber: '',
+  });
   const [adjustIdempotencyKey, setAdjustIdempotencyKey] = useState(() => crypto.randomUUID());
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustForm, setAdjustForm] = useState({
@@ -87,6 +95,37 @@ export default function Inventory() {
   const uncostedStockCount = physicalProducts.filter(p =>
     (p.stock_quantity || 0) > 0 && !p.cost_price_verified
   ).length;
+
+  const recordStockCount = useMutation({
+    mutationFn: async () => {
+      if (!selectedProduct) throw new Error('Select a product to reconcile.');
+      if (!canRecordInventoryDamage) throw new Error('Only an admin or accountant can approve stock-count corrections.');
+      if (!countForm.reason.trim() || !countForm.referenceNumber.trim()) {
+        throw new Error('A count explanation and signed count-sheet/reference are required.');
+      }
+      const { error } = await supabase.rpc('record_stock_count_adjustment', {
+        p_product_id: selectedProduct.id,
+        p_counted_quantity: countForm.countedQuantity,
+        p_counted_on: countForm.countedOn,
+        p_reason: countForm.reason.trim(),
+        p_reference_number: countForm.referenceNumber.trim(),
+        p_idempotency_key: countIdempotencyKey,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: 'Stock count reconciled', description: 'The verified variance was recorded in inventory history and the general ledger.' });
+      setIsCountOpen(false);
+      setSelectedProduct(null);
+      setCountForm({ countedQuantity: 0, countedOn: format(new Date(), 'yyyy-MM-dd'), reason: '', referenceNumber: '' });
+      setCountIdempotencyKey(crypto.randomUUID());
+    },
+    onError: error => toast({ title: 'Stock count was not posted', description: error.message, variant: 'destructive' }),
+  });
 
   const recordAdjustment = useMutation({
     mutationFn: async () => {
@@ -242,10 +281,22 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
-                            <ArrowUpDown className="h-3 w-3 mr-1" />
-                            Adjust
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
+                              <ArrowUpDown className="h-3 w-3 mr-1" />
+                              Adjust
+                            </Button>
+                            {canRecordInventoryDamage && (
+                              <Button size="sm" variant="secondary" onClick={() => {
+                                setSelectedProduct(product);
+                                setCountForm({ countedQuantity: product.stock_quantity || 0, countedOn: format(new Date(), 'yyyy-MM-dd'), reason: '', referenceNumber: '' });
+                                setCountIdempotencyKey(crypto.randomUUID());
+                                setIsCountOpen(true);
+                              }}>
+                                Count
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -293,6 +344,56 @@ export default function Inventory() {
         </Card>
       </div>
 
+      <Dialog open={isCountOpen} onOpenChange={setIsCountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reconcile Physical Stock Count</DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.name}: system quantity is {selectedProduct?.stock_quantity ?? 0}. Enter the independently counted quantity; the difference will be valued at the verified weighted-average cost.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Physical quantity counted *</Label>
+              <Input type="number" min="0" step="1" value={countForm.countedQuantity}
+                onChange={e => setCountForm({ ...countForm, countedQuantity: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Count date *</Label>
+              <Input type="date" max={format(new Date(), 'yyyy-MM-dd')} value={countForm.countedOn}
+                onChange={e => setCountForm({ ...countForm, countedOn: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Signed count-sheet / approval reference *</Label>
+              <Input value={countForm.referenceNumber} onChange={e => setCountForm({ ...countForm, referenceNumber: e.target.value })}
+                placeholder="e.g. COUNT-2026-001" />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason / explanation *</Label>
+              <Textarea value={countForm.reason} onChange={e => setCountForm({ ...countForm, reason: e.target.value })}
+                placeholder="Explain the variance and the count approval..." rows={3} />
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Increases debit Inventory and credit Inventory Count Variance Gain. Shortages debit Inventory Shrinkage and credit Inventory. The system refuses unverified costs, backdated counts and duplicate submissions.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsCountOpen(false)}>Cancel</Button>
+              <Button onClick={() => recordStockCount.mutate()} disabled={
+                recordStockCount.isPending || !selectedProduct?.cost_price_verified ||
+                !countForm.countedOn || !countForm.reason.trim() || !countForm.referenceNumber.trim() ||
+                countForm.countedQuantity === (selectedProduct?.stock_quantity || 0)
+              }>
+                {recordStockCount.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Approve & Post Count
+              </Button>
+            </div>
+            {!selectedProduct?.cost_price_verified && (
+              <p className="text-xs text-destructive">This product's purchase cost is not verified. Resolve its actual cost evidence before reconciling stock.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Adjust Stock Dialog */}
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
@@ -319,7 +420,7 @@ export default function Inventory() {
               </div>
             ) : (
               <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
-                Only evidenced stock purchases and documented damage can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Customer returns and count corrections remain blocked until their audited workflows are implemented.
+                Only evidenced stock purchases and documented damage can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Customer returns remain blocked until their audited credit-note and stock-return workflow is implemented. Count differences must be approved and supported by a count-sheet reference.
               </div>
             )}
             <div className="space-y-2">
