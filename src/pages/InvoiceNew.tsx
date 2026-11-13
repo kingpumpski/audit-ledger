@@ -235,7 +235,7 @@ export default function InvoiceNew() {
       if (!asDraft) {
         try {
           await issueInvoiceAsync(invoice.id);
-        } catch (issueError) {
+        } catch {
           navigate(`/invoices/${invoice.id}`);
           return;
         }
