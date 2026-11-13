@@ -37,6 +37,7 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
   const [reason, setReason] = useState('');
   const [reference, setReference] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -52,6 +53,7 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
     setCreditDate(localDateValue());
     setReason('');
     setReference('');
+    setIdempotencyKey(crypto.randomUUID());
   };
 
   const handleSubmit = async () => {
@@ -84,7 +86,7 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
         p_credit_note_date: creditDate,
         p_reason: reason.trim(),
         p_reference_number: reference.trim(),
-        p_idempotency_key: crypto.randomUUID(),
+        p_idempotency_key: idempotencyKey,
       });
 
       if (error) throw error;
@@ -99,7 +101,7 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
 
       toast({
         title: 'Credit note issued',
-        description: `Credit note ${data} was recorded. Any customer credit or stock return is posted separately in the accounting records.`,
+        description: 'The credit note was recorded. Any customer credit or stock return is posted separately in the accounting records.',
       });
       setOpen(false);
       resetForm();
@@ -161,10 +163,13 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
                     inputMode="decimal"
                     placeholder="0"
                     value={quantities[item.id] ?? ''}
-                    onChange={(event) => setQuantities((current) => ({
-                      ...current,
-                      [item.id]: event.target.value,
-                    }))}
+                    onChange={(event) => {
+                      setIdempotencyKey(crypto.randomUUID());
+                      setQuantities((current) => ({
+                        ...current,
+                        [item.id]: event.target.value,
+                      }));
+                    }}
                   />
                 </div>
               ))}
@@ -180,17 +185,17 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">
               <span className="font-medium">Credit date</span>
-              <Input type="date" value={creditDate} min={invoice.issue_date || undefined} onChange={(event) => setCreditDate(event.target.value)} />
+              <Input type="date" value={creditDate} min={invoice.issue_date || undefined} onChange={(event) => { setIdempotencyKey(crypto.randomUUID()); setCreditDate(event.target.value); }} />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Supporting reference</span>
-              <Input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Return note / customer reference" maxLength={120} />
+              <Input value={reference} onChange={(event) => { setIdempotencyKey(crypto.randomUUID()); setReference(event.target.value); }} placeholder="Return note / customer reference" maxLength={120} />
             </label>
           </div>
 
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Reason for credit</span>
-            <Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain the return, pricing correction or service adjustment..." rows={3} maxLength={1000} />
+            <Textarea value={reason} onChange={(event) => { setIdempotencyKey(crypto.randomUUID()); setReason(event.target.value); }} placeholder="Explain the return, pricing correction or service adjustment..." rows={3} maxLength={1000} />
           </label>
 
           <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
