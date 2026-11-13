@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(63);
+SELECT extensions.plan(66);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -89,6 +89,29 @@ SELECT i.id, p.id, 'Service labour and materials', 1, 100, 100
 FROM public.invoices i
 JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
 WHERE i.invoice_number = 'INV-TEST-SERVICE-001';
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date,
+  subtotal, tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TEST-MIXED-001', id, 'draft', CURRENT_DATE, 200, 0, 200, 200
+FROM public.customers WHERE code = 'TEST-CUSTOMER-001';
+
+INSERT INTO public.invoice_items (
+  invoice_id, product_id, description, quantity, unit_price, line_total
+)
+SELECT i.id, p.id, 'Physical inventory item', 1, 100, 100
+FROM public.invoices i
+JOIN public.products p ON p.sku = 'TEST-PURCHASE-001'
+WHERE i.invoice_number = 'INV-TEST-MIXED-001';
+
+INSERT INTO public.invoice_items (
+  invoice_id, product_id, description, quantity, unit_price, line_total
+)
+SELECT i.id, p.id, 'Service labour', 1, 100, 100
+FROM public.invoices i
+JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
+WHERE i.invoice_number = 'INV-TEST-MIXED-001';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -689,6 +712,42 @@ SELECT extensions.throws_ok(
   'P0001',
   'Refund date cannot be earlier than the original petty-cash expense date',
   'Petty-cash reversal cannot predate the original expense'
+);
+
+SELECT extensions.lives_ok(
+  $ UPDATE public.invoices SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-SERVICE-001' $,
+  'Service-only invoice can be issued without an inventory cost snapshot'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer
+   FROM public.journal_entries je
+   JOIN public.journal_lines jl ON jl.journal_entry_id = je.id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'invoice'
+     AND je.source_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-SERVICE-001')
+     AND coa.code = '5000'),
+  0,
+  'Service-only invoice does not create physical inventory COGS'
+);
+
+SELECT extensions.lives_ok(
+  $ UPDATE public.invoices SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-MIXED-001' $,
+  'Mixed physical-product and service invoice can be issued'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_entries je
+   JOIN public.journal_lines jl ON jl.journal_entry_id = je.id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'invoice'
+     AND je.source_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-MIXED-001')
+     AND coa.code = '5000'),
+  8.00::numeric,
+  'Mixed invoice posts verified COGS for its physical line despite service line having no stock cost'
 );
 
 SELECT * FROM extensions.finish();
