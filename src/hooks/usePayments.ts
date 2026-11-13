@@ -80,7 +80,7 @@ export function usePayments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast({ title: 'Payment recorded successfully', description: 'Confirmation email sent to customer.' });
+      toast({ title: 'Payment recorded successfully' });
     },
     onError: (error) => {
       toast({ title: 'Failed to record payment', description: error.message, variant: 'destructive' });
