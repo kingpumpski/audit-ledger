@@ -33,6 +33,7 @@ import { format, subDays, subMonths, subWeeks, startOfDay, startOfWeek, startOfM
 import { cn } from '@/lib/utils';
 import { ChartOfAccounts } from '@/components/accounting/ChartOfAccounts';
 import { GeneralLedgerReport } from '@/components/accounting/GeneralLedgerReport';
+import { ProfitAndLossReport } from '@/components/accounting/ProfitAndLossReport';
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
 
@@ -55,6 +56,16 @@ export default function Accounting() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'receipts' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['receipts'] });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_entries' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_items' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_transactions' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+      })
       .subscribe();
 
     return () => {
@@ -66,6 +77,7 @@ export default function Accounting() {
   const [isPettyCashOpen, setIsPettyCashOpen] = useState(false);
   const [pettyCashForm, setPettyCashForm] = useState({
     description: '', amount: 0, type: 'expense' as string, category: '', reference_number: '',
+    payment_method: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -95,6 +107,7 @@ export default function Accounting() {
           type: pettyCashForm.type,
           category: pettyCashForm.category || null,
           reference_number: pettyCashForm.reference_number || null,
+          payment_method: pettyCashForm.payment_method,
           recorded_by: user?.id,
         });
       if (error) throw error;
@@ -103,7 +116,7 @@ export default function Accounting() {
       queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
       toast({ title: 'Petty cash transaction recorded' });
       setIsPettyCashOpen(false);
-      setPettyCashForm({ description: '', amount: 0, type: 'expense', category: '', reference_number: '' });
+      setPettyCashForm({ description: '', amount: 0, type: 'expense', category: '', reference_number: '', payment_method: 'cash' });
     },
     onError: (error) => {
       toast({ title: 'Failed to record transaction', description: error.message, variant: 'destructive' });
@@ -263,6 +276,7 @@ export default function Accounting() {
           <TabsTrigger value="coa">Chart of Accounts</TabsTrigger>
           <TabsTrigger value="ledger">General Ledger</TabsTrigger>
           <TabsTrigger value="pl">Recorded Income & Expenses</TabsTrigger>
+          <TabsTrigger value="profit">Profit &amp; Loss</TabsTrigger>
           <TabsTrigger value="balance">Business Balances</TabsTrigger>
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
           <TabsTrigger value="petty">Petty Cash</TabsTrigger>
@@ -274,6 +288,9 @@ export default function Accounting() {
         </TabsContent>
         <TabsContent value="ledger"><GeneralLedgerReport currencySymbol={currencySymbol} /></TabsContent>
         {/* Recorded income & expenses */}
+        <TabsContent value="profit">
+          <ProfitAndLossReport currencySymbol={currencySymbol} />
+        </TabsContent>
         <TabsContent value="pl">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
@@ -519,6 +536,21 @@ export default function Accounting() {
                 <Label>Reference #</Label>
                 <Input value={pettyCashForm.reference_number} onChange={e => setPettyCashForm({ ...pettyCashForm, reference_number: e.target.value })} placeholder="Optional" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Paid From</Label>
+              <Select value={pettyCashForm.payment_method} onValueChange={v => setPettyCashForm({ ...pettyCashForm, payment_method: v as typeof pettyCashForm.payment_method })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="debit_card">Debit Card</SelectItem>
+                  <SelectItem value="check">Cheque</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setIsPettyCashOpen(false)}>Cancel</Button>
