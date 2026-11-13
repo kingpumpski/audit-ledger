@@ -20,7 +20,7 @@ SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.lives_ok(
-  $$$ SELECT public.record_operating_expense(
+  $$ SELECT public.record_operating_expense(
     'Office internet service', 'Example Telecom', 'OPEX-TEST-001',
     (SELECT id FROM public.chart_of_accounts
      WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500') ORDER BY code LIMIT 1),
@@ -191,7 +191,7 @@ SELECT extensions.throws_ok(
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000002', true);
 
 SELECT extensions.throws_ok(
-  $$$ SELECT public.record_operating_expense(
+  $$ SELECT public.record_operating_expense(
     'Unauthorized expense', 'Test vendor', 'OPEX-UNAUTH-001',
     (SELECT id FROM public.chart_of_accounts
      WHERE account_type = 'expense' AND is_active ORDER BY code LIMIT 1),
