@@ -37,6 +37,7 @@ export default function Inventory() {
     quantity: 0,
     notes: '',
     unitCost: 0,
+    openingUnitCost: 0,
     supplierName: '',
     referenceNumber: '',
     amountPaid: 0,
@@ -94,6 +95,7 @@ export default function Inventory() {
           p_product_id: selectedProduct.id,
           p_quantity: adjustForm.quantity,
           p_unit_cost: adjustForm.unitCost,
+          p_opening_unit_cost: (selectedProduct.stock_quantity || 0) > 0 && !selectedProduct.cost_price_verified ? adjustForm.openingUnitCost : null,
           p_supplier_name: adjustForm.supplierName || null,
           p_reference_number: adjustForm.referenceNumber || null,
           p_amount_paid: adjustForm.amountPaid,
@@ -147,7 +149,7 @@ export default function Inventory() {
       toast({ title: adjustForm.type === 'purchase' ? 'Stock purchase recorded with verified actual cost' : 'Stock updated successfully' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
-      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
+      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
     },
     onError: (error) => {
       toast({ title: 'Failed to update stock', description: error.message, variant: 'destructive' });
@@ -260,7 +262,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
@@ -348,7 +350,12 @@ export default function Inventory() {
                 <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
                   Enter the supplier's actual unit purchase cost. This purchase will update the product's weighted-average cost and post Inventory against Cash/Bank and Accounts Payable.
                   {(selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && (
-                    <p className="mt-2 font-medium text-warning">This product already has stock without a verified opening cost. Record its opening stock valuation first.</p>
+                    <div className="mt-3 space-y-2">
+                      <p className="font-medium text-warning">Existing stock needs an opening valuation before this purchase can be posted.</p>
+                      <Label>Actual unit cost of existing stock ({currencySymbol}) *</Label>
+                      <Input type="number" min="0" step="0.0001" value={adjustForm.openingUnitCost || ''} onChange={e => setAdjustForm({ ...adjustForm, openingUnitCost: Number(e.target.value) || 0 })} />
+                      <p className="text-xs text-muted-foreground">This value is recorded once as opening Inventory against Owner's Equity. The new purchase is then blended into the weighted-average cost.</p>
+                    </div>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -404,7 +411,7 @@ export default function Inventory() {
                 (adjustForm.type === 'purchase' && (
                   adjustForm.unitCost <= 0 ||
                   adjustForm.amountPaid > adjustForm.quantity * adjustForm.unitCost ||
-                  ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified)
+                  ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && adjustForm.openingUnitCost <= 0)
                 ))
               }>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
