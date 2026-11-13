@@ -1,6 +1,7 @@
 import { csvCell } from '@/lib/reset-monitoring';
 import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +88,8 @@ export default function Accounting() {
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { roles } = useAuth();
+  const canReversePettyCash = roles.includes('admin') || roles.includes('accountant');
 
   useEffect(() => {
     const channel = supabase
@@ -600,11 +603,11 @@ export default function Accounting() {
                         {tx.type === 'expense' ? (
                           pettyCashReversalById.has(tx.id) ? (
                             <Badge variant="outline">Reversed · {pettyCashReversalById.get(tx.id)?.reference_number}</Badge>
-                          ) : (
+                          ) : canReversePettyCash ? (
                             <Button size="sm" variant="outline" onClick={() => setPettyCashToReverse({ id: tx.id, description: tx.description, amount: tx.amount })}>
                               Reverse
                             </Button>
-                          )
+                          ) : '—'
                         ) : '—'}
                       </td>
                     </tr>
