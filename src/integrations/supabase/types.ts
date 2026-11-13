@@ -911,6 +911,7 @@ export type Database = {
           customer_id: string
           deleted_at: string | null
           id: string
+          idempotency_key: string | null
           invoice_id: string
           notes: string | null
           payment_date: string
@@ -925,6 +926,7 @@ export type Database = {
           customer_id: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id: string
           notes?: string | null
           payment_date?: string
@@ -939,6 +941,7 @@ export type Database = {
           customer_id?: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string
           notes?: string | null
           payment_date?: string
@@ -1172,6 +1175,7 @@ export type Database = {
           customer_id: string
           deleted_at: string | null
           id: string
+          idempotency_key: string | null
           invoice_id: string | null
           is_locked: boolean | null
           issue_date: string
@@ -1192,6 +1196,7 @@ export type Database = {
           customer_id: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_locked?: boolean | null
           issue_date?: string
@@ -1212,6 +1217,7 @@ export type Database = {
           customer_id?: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_locked?: boolean | null
           issue_date?: string
