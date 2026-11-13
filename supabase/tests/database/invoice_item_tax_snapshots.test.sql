@@ -85,8 +85,8 @@ SELECT id, 'Second draft invoice line', 1, 100, 15, 15, 115
 FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-002';
 
 SELECT extensions.throws_ok(
-  $ UPDATE public.invoice_item_taxes SET tax_rate=99
-     WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001') $,
+  $$ UPDATE public.invoice_item_taxes SET tax_rate=99
+     WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001') $$,
   'P0001',
   'Tax snapshot must match the active authoritative tax definition',
   'A client cannot rewrite the authoritative tax rate in a line snapshot'
@@ -106,7 +106,7 @@ SELECT extensions.throws_ok(
      )
      CROSS JOIN public.taxes t
      WHERE i2.invoice_number='INV-TAX-SNAPSHOT-002'
-       AND t.code='TAX-SNAPSHOT-001' $,
+       AND t.code='TAX-SNAPSHOT-001' $$,
   'P0001',
   'Tax snapshot invoice line does not belong to the specified invoice',
   'A tax snapshot cannot attach another invoice line to a different invoice'
