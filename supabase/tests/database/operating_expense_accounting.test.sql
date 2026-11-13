@@ -376,15 +376,20 @@ SELECT extensions.is(
   (SELECT round(sum(jl.debit - jl.credit), 2)
    FROM public.journal_lines jl
    JOIN public.journal_entries je ON je.id = jl.journal_entry_id
-   WHERE je.source_type IN ('operating_expense', 'operating_expense_payment', 'operating_expense_reversal', 'operating_expense_refund')
-     AND je.source_id IN (
-       (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
-       (SELECT id FROM public.operating_expense_reversals WHERE operating_expense_id =
-         (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001')),
-       (SELECT id FROM public.operating_expense_payments WHERE operating_expense_id =
-         (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001')),
-       (SELECT id FROM public.operating_expense_refunds WHERE reference_number = 'SUPPLIER-REFUND-001')
-     )),
+   WHERE
+     (je.source_type = 'operating_expense'
+       AND je.source_id = (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'))
+     OR (je.source_type = 'operating_expense_payment'
+       AND je.source_id IN (SELECT p.id FROM public.operating_expense_payments p
+                            JOIN public.operating_expenses e ON e.id = p.operating_expense_id
+                            WHERE e.reference_number = 'OPEX-TEST-001'))
+     OR (je.source_type = 'operating_expense_reversal'
+       AND je.source_id = (SELECT id FROM public.operating_expense_reversals
+                           WHERE operating_expense_id = (SELECT id FROM public.operating_expenses
+                                                         WHERE reference_number = 'OPEX-TEST-001')))
+     OR (je.source_type = 'operating_expense_refund'
+       AND je.source_id = (SELECT id FROM public.operating_expense_refunds
+                           WHERE reference_number = 'SUPPLIER-REFUND-001'))),
   0::numeric,
   'Expense recognition, payments, reversal and supplier refund journals remain balanced'
 );
