@@ -21,6 +21,7 @@ type ExpenseRow = {
   amount: number | string; amount_paid: number | string; notes: string | null;
   expense_account: { code: string; name: string } | null;
   reversal: { id: string; reason: string; reference_number: string } | null;
+  refunds: { id: string; amount: number | string; refunded_on: string; reference_number: string }[];
 };
 
 type ExpenseQuery = {
@@ -29,7 +30,7 @@ type ExpenseQuery = {
 };
 type ExpenseApi = {
   from: (table: string) => { select: (columns: string) => ExpenseQuery };
-  rpc: (name: 'record_operating_expense' | 'pay_operating_expense' | 'reverse_unpaid_operating_expense', args: Record<string, unknown>) =>
+  rpc: (name: 'record_operating_expense' | 'pay_operating_expense' | 'reverse_unpaid_operating_expense' | 'record_operating_expense_refund', args: Record<string, unknown>) =>
     PromiseLike<{ data: string | null; error: { message: string } | null }>;
 };
 
@@ -45,6 +46,8 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const [settlement, setSettlement] = useState<ExpenseRow | null>(null);
   const [reversal, setReversal] = useState<ExpenseRow | null>(null);
   const [reversalForm, setReversalForm] = useState({ reason: '', reference: '' });
+  const [refund, setRefund] = useState<ExpenseRow | null>(null);
+  const [refundForm, setRefundForm] = useState({ amount: '', refundedOn: today(), method: 'cash' as PaymentMethod, reference: '' });
   const [form, setForm] = useState({
     description: '', vendor: '', reference: '', accountId: '', incurredOn: today(),
     dueOn: '', amount: '', amountPaid: '0', paymentMethod: 'cash' as PaymentMethod,
@@ -69,7 +72,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
     queryKey: ['operating-expenses'],
     queryFn: async (): Promise<ExpenseRow[]> => {
       const { data, error } = await expenseApi.from('operating_expenses')
-        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number)')
+        .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number), refunds:operating_expense_refunds(id, amount, refunded_on, reference_number)')
         .order('incurred_on', { ascending: false });
       if (error) throw error;
       return (data || []) as unknown as ExpenseRow[];
