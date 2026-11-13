@@ -31,6 +31,7 @@ type UncostedInvoiceLine = {
   invoice_number: string;
   issue_date: string;
   product_name: string | null;
+  is_service: boolean;
 };
 
 type CostInput = { unitCost: string; reference: string; notes: string };
@@ -69,7 +70,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       const pageSize = 1000;
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
       const missingItems: Array<{ id: string; invoice_id: string; description: string; quantity: number; unit_price: number; product_id: string | null }> = [];
-      const products: Array<{ id: string; name: string }> = [];
+      const products: Array<{ id: string; name: string; is_service: boolean }> = [];
 
       let offset = 0;
       while (true) {
@@ -104,7 +105,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       while (true) {
         const { data, error } = await supabase
           .from('products')
-          .select('id, name')
+          .select('id, name, is_service')
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -114,7 +115,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       }
 
       const invoiceMap = new Map(invoices.map(invoice => [invoice.id, invoice]));
-      const productMap = new Map(products.map(product => [product.id, product.name]));
+      const productMap = new Map(products.map(product => [product.id, product]));
       const uncostedItems: UncostedInvoiceLine[] = missingItems.flatMap(item => {
         const invoice = invoiceMap.get(item.invoice_id);
         if (!invoice) return [];
@@ -122,7 +123,8 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           ...item,
           invoice_number: invoice.invoice_number,
           issue_date: invoice.issue_date || '',
-          product_name: item.product_id ? productMap.get(item.product_id) || null : null,
+          product_name: item.product_id ? productMap.get(item.product_id)?.name || null : null,
+          is_service: !item.product_id || productMap.get(item.product_id)?.is_service === true,
         }];
       });
       return {
@@ -264,9 +266,13 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
                         <td><Input className="w-40" value={input.reference} placeholder="Supplier ref" onChange={e => setCostInputs(current => ({ ...current, [item.id]: { ...input, reference: e.target.value } }))} /></td>
                         <td><Input className="w-40" value={input.notes} placeholder="Optional" onChange={e => setCostInputs(current => ({ ...current, [item.id]: { ...input, notes: e.target.value } }))} /></td>
                         <td>
-                          <Button size="sm" disabled={verifyHistoricalCost.isPending || input.unitCost.trim() === '' || Number(input.unitCost) < 0 || !input.reference.trim()} onClick={() => verifyHistoricalCost.mutate({ itemId: item.id, unitCost: Number(input.unitCost), reference: input.reference, notes: input.notes })}>
-                            {verifyHistoricalCost.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Verify
-                          </Button>
+                          {item.is_service ? (
+                            <span className="text-xs text-warning">Direct service-cost workflow required</span>
+                          ) : (
+                            <Button size="sm" disabled={verifyHistoricalCost.isPending || input.unitCost.trim() === '' || Number(input.unitCost) < 0 || !input.reference.trim()} onClick={() => verifyHistoricalCost.mutate({ itemId: item.id, unitCost: Number(input.unitCost), reference: input.reference, notes: input.notes })}>
+                              {verifyHistoricalCost.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Verify
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     );
