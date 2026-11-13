@@ -51,7 +51,14 @@ export default function ReceiptNew() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [notes, setNotes] = useState('');
   const [signatureData, setSignatureData] = useState('');
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(() => {
+    const storageKey = 'audit-ledger:receipt-new:idempotency-key';
+    const existingKey = window.sessionStorage.getItem(storageKey);
+    if (existingKey) return existingKey;
+    const nextKey = crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, nextKey);
+    return nextKey;
+  });
   const [isIssued, setIsIssued] = useState(false);
   const [issuedReceipt, setIssuedReceipt] = useState<ReceiptWithRelations | null>(null);
   const [showManualSign, setShowManualSign] = useState(false);
@@ -93,6 +100,7 @@ export default function ReceiptNew() {
         idempotency_key: idempotencyKey,
       });
       setIssuedReceipt(receipt);
+      window.sessionStorage.removeItem('audit-ledger:receipt-new:idempotency-key');
       setIsIssued(true);
     } catch (error) {
       console.error('Failed to create receipt:', error);
