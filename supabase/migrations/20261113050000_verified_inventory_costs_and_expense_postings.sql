@@ -677,3 +677,76 @@ END;
 $publication$;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Protect posted source documents from direct edits or deletion. Their journal
+-- entries are immutable; corrections must use an audited reversal/repost path.
+CREATE OR REPLACE FUNCTION public.guard_posted_inventory_transaction_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $posted_inventory_guard$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'An authenticated user is required to change inventory records';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_entries
+    WHERE source_type = 'stock_purchase'
+      AND source_id = OLD.id
+  ) THEN
+    RAISE EXCEPTION 'A stock purchase with a posted journal is immutable; record an audited reversal instead';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$posted_inventory_guard$;
+
+CREATE TRIGGER guard_posted_inventory_transaction_mutations
+BEFORE UPDATE OR DELETE ON public.inventory_transactions
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_posted_inventory_transaction_mutations();
+
+CREATE OR REPLACE FUNCTION public.guard_posted_petty_cash_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $posted_petty_cash_guard$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'An authenticated user is required to change petty-cash records';
+  END IF;
+
+  IF NEW.type IS DISTINCT FROM OLD.type THEN
+    RAISE EXCEPTION 'A petty-cash record cannot be reclassified between income and expense; use a controlled correction';
+  END IF;
+
+  IF OLD.type = 'expense' AND EXISTS (
+    SELECT 1
+    FROM public.journal_entries
+    WHERE source_type = 'petty_cash_expense'
+      AND source_id = OLD.id
+  ) THEN
+    RAISE EXCEPTION 'An expense with a posted journal is immutable; record an audited reversal instead';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$posted_petty_cash_guard$;
+
+CREATE TRIGGER guard_posted_petty_cash_mutations
+BEFORE UPDATE OR DELETE ON public.petty_cash_transactions
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_posted_petty_cash_mutations();
+
+REVOKE ALL ON FUNCTION public.guard_posted_inventory_transaction_mutations() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.guard_posted_petty_cash_mutations() FROM PUBLIC, anon, authenticated;
