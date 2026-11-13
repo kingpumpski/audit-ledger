@@ -203,6 +203,13 @@ BEGIN
     RAISE EXCEPTION 'Invoice line was not found';
   END IF;
 
+  IF v_item.product_id IS NULL OR EXISTS (
+    SELECT 1 FROM public.products
+    WHERE id = v_item.product_id AND is_service = true
+  ) THEN
+    RAISE EXCEPTION 'Service and manual invoice lines require a separate evidenced direct-cost workflow; they cannot be credited against inventory';
+  END IF;
+
   SELECT * INTO v_invoice
   FROM public.invoices
   WHERE id = v_item.invoice_id
