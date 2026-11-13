@@ -235,6 +235,7 @@ BEGIN
 END;
 $historical_cost$;
 
+REVOKE ALL ON FUNCTION public.snapshot_invoice_item_cost() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.guard_invoice_item_cost_changes() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.set_historical_invoice_item_cost(uuid, numeric, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_historical_invoice_item_cost(uuid, numeric, text, text) TO authenticated;
