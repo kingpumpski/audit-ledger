@@ -202,6 +202,8 @@ DECLARE
   v_prev_taxable numeric(15,2);
   v_inventory_cost numeric(15,2);
   v_unit_cost numeric(14,4);
+  v_previous_quantity integer;
+  v_new_quantity integer;
   v_is_service boolean;
   v_is_inventory boolean;
   v_subtotal numeric(15,2) := 0;
@@ -552,23 +554,25 @@ BEGIN
     GROUP BY product_id
     ORDER BY product_id
   LOOP
-    PERFORM 1 FROM public.products WHERE id=v_request.product_id FOR UPDATE;
+    SELECT COALESCE(stock_quantity,0) INTO v_previous_quantity
+    FROM public.products WHERE id=v_request.product_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Returned product no longer exists'; END IF;
+    v_new_quantity := v_previous_quantity + v_request.quantity;
 
     UPDATE public.products
-    SET stock_quantity = COALESCE(stock_quantity,0) + v_request.quantity
+    SET stock_quantity = v_new_quantity
     WHERE id=v_request.product_id;
 
     INSERT INTO public.inventory_transactions (
       product_id,type,quantity,previous_quantity,new_quantity,unit_cost,total_cost,
       reference_id,reference_type,reference_number,notes,performed_by,idempotency_key
-    )
-    SELECT p.id,'return',v_request.quantity,p.stock_quantity,
-           p.stock_quantity + v_request.quantity,v_request.unit_cost,v_request.total_cost,
-           v_credit_note_id,'credit_note',v_credit_note_number,
-           'Returned against invoice ' || v_invoice.invoice_number || ': ' || BTRIM(p_reason),
-           auth.uid(),gen_random_uuid()
-    FROM public.products p WHERE p.id=v_request.product_id;
+    ) VALUES (
+      v_request.product_id,'return',v_request.quantity,v_previous_quantity,
+      v_new_quantity,v_request.unit_cost,v_request.total_cost,
+      v_credit_note_id,'credit_note',v_credit_note_number,
+      'Returned against invoice ' || v_invoice.invoice_number || ': ' || BTRIM(p_reason),
+      auth.uid(),gen_random_uuid()
+    );
   END LOOP;
 
   UPDATE public.credit_notes SET journal_entry_id=v_journal_id WHERE id=v_credit_note_id;
