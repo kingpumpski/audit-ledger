@@ -58,7 +58,7 @@ interface LineItem {
 export default function InvoiceNew() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { createInvoice, issueInvoice, isCreating, isIssuing } = useInvoices();
+  const { createInvoice, issueInvoiceAsync, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
   const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
@@ -80,7 +80,6 @@ export default function InvoiceNew() {
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
@@ -226,12 +225,22 @@ export default function InvoiceNew() {
         })),
       });
 
-      if (!asDraft && invoice?.id) {
-        // Issue the invoice immediately
-        issueInvoice(invoice.id);
+      if (!invoice?.id) {
+        throw new Error('The invoice was saved but its reference could not be confirmed. Please check the invoice list before trying again.');
       }
 
-      navigate('/invoices');
+      // When issuing immediately, wait for the database transaction to finish.
+      // Even if issuing fails, take the user to the saved invoice so it can be reviewed.
+      if (!asDraft) {
+        try {
+          await issueInvoiceAsync(invoice.id);
+        } catch {
+          navigate(`/invoices/${invoice.id}`);
+          return;
+        }
+      }
+
+      navigate(`/invoices/${invoice.id}`);
     } catch (error) {
       console.error('Failed to create invoice:', error);
     }
@@ -266,16 +275,17 @@ export default function InvoiceNew() {
         })),
       });
 
-      if (invoice?.id) {
-        // Issue and send email
-        issueInvoice(invoice.id);
-        toast({
-          title: 'Invoice Created & Sent',
-          description: 'The invoice has been created and will be emailed to the customer.',
-        });
+      if (!invoice?.id) {
+        throw new Error('The invoice was saved but its reference could not be confirmed. Please check the invoice list before trying again.');
       }
 
-      navigate('/invoices');
+      // Wait for issue/posting to finish before opening the review page.
+      // The issue mutation handles email delivery and reports any domain restrictions.
+      try {
+        await issueInvoiceAsync(invoice.id);
+      } finally {
+        navigate(`/invoices/${invoice.id}`);
+      }
     } catch (error) {
       console.error('Failed to create and send invoice:', error);
     }
