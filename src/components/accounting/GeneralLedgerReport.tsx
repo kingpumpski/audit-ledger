@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Loader2, Download, RefreshCw } from 'lucide-react';
 
 type LedgerEntry = {
@@ -108,6 +109,8 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
 
   const totalDebits = trialBalance.reduce((sum, row) => sum + row.debit, 0);
   const totalCredits = trialBalance.reduce((sum, row) => sum + row.credit, 0);
+  const balanceDifference = Math.abs(totalDebits - totalCredits);
+  const isBalanced = balanceDifference < 0.005;
 
   const downloadTrialBalance = () => {
     const headers = ['Account Code', 'Account', 'Type', 'Debit Balance', 'Credit Balance', 'Net Balance'];
@@ -155,6 +158,19 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
           <div className="rounded-lg bg-muted/40 p-3">
             <p className="text-sm text-muted-foreground">Credit balances</p>
             <p className="text-xl font-semibold">{formatAmount(totalCredits)}</p>
+          </div>
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-sm text-muted-foreground">Reconciliation status</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Badge variant={isBalanced ? 'secondary' : 'destructive'}>
+                {isBalanced ? 'Balanced' : 'Out of balance'}
+              </Badge>
+              {!isBalanced && (
+                <span className="text-sm font-semibold text-destructive tabular-nums">
+                  Difference: {formatAmount(balanceDifference)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {journalQuery.isLoading ? (
