@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(45);
+SELECT extensions.plan(48);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -14,6 +14,24 @@ INSERT INTO auth.users (
 INSERT INTO public.user_roles(user_id,role) VALUES
   ('c1000000-0000-4000-8000-000000000001','accountant'),
   ('c1000000-0000-4000-8000-000000000002','cashier');
+
+SELECT extensions.is(
+  has_table_privilege('authenticated','public.credit_notes','SELECT'),
+  true,
+  'Authenticated finance users receive read-only SELECT privilege on credit notes'
+);
+
+SELECT extensions.is(
+  has_table_privilege('authenticated','public.credit_notes','INSERT'),
+  false,
+  'Authenticated users cannot insert credit notes directly'
+);
+
+SELECT extensions.is(
+  has_table_privilege('anon','public.credit_notes','SELECT'),
+  false,
+  'Anonymous users cannot read credit notes'
+);
 
 INSERT INTO public.customers(code,name)
 VALUES('CREDIT-NOTE-CUSTOMER','Credit note test customer');
