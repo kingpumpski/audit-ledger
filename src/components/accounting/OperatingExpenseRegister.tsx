@@ -224,8 +224,9 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const totals = useMemo(() => (expensesQuery.data || []).reduce((result, expense) => {
     result.incurred += Number(expense.amount || 0);
     result.paid += Number(expense.amount_paid || 0);
+    if (!expense.reversal) result.outstanding += Math.max(0, Number(expense.amount || 0) - Number(expense.amount_paid || 0));
     return result;
-  }, { incurred: 0, paid: 0 }), [expensesQuery.data]);
+  }, { incurred: 0, paid: 0, outstanding: 0 }), [expensesQuery.data]);
 
   return (
     <>
@@ -241,7 +242,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Expenses incurred</p><p className="text-xl font-semibold">{money(totals.incurred, currencySymbol)}</p></div>
             <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Paid to date</p><p className="text-xl font-semibold">{money(totals.paid, currencySymbol)}</p></div>
-            <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Outstanding suppliers</p><p className="text-xl font-semibold">{money(totals.incurred - totals.paid, currencySymbol)}</p></div>
+            <div className="rounded-lg border p-4"><p className="text-sm text-muted-foreground">Outstanding suppliers</p><p className="text-xl font-semibold">{money(totals.outstanding, currencySymbol)}</p></div>
           </div>
           {expensesQuery.isLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> :
             expensesQuery.isError ? <div className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">Could not load operating expenses. Check finance-role access and refresh.</div> :
