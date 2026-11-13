@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(10);
+SELECT extensions.plan(21);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -27,7 +27,8 @@ INSERT INTO public.products (
 )
 VALUES
   ('TEST-DAMAGE-001', 'Damage workflow test product', 20, 8.25, true, 10, false, true),
-  ('TEST-DAMAGE-002', 'Unverified damage test product', 20, 8.25, false, 10, false, true);
+  ('TEST-DAMAGE-002', 'Unverified damage test product', 20, 8.25, false, 10, false, true),
+  ('TEST-PURCHASE-001', 'Stock purchase test product', 20, NULL, false, 0, false, true);
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
 
@@ -95,6 +96,92 @@ SELECT extensions.is(
   (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-DAMAGE-001'),
   7,
   'Idempotent retry does not decrement stock twice'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_stock_purchase(
+    (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+    4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
+    'cash', 'Initial test purchase', NULL,
+    'd0000000-0000-4000-8000-000000000201'
+  ) $,
+  'Accountant can record an evidenced stock purchase'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  4,
+  'Stock purchase increases physical quantity'
+);
+
+SELECT extensions.is(
+  (SELECT cost_price FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  7.5000::numeric,
+  'First purchase establishes verified unit cost'
+);
+
+SELECT extensions.ok(
+  (SELECT cost_price_verified FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  'Purchase evidence marks the product cost as verified'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_stock_purchase(
+    (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+    4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
+    'cash', 'Initial test purchase', NULL,
+    'd0000000-0000-4000-8000-000000000201'
+  ) $,
+  'Retry with the same stock-purchase idempotency key is accepted'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.inventory_transactions
+   WHERE reference_number = 'PURCHASE-TEST-001' AND type = 'purchase'),
+  1,
+  'Idempotent purchase retry does not duplicate inventory transactions'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  4,
+  'Idempotent purchase retry does not increase stock twice'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_stock_purchase(
+    (SELECT id FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+    2, 9.00, 'Test supplier', 'PURCHASE-TEST-002', 18.00,
+    'bank_transfer', 'Second test purchase', NULL,
+    'd0000000-0000-4000-8000-000000000202'
+  ) $,
+  'A subsequent stock purchase is posted successfully'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  6,
+  'Subsequent purchase adds the received quantity'
+);
+
+SELECT extensions.is(
+  (SELECT cost_price FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
+  8.0000::numeric,
+  'Weighted-average purchase cost is recalculated correctly'
+);
+
+SELECT extensions.ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.journal_entries je
+    JOIN public.inventory_transactions it
+      ON it.id = je.source_id AND it.type = 'purchase'
+    JOIN public.journal_lines jl ON jl.journal_entry_id = je.id
+    WHERE je.source_type = 'stock_purchase'
+    GROUP BY je.id
+    HAVING round(sum(jl.debit - jl.credit), 2) <> 0
+  ),
+  'Every stock-purchase journal is balanced'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
