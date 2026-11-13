@@ -337,6 +337,10 @@ export type Database = {
           created_at: string
           id: string
           new_quantity: number | null
+          supplier_name: string | null
+          reference_number: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          amount_paid: number
           notes: string | null
           performed_by: string | null
           previous_quantity: number | null
@@ -352,6 +356,10 @@ export type Database = {
           created_at?: string
           id?: string
           new_quantity?: number | null
+          supplier_name?: string | null
+          reference_number?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          amount_paid?: number
           notes?: string | null
           performed_by?: string | null
           previous_quantity?: number | null
@@ -403,6 +411,8 @@ export type Database = {
           tax_amount: number | null
           tax_rate: number | null
           unit_price: number
+          unit_cost: number | null
+          cost_source: string | null
         }
         Insert: {
           created_at?: string
@@ -418,6 +428,8 @@ export type Database = {
           tax_amount?: number | null
           tax_rate?: number | null
           unit_price: number
+          unit_cost?: number | null
+          cost_source?: string | null
         }
         Update: {
           created_at?: string
@@ -433,6 +445,8 @@ export type Database = {
           tax_amount?: number | null
           tax_rate?: number | null
           unit_price?: number
+          unit_cost?: number | null
+          cost_source?: string | null
         }
         Relationships: [
           {
@@ -995,6 +1009,7 @@ export type Database = {
           id: string
           recorded_by: string | null
           reference_number: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
           type: string
           updated_at: string
         }
@@ -1007,6 +1022,7 @@ export type Database = {
           id?: string
           recorded_by?: string | null
           reference_number?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
           type: string
           updated_at?: string
         }
@@ -1069,7 +1085,8 @@ export type Database = {
         Row: {
           category: string | null
           cost_price: number | null
-          created_at: string
+          cost_price_verified: boolean
+          created_at
           created_by: string | null
           current_price: number
           deleted_at: string | null
@@ -1088,6 +1105,7 @@ export type Database = {
         Insert: {
           category?: string | null
           cost_price?: number | null
+          cost_price_verified?: boolean
           created_at?: string
           created_by?: string | null
           current_price: number
@@ -1434,6 +1452,19 @@ export type Database = {
       }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
       issue_invoice: { Args: { p_invoice_id: string }; Returns: string }
+      record_stock_purchase: {
+        Args: {
+          p_product_id: string
+          p_quantity: number
+          p_unit_cost: number
+          p_supplier_name?: string | null
+          p_reference_number?: string | null
+          p_amount_paid?: number
+          p_payment_method?: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       record_invoice_payment: {
         Args: {
           p_invoice_id: string
