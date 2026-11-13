@@ -1475,6 +1475,7 @@ export type Database = {
           p_payment_method?: Database["public"]["Enums"]["payment_method"]
           p_notes?: string | null
           p_opening_unit_cost?: number | null
+          p_idempotency_key: string
         }
         Returns: string
       }
