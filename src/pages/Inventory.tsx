@@ -33,7 +33,7 @@ export default function Inventory() {
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustForm, setAdjustForm] = useState({
-    type: 'adjustment' as string,
+    type: 'purchase' as string,
     quantity: 0,
     notes: '',
     unitCost: 0,
@@ -115,7 +115,7 @@ export default function Inventory() {
       toast({ title: 'Stock purchase recorded with verified actual cost' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
-      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
+      setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
     },
     onError: (error) => {
       toast({ title: 'Failed to update stock', description: error.message, variant: 'destructive' });
@@ -228,7 +228,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
