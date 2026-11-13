@@ -1,3 +1,8 @@
+-- Preserve four-decimal weighted-average cost; two-decimal storage loses cost precision.
+ALTER TABLE public.products
+  ALTER COLUMN cost_price TYPE numeric(18,4)
+  USING ROUND(cost_price,4);
+
 CREATE OR REPLACE FUNCTION public.invalidate_product_cost_verification()
 RETURNS trigger
 LANGUAGE plpgsql
