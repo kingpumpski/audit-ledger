@@ -233,7 +233,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5" />Operating Expense Register</CardTitle>
-            <CardDescription>Record supplier and business expenses when incurred, then track partial or full settlement. Expense recognition and cash payment are posted separately.</CardDescription>
+            <CardDescription>Record supplier and business expenses, track settlements, and process evidenced reversals and supplier refunds without deleting original ledger history.</CardDescription>
           </div>
           <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Record Expense</Button>
         </CardHeader>
@@ -248,12 +248,14 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
             <div className="overflow-x-auto">
               <table className="w-full min-w-[850px] text-sm">
                 <thead><tr className="border-b text-left text-muted-foreground">
-                  <th className="p-2">Date / Reference</th><th className="p-2">Supplier / Description</th><th className="p-2">Account</th><th className="p-2 text-right">Amount</th><th className="p-2 text-right">Paid</th><th className="p-2 text-right">Balance</th><th className="p-2">Status</th><th className="p-2"></th>
+                  <th className="p-2">Date / Reference</th><th className="p-2">Supplier / Description</th><th className="p-2">Account</th><th className="p-2 text-right">Amount</th><th className="p-2 text-right">Paid</th><th className="p-2 text-right">Refunded</th><th className="p-2 text-right">Balance</th><th className="p-2">Status</th><th className="p-2"></th>
                 </tr></thead>
                 <tbody>
                   {(expensesQuery.data || []).map(expense => {
                     const amount = Number(expense.amount || 0);
                     const paid = Number(expense.amount_paid || 0);
+                    const refunded = (expense.refunds || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+                    const refundDue = expense.reversal ? Math.max(0, paid - refunded) : 0;
                     const outstanding = expense.reversal ? 0 : Math.max(0, amount - paid);
                     return <tr key={expense.id} className="border-b">
                       <td className="p-2"><div>{format(new Date(expense.incurred_on), 'dd MMM yyyy')}</div><div className="text-xs text-muted-foreground">{expense.expense_number} · {expense.reference_number}</div></td>
@@ -261,9 +263,10 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
                       <td className="p-2">{expense.expense_account?.code} · {expense.expense_account?.name}</td>
                       <td className="p-2 text-right">{money(amount, currencySymbol)}</td>
                       <td className="p-2 text-right">{money(paid, currencySymbol)}</td>
+                      <td className="p-2 text-right">{money(refunded, currencySymbol)}</td>
                       <td className="p-2 text-right font-medium">{money(outstanding, currencySymbol)}</td>
                       <td className="p-2">{expense.reversal ? <Badge variant="destructive">Reversed</Badge> : outstanding <= 0 ? <Badge>Paid</Badge> : paid > 0 ? <Badge variant="secondary">Part paid</Badge> : <Badge variant="outline">Unpaid</Badge>}</td>
-                      <td className="p-2 text-right">{outstanding > 0 && <div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setSettlement(expense); setPayment({ amount: outstanding.toFixed(2), paidOn: today(), method: 'cash', reference: '' }); }}>Settle</Button>{paid === 0 && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setReversal(expense); setReversalForm({ reason: '', reference: '' }); }}>Reverse</Button>}</div>}</td>
+                      <td className="p-2 text-right"><div className="flex justify-end gap-2">{outstanding > 0 && <Button size="sm" variant="outline" onClick={() => { setSettlement(expense); setPayment({ amount: outstanding.toFixed(2), paidOn: today(), method: 'cash', reference: '' }); }}>Settle</Button>}{!expense.reversal && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { setReversal(expense); setReversalForm({ reason: '', reference: '' }); }}>Reverse</Button>}{refundDue > 0 && <Button size="sm" variant="outline" onClick={() => { setRefund(expense); setRefundForm({ amount: refundDue.toFixed(2), refundedOn: today(), method: 'cash', reference: '' }); }}>Record refund</Button>}</div></td>
                     </tr>;
                   })}
                 </tbody>
