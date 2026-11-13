@@ -118,7 +118,9 @@ BEGIN
   IF (NEW.unit_cost IS DISTINCT FROM OLD.unit_cost
       OR NEW.cost_source IS DISTINCT FROM OLD.cost_source
       OR NEW.cost_reference IS DISTINCT FROM OLD.cost_reference
-      OR NEW.cost_notes IS DISTINCT FROM OLD.cost_notes)
+      OR NEW.cost_notes IS DISTINCT FROM OLD.cost_notes
+      OR NEW.cost_verified_by IS DISTINCT FROM OLD.cost_verified_by
+      OR NEW.cost_verified_at IS DISTINCT FROM OLD.cost_verified_at)
      AND COALESCE(current_setting('app.historical_cost_rpc', true), '') <> 'on' THEN
     RAISE EXCEPTION 'Historical item costs must be updated through the audited cost verification action';
   END IF;
@@ -127,10 +129,42 @@ END;
 $cost_change_guard$;
 
 CREATE TRIGGER guard_invoice_item_cost_changes
-BEFORE UPDATE OF unit_cost, cost_source, cost_reference, cost_notes
+BEFORE UPDATE OF unit_cost, cost_source, cost_reference, cost_notes, cost_verified_by, cost_verified_at
 ON public.invoice_items
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_invoice_item_cost_changes();
+
+-- Once an invoice is issued, its quantity/product basis and cost snapshot are
+-- historical accounting evidence. Corrections must be issued as a credit note
+-- or reversal, never by silently changing the original invoice lines.
+CREATE OR REPLACE FUNCTION public.guard_issued_invoice_item_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $issued_invoice_item_guard$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.invoices
+  WHERE id = OLD.invoice_id;
+
+  IF v_status IN ('issued', 'partially_paid', 'paid', 'overdue')
+     AND (NEW.product_id IS DISTINCT FROM OLD.product_id
+       OR NEW.quantity IS DISTINCT FROM OLD.quantity
+       OR NEW.unit_price IS DISTINCT FROM OLD.unit_price
+       OR NEW.description IS DISTINCT FROM OLD.description) THEN
+    RAISE EXCEPTION 'Issued invoice lines are immutable; use a credit note or audited correction';
+  END IF;
+  RETURN NEW;
+END;
+$issued_invoice_item_guard$;
+
+CREATE TRIGGER guard_issued_invoice_item_mutations
+BEFORE UPDATE OF product_id, quantity, unit_price, description
+ON public.invoice_items
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_issued_invoice_item_mutations();
 
 CREATE OR REPLACE FUNCTION public.set_historical_invoice_item_cost(
   p_invoice_item_id uuid,
@@ -286,6 +320,9 @@ BEGIN
   END IF;
   IF p_unit_cost IS NULL OR p_unit_cost < 0 THEN
     RAISE EXCEPTION 'A valid actual unit purchase cost is required';
+  END IF;
+  IF NULLIF(BTRIM(p_reference_number), '') IS NULL THEN
+    RAISE EXCEPTION 'A supplier invoice, receipt or purchase reference is required';
   END IF;
 
   v_total_cost := ROUND(p_quantity * p_unit_cost, 2);
