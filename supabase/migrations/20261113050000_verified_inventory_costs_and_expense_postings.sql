@@ -1816,3 +1816,38 @@ DROP POLICY IF EXISTS "Admins accountants cashiers manage inventory"
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_damage_journal_source
   ON public.journal_entries(source_type, source_id)
   WHERE source_type = 'inventory_damage';
+
+
+-- A catalogue item cannot be reclassified between physical stock and a service
+-- after it has been used by inventory or invoice history. This keeps old COGS,
+-- stock movements and service direct costs interpretable.
+CREATE OR REPLACE FUNCTION public.guard_product_service_type_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $product_service_type_guard$
+BEGIN
+  IF NEW.is_service IS DISTINCT FROM OLD.is_service AND (
+    COALESCE(OLD.stock_quantity, 0) > 0
+    OR EXISTS (
+      SELECT 1 FROM public.inventory_transactions
+      WHERE product_id = OLD.id
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.invoice_items
+      WHERE product_id = OLD.id
+    )
+  ) THEN
+    RAISE EXCEPTION 'Product type cannot be changed after stock or invoice history exists; create a correctly classified item and use an audited correction';
+  END IF;
+  RETURN NEW;
+END;
+$product_service_type_guard$;
+
+CREATE TRIGGER guard_product_service_type_changes
+BEFORE UPDATE OF is_service ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_product_service_type_changes();
+
+REVOKE ALL ON FUNCTION public.guard_product_service_type_changes() FROM PUBLIC, anon, authenticated;
