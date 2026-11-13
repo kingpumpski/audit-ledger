@@ -36,6 +36,11 @@ export default function Inventory() {
     type: 'adjustment' as string,
     quantity: 0,
     notes: '',
+    unitCost: 0,
+    supplierName: '',
+    referenceNumber: '',
+    amountPaid: 0,
+    paymentMethod: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -72,14 +77,32 @@ export default function Inventory() {
   ).length;
 
   const totalStockValue = physicalProducts.reduce((sum, p) =>
-    sum + (p.stock_quantity || 0) * (p.cost_price || p.current_price), 0
+    sum + (p.cost_price_verified ? (p.stock_quantity || 0) * Number(p.cost_price || 0) : 0), 0
   );
+  const uncostedStockCount = physicalProducts.filter(p =>
+    (p.stock_quantity || 0) > 0 && !p.cost_price_verified
+  ).length;
 
   const recordAdjustment = useMutation({
     mutationFn: async () => {
       if (!selectedProduct) return;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      if (adjustForm.type === 'purchase') {
+        const { error } = await supabase.rpc('record_stock_purchase', {
+          p_product_id: selectedProduct.id,
+          p_quantity: adjustForm.quantity,
+          p_unit_cost: adjustForm.unitCost,
+          p_supplier_name: adjustForm.supplierName || null,
+          p_reference_number: adjustForm.referenceNumber || null,
+          p_amount_paid: adjustForm.amountPaid,
+          p_payment_method: adjustForm.paymentMethod,
+          p_notes: adjustForm.notes || null,
+        });
+        if (error) throw error;
+        return;
+      }
 
       const prevQty = selectedProduct.stock_quantity || 0;
       let newQty: number;
@@ -120,10 +143,11 @@ export default function Inventory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
-      toast({ title: 'Stock updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      toast({ title: adjustForm.type === 'purchase' ? 'Stock purchase recorded with verified actual cost' : 'Stock updated successfully' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
-      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '' });
+      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
     },
     onError: (error) => {
       toast({ title: 'Failed to update stock', description: error.message, variant: 'destructive' });
@@ -167,8 +191,9 @@ export default function Inventory() {
                 <TrendingUp className="h-5 w-5 text-success" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Stock Value</p>
+                <p className="text-sm text-muted-foreground">Verified Stock Value</p>
                 <p className="text-2xl font-bold">{currencySymbol}{totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                {uncostedStockCount > 0 && <p className="mt-1 text-xs text-warning">{uncostedStockCount} product(s) need an actual purchase cost</p>}
               </div>
             </div>
           </CardContent>
@@ -224,7 +249,9 @@ export default function Inventory() {
                         </td>
                         <td className={cn('font-medium', isLow && 'text-warning')}>{product.stock_quantity ?? 0}</td>
                         <td className="text-muted-foreground">{product.min_stock_level ?? '—'}</td>
-                        <td>{currencySymbol}{((product.stock_quantity || 0) * (product.cost_price || product.current_price)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                        <td>{product.cost_price_verified
+                          ? `${currencySymbol}${((product.stock_quantity || 0) * Number(product.cost_price || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : <span className="text-warning text-xs">Cost not verified</span>}</td>
                         <td>
                           {isLow ? (
                             <Badge variant="destructive" className="bg-warning/10 text-warning border-warning/20">Low Stock</Badge>
@@ -233,7 +260,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'adjustment', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
@@ -316,6 +343,51 @@ export default function Inventory() {
                 onChange={e => setAdjustForm({ ...adjustForm, quantity: parseInt(e.target.value) || 0 })}
               />
             </div>
+            {adjustForm.type === 'purchase' && (
+              <>
+                <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                  Enter the supplier's actual unit purchase cost. This purchase will update the product's weighted-average cost and post Inventory against Cash/Bank and Accounts Payable.
+                  {(selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && (
+                    <p className="mt-2 font-medium text-warning">This product already has stock without a verified opening cost. Record its opening stock valuation first.</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Actual Unit Cost ({currencySymbol}) *</Label>
+                    <Input type="number" min="0" step="0.0001" value={adjustForm.unitCost || ''} onChange={e => setAdjustForm({ ...adjustForm, unitCost: Number(e.target.value) || 0 })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Amount Paid ({currencySymbol})</Label>
+                    <Input type="number" min="0" step="0.01" value={adjustForm.amountPaid || ''} onChange={e => setAdjustForm({ ...adjustForm, amountPaid: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Supplier</Label>
+                    <Input value={adjustForm.supplierName} onChange={e => setAdjustForm({ ...adjustForm, supplierName: e.target.value })} placeholder="Supplier name (optional)" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Supplier Reference</Label>
+                    <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Invoice / receipt number" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select value={adjustForm.paymentMethod} onValueChange={v => setAdjustForm({ ...adjustForm, paymentMethod: v as typeof adjustForm.paymentMethod })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                      <SelectItem value="debit_card">Debit Card</SelectItem>
+                      <SelectItem value="check">Cheque</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
@@ -327,7 +399,14 @@ export default function Inventory() {
             </div>
             <div className="sticky bottom-0 z-10 flex shrink-0 justify-end gap-3 border-t bg-background pt-4">
               <Button variant="outline" onClick={() => setIsAdjustOpen(false)}>Cancel</Button>
-              <Button onClick={() => recordAdjustment.mutate()} disabled={recordAdjustment.isPending || adjustForm.quantity <= 0}>
+              <Button onClick={() => recordAdjustment.mutate()} disabled={
+                recordAdjustment.isPending || adjustForm.quantity <= 0 ||
+                (adjustForm.type === 'purchase' && (
+                  adjustForm.unitCost <= 0 ||
+                  adjustForm.amountPaid > adjustForm.quantity * adjustForm.unitCost ||
+                  ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified)
+                ))
+              }>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save Adjustment
               </Button>
