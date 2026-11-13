@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(41);
+SELECT extensions.plan(44);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -29,6 +29,12 @@ VALUES
   ('TEST-DAMAGE-001', 'Damage workflow test product', 20, 8.25, true, 10, false, true),
   ('TEST-DAMAGE-002', 'Unverified damage test product', 20, 8.25, false, 10, false, true),
   ('TEST-PURCHASE-001', 'Stock purchase test product', 20, NULL, false, 0, false, true);
+
+INSERT INTO public.products (
+  sku, name, current_price, cost_price, cost_price_verified,
+  stock_quantity, is_service, is_active
+)
+VALUES ('TEST-TYPE-001', 'Unused product type test', 15, NULL, false, 0, false, true);
 
 INSERT INTO public.customers (code, name)
 VALUES ('TEST-CUSTOMER-001', 'Inventory test customer');
@@ -442,6 +448,27 @@ SELECT extensions.is(
   (SELECT status::text FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-002'),
   'draft',
   'Rejected invoice issue leaves the invoice in draft'
+);
+
+SELECT extensions.throws_ok(
+  $$ UPDATE public.products
+     SET is_service = true
+     WHERE sku = 'TEST-PURCHASE-001' $$,
+  'P0001',
+  'Product type cannot be changed after stock or invoice history exists; create a correctly classified item and use an audited correction',
+  'A product with inventory or invoice history cannot be reclassified as a service'
+);
+
+SELECT extensions.lives_ok(
+  $$ UPDATE public.products
+     SET is_service = true
+     WHERE sku = 'TEST-TYPE-001' $$,
+  'An unused product without stock or invoice history can be reclassified'
+);
+
+SELECT extensions.ok(
+  (SELECT is_service FROM public.products WHERE sku = 'TEST-TYPE-001'),
+  'Allowed product type correction is saved'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
