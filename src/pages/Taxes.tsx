@@ -116,17 +116,35 @@ export default function Taxes() {
   const taxReportQuery = useQuery({
     queryKey: ['tax-report'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('invoice_taxes')
-        .select(`
-          id, tax_rate, taxable_amount, tax_amount, created_at,
-          tax:taxes(name, code),
-          invoice:invoices(invoice_number, issue_date, status, customer:customers(name))
-        `)
-        .order('created_at', { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      return data;
+      const pageSize = 1000;
+      let offset = 0;
+      const allRows: Array<{
+        id: string;
+        tax_rate: number;
+        taxable_amount: number;
+        tax_amount: number;
+        created_at: string;
+        tax: { name: string; code: string } | null;
+        invoice: { invoice_number: string; issue_date: string; status: string; customer: { name: string } | null } | null;
+      }> = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('invoice_taxes')
+          .select(`
+            id, tax_rate, taxable_amount, tax_amount, created_at,
+            tax:taxes(name, code),
+            invoice:invoices(invoice_number, issue_date, status, customer:customers(name))
+          `)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        allRows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      return allRows;
     },
   });
 
