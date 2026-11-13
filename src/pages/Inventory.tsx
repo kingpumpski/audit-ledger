@@ -116,6 +116,7 @@ export default function Inventory() {
         p_amount_paid: adjustForm.amountPaid,
         p_payment_method: adjustForm.paymentMethod,
         p_notes: adjustForm.notes || null,
+        p_idempotency_key: adjustIdempotencyKey,
       });
       if (error) throw error;
     },
@@ -241,7 +242,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
