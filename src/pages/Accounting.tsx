@@ -103,20 +103,28 @@ export default function Accounting() {
   const currencySymbol = settings?.currency_symbol || '$';
 
   // Fetch petty cash
-  const { data: pettyCash = [] } = useQuery({
+  const { data: pettyCash = [], isError: pettyCashError, isLoading: pettyCashLoading } = useQuery({
     queryKey: ['petty-cash'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('petty_cash_transactions')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return data;
+      const rows: Array<(typeof pettyCash)[number]> = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('petty_cash_transactions')
+          .select('*')
+          .order('date', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+      return rows;
     },
   });
 
-  const { data: operatingExpenseRecords = [] } = useQuery({
+  const { data: operatingExpenseRecords = [], isError: operatingExpensesError, isLoading: operatingExpensesLoading } = useQuery({
     queryKey: ['operating-expenses-summary'],
     queryFn: async () => {
       const rows: OperatingExpenseSummary[] = [];
@@ -319,6 +327,9 @@ export default function Accounting() {
           </div>
         </CardContent></Card>
       </div>
+
+      {(pettyCashError || operatingExpensesError) && <Card className="mb-4 border-destructive/40"><CardContent className="p-4 text-sm text-destructive">Some expense records could not be loaded. Expense totals and financial summaries may be incomplete; refresh or check finance-role access before relying on these figures.</CardContent></Card>}
+      {(pettyCashLoading || operatingExpensesLoading) && <p className="mb-3 text-sm text-muted-foreground">Loading complete expense records…</p>}
 
       <Tabs defaultValue="pl" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
