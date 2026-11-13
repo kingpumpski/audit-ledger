@@ -51,6 +51,7 @@ export default function ReceiptNew() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [notes, setNotes] = useState('');
   const [signatureData, setSignatureData] = useState('');
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [isIssued, setIsIssued] = useState(false);
   const [issuedReceipt, setIssuedReceipt] = useState<ReceiptWithRelations | null>(null);
   const [showManualSign, setShowManualSign] = useState(false);
@@ -89,6 +90,7 @@ export default function ReceiptNew() {
         payment_method: paymentMethod,
         notes,
         signature_data: signatureData,
+        idempotency_key: idempotencyKey,
       });
       setIssuedReceipt(receipt);
       setIsIssued(true);
