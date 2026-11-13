@@ -1775,3 +1775,15 @@ $inventory_damage$;
 
 REVOKE ALL ON FUNCTION public.record_inventory_damage(uuid, integer, text, uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_inventory_damage(uuid, integer, text, uuid, text) TO authenticated;
+
+
+-- Inventory transaction history is append-only from the client. Purchases,
+-- invoice sales and damage are inserted only by their SECURITY DEFINER RPCs.
+-- Employees retain the existing read policy; the old ALL policy would have
+-- allowed fabricated transaction rows that did not move stock or post a journal.
+DROP POLICY IF EXISTS "Admins accountants cashiers manage inventory"
+  ON public.inventory_transactions;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_damage_journal_source
+  ON public.journal_entries(source_type, source_id)
+  WHERE source_type = 'inventory_damage';
