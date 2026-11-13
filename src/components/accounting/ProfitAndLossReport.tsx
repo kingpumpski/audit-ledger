@@ -1,9 +1,13 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Loader2, TrendingUp, TrendingDown, CircleAlert, CircleCheck } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 type JournalLine = {
   debit: number;
@@ -17,16 +21,43 @@ type JournalEntry = {
   lines: JournalLine[];
 };
 
+type UncostedInvoiceLine = {
+  id: string;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  product_id: string | null;
+  invoice_number: string;
+  issue_date: string;
+  product_name: string | null;
+};
+
+type CostInput = { unitCost: string; reference: string; notes: string };
+
 export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [costInputs, setCostInputs] = useState<Record<string, CostInput>>({});
+
   const journalQuery = useQuery({
     queryKey: ['profit-loss-journal'],
     queryFn: async (): Promise<JournalEntry[]> => {
-      const { data, error } = await supabase
-        .from('journal_entries')
-        .select('entry_date, source_type, lines:journal_lines(debit, credit, account:chart_of_accounts(code, account_type))')
-        .order('entry_date', { ascending: true });
-      if (error) throw error;
-      return (data || []) as unknown as JournalEntry[];
+      const allEntries: JournalEntry[] = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('journal_entries')
+          .select('entry_date, source_type, lines:journal_lines(debit, credit, account:chart_of_accounts(code, account_type))')
+          .order('entry_date', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        allEntries.push(...((data || []) as unknown as JournalEntry[]));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+      return allEntries;
     },
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
@@ -35,21 +66,92 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   const costCoverageQuery = useQuery({
     queryKey: ['profit-loss-cost-coverage'],
     queryFn: async () => {
-      const [invoiceResult, itemResult] = await Promise.all([
-        supabase.from('invoices').select('id').in('status', ['issued', 'partially_paid', 'paid', 'overdue']).is('deleted_at', null),
-        supabase.from('invoice_items').select('invoice_id, unit_cost'),
-      ]);
-      if (invoiceResult.error) throw invoiceResult.error;
-      if (itemResult.error) throw itemResult.error;
-      const issuedInvoiceIds = new Set((invoiceResult.data || []).map(invoice => invoice.id));
-      const soldLines = (itemResult.data || []).filter(item => issuedInvoiceIds.has(item.invoice_id));
+      const pageSize = 1000;
+      const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
+      const missingItems: Array<{ id: string; invoice_id: string; description: string; quantity: number; unit_price: number; product_id: string | null }> = [];
+      const products: Array<{ id: string; name: string }> = [];
+
+      let offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('invoices')
+          .select('id, invoice_number, issue_date')
+          .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
+          .is('deleted_at', null)
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        invoices.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('invoice_items')
+          .select('id, invoice_id, description, quantity, unit_price, product_id')
+          .is('unit_cost', null)
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        missingItems.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      offset = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name')
+          .order('id')
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        products.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      const invoiceMap = new Map(invoices.map(invoice => [invoice.id, invoice]));
+      const productMap = new Map(products.map(product => [product.id, product.name]));
+      const uncostedItems: UncostedInvoiceLine[] = missingItems.flatMap(item => {
+        const invoice = invoiceMap.get(item.invoice_id);
+        if (!invoice) return [];
+        return [{
+          ...item,
+          invoice_number: invoice.invoice_number,
+          issue_date: invoice.issue_date || '',
+          product_name: item.product_id ? productMap.get(item.product_id) || null : null,
+        }];
+      });
       return {
-        soldLineCount: soldLines.length,
-        uncostedLineCount: soldLines.filter(item => item.unit_cost === null).length,
+        soldLineCount: invoices.length,
+        uncostedLineCount: uncostedItems.length,
+        uncostedItems,
       };
     },
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
+  });
+
+  const verifyHistoricalCost = useMutation({
+    mutationFn: async ({ itemId, unitCost, reference, notes }: { itemId: string; unitCost: number; reference: string; notes: string }) => {
+      const { error } = await supabase.rpc('set_historical_invoice_item_cost', {
+        p_invoice_item_id: itemId,
+        p_unit_cost: unitCost,
+        p_reference: reference,
+        p_notes: notes || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      toast({ title: 'Historical cost verified', description: 'The source reference was saved and cost of sales was posted when the invoice became fully costed.' });
+    },
+    onError: error => toast({ title: 'Could not verify historical cost', description: error.message, variant: 'destructive' }),
   });
 
   const totals = useMemo(() => {
@@ -69,6 +171,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
     return { revenue, costOfGoodsSold, operatingExpenses };
   }, [journalQuery.data]);
 
+  const uncostedItems = costCoverageQuery.data?.uncostedItems || [];
   const uncosted = costCoverageQuery.data?.uncostedLineCount || 0;
   const costCoverageComplete = costCoverageQuery.isSuccess && uncosted === 0;
   const grossProfit = totals.revenue - totals.costOfGoodsSold;
@@ -99,7 +202,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           ) : (
             <Badge variant="destructive" className="gap-1"><CircleAlert className="h-3.5 w-3.5" />Profit withheld — {uncosted} sold line(s) without verified cost</Badge>
           )}
-          <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice line(s) checked</span>
+          <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice(s) checked</span>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -140,11 +243,45 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           </div>
         </div>
 
+        {uncostedItems.length > 0 && (
+          <div className="space-y-3">
+            <div>
+              <h3 className="font-semibold">Verify historical product costs</h3>
+              <p className="text-sm text-muted-foreground">Enter the actual unit cost from the supplier invoice, purchase receipt or reliable historical record. A reference is required; costs are not guessed from today's product price.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-[900px]">
+                <thead><tr><th>Invoice / Date</th><th>Product / Description</th><th>Qty</th><th>Actual Unit Cost</th><th>Source Reference *</th><th>Notes</th><th>Action</th></tr></thead>
+                <tbody>
+                  {uncostedItems.map(item => {
+                    const input = costInputs[item.id] || { unitCost: '', reference: '', notes: '' };
+                    return (
+                      <tr key={item.id}>
+                        <td><span className="font-medium">{item.invoice_number}</span><span className="block text-xs text-muted-foreground">{item.issue_date}</span></td>
+                        <td><span className="font-medium">{item.product_name || item.description}</span>{item.product_name && <span className="block text-xs text-muted-foreground">{item.description}</span>}</td>
+                        <td>{Number(item.quantity).toLocaleString()}</td>
+                        <td><Input type="number" min="0" step="0.0001" className="w-32" value={input.unitCost} onChange={e => setCostInputs(current => ({ ...current, [item.id]: { ...input, unitCost: e.target.value } }))} /></td>
+                        <td><Input className="w-40" value={input.reference} placeholder="Supplier ref" onChange={e => setCostInputs(current => ({ ...current, [item.id]: { ...input, reference: e.target.value } }))} /></td>
+                        <td><Input className="w-40" value={input.notes} placeholder="Optional" onChange={e => setCostInputs(current => ({ ...current, [item.id]: { ...input, notes: e.target.value } }))} /></td>
+                        <td>
+                          <Button size="sm" disabled={verifyHistoricalCost.isPending || input.unitCost.trim() === '' || Number(input.unitCost) < 0 || !input.reference.trim()} onClick={() => verifyHistoricalCost.mutate({ itemId: item.id, unitCost: Number(input.unitCost), reference: input.reference, notes: input.notes })}>
+                            {verifyHistoricalCost.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Verify
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {!costCoverageComplete && (
           <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
             <p className="font-medium">Why profit is not displayed</p>
             <p className="mt-1 text-muted-foreground">
-              At least one issued invoice line has no purchase-verified cost. Record the actual purchase or opening-stock valuation for each affected product, then create a new invoice for future sales. Historical sales are not assigned today's cost because that would invent past costs.
+              Historical invoice lines are not assigned today's product cost. Verify each missing cost against its original purchase evidence above. Future invoices automatically snapshot the current purchase-weighted average cost.
             </p>
           </div>
         )}
