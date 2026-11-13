@@ -69,7 +69,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-background">
+    <div className="relative min-h-screen w-full overflow-x-clip bg-background">
       <AppSidebar />
       {mobileOpen && (
         <button
@@ -85,7 +85,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
         'ml-0',
         collapsed ? 'md:ml-16' : 'md:ml-64'
       )}>
-        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-6">
+        <header className="sticky top-0 z-50 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               type="button"
