@@ -20,6 +20,7 @@ interface CreateReceiptData {
   payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
   notes?: string;
   signature_data?: string;
+  idempotency_key: string;
 }
 
 // Simple hash function for verification
@@ -89,6 +90,7 @@ export function useReceipts() {
         p_payment_id: receiptData.payment_id || null,
         p_amount: receiptData.amount,
         p_payment_method: receiptData.payment_method,
+        p_idempotency_key: receiptData.idempotency_key,
         p_notes: receiptData.notes || null,
         p_signature_data: receiptData.signature_data || null,
         p_signature_hash: signatureHash,
