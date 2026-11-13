@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(38);
+SELECT extensions.plan(41);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -222,6 +222,45 @@ SELECT extensions.is(
   (SELECT cost_price FROM public.products WHERE sku = 'TEST-PURCHASE-001'),
   8.0000::numeric,
   'Weighted-average purchase cost is recalculated correctly'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.inventory_transactions it ON it.id = je.source_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'stock_purchase'
+     AND it.reference_number = 'PURCHASE-TEST-001'
+     AND coa.code = '1000'),
+  10.00::numeric,
+  'Part-paid stock purchase credits cash for the amount actually paid'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.inventory_transactions it ON it.id = je.source_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'stock_purchase'
+     AND it.reference_number = 'PURCHASE-TEST-001'
+     AND coa.code = '2000'),
+  20.00::numeric,
+  'Unpaid stock purchase balance is recorded in Accounts Payable'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.inventory_transactions it ON it.id = je.source_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'stock_purchase'
+     AND it.reference_number = 'PURCHASE-TEST-002'
+     AND coa.code = '1010'),
+  18.00::numeric,
+  'Bank-paid stock purchase credits the bank account'
 );
 
 SELECT extensions.ok(
