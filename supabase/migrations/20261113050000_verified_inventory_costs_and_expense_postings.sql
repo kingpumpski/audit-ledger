@@ -994,7 +994,7 @@ BEGIN
       RAISE EXCEPTION 'Invoice inventory movement failed for product %; stock changed after issue validation', v_line.product_id;
     END IF;
 
-    v_new_quantity := v_product.stock_quantity - v_line.quantity;
+    v_new_quantity := v_product.stock_quantity - v_line.quantity::integer;
     UPDATE public.products
     SET stock_quantity = v_new_quantity
     WHERE id = v_product.id;
@@ -1004,7 +1004,7 @@ BEGIN
       unit_cost, total_cost, reference_id, reference_type, notes, performed_by
     )
     VALUES (
-      v_product.id, 'sale', v_line.quantity, v_product.stock_quantity, v_new_quantity,
+      v_product.id, 'sale', v_line.quantity::integer, v_product.stock_quantity, v_new_quantity,
       v_line.unit_cost, v_line.total_cost, NEW.source_id, 'invoice',
       'Stock relieved for issued invoice journal ' || NEW.entry_number, NEW.created_by
     );
@@ -1023,3 +1023,45 @@ EXECUTE FUNCTION public.post_invoice_inventory_movement();
 REVOKE ALL ON FUNCTION public.guard_product_inventory_value_changes() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.prepare_invoice_stock_issue() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.post_invoice_inventory_movement() FROM PUBLIC, anon, authenticated;
+
+
+-- Service catalogue items are not inventory assets and must never inherit a
+-- product purchase valuation as inventory COGS.
+CREATE OR REPLACE FUNCTION public.snapshot_invoice_item_cost()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $snapshot_cost$
+DECLARE
+  v_cost numeric(14,4);
+  v_verified boolean;
+  v_is_service boolean;
+BEGIN
+  IF NEW.product_id IS NULL THEN
+    NEW.unit_cost := NULL;
+    NEW.cost_source := NULL;
+    RETURN NEW;
+  END IF;
+
+  SELECT cost_price, cost_price_verified, COALESCE(is_service, false)
+    INTO v_cost, v_verified, v_is_service
+  FROM public.products
+  WHERE id = NEW.product_id
+    AND deleted_at IS NULL;
+
+  IF v_is_service THEN
+    NEW.unit_cost := NULL;
+    NEW.cost_source := NULL;
+  ELSIF COALESCE(v_verified, false) AND v_cost IS NOT NULL AND v_cost >= 0 THEN
+    NEW.unit_cost := v_cost;
+    NEW.cost_source := 'verified_weighted_average';
+  ELSE
+    NEW.unit_cost := NULL;
+    NEW.cost_source := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$snapshot_cost$;
+
