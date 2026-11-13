@@ -112,9 +112,12 @@ export function useReceipts() {
       if (fetchError) throw fetchError;
       return receipt;
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      if (receipt.invoice_id) {
+        queryClient.invalidateQueries({ queryKey: ['invoice', receipt.invoice_id] });
+      }
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       toast({ title: 'Receipt issued successfully' });
@@ -142,6 +145,7 @@ export function useReceipts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['receipt'] });
       toast({ title: 'Receipt updated successfully' });
     },
     onError: (error) => {
