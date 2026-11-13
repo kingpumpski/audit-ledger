@@ -23,6 +23,7 @@ interface CustomerCreditBalance {
   applied_amount: number;
   refunded_amount: number;
   remaining_amount: number;
+  can_manage: boolean;
 }
 
 interface OutstandingInvoice {
@@ -240,11 +241,11 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                    <div>Credit issued: {currencySymbol}{Number(credit.credit_amount).toFixed(2)}</div>
+                    <div>Customer credit created: {currencySymbol}{Number(credit.credit_amount).toFixed(2)}</div>
                     <div>Applied: {currencySymbol}{Number(credit.applied_amount).toFixed(2)}</div>
                     <div>Refunded: {currencySymbol}{Number(credit.refunded_amount).toFixed(2)}</div>
                   </div>
-                  {credit.remaining_amount > 0 && (
+                  {credit.remaining_amount > 0 && credit.can_manage && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="sm" variant="outline" onClick={() => openApply(credit)} disabled={!invoicesQuery.data?.length}>
                         <ArrowRightLeft className="mr-2 h-4 w-4" /> Apply to invoice
