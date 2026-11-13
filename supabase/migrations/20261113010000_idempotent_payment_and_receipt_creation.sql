@@ -64,7 +64,8 @@ BEGIN
       OR v_existing_payment.customer_id IS DISTINCT FROM p_customer_id
       OR ROUND(v_existing_payment.amount, 2) IS DISTINCT FROM ROUND(p_amount, 2)
       OR v_existing_payment.payment_method IS DISTINCT FROM p_payment_method
-      OR v_existing_payment.reference_number IS DISTINCT FROM v_reference_number THEN
+      OR v_existing_payment.reference_number IS DISTINCT FROM v_reference_number
+      OR NULLIF(BTRIM(v_existing_payment.notes), '') IS DISTINCT FROM NULLIF(BTRIM(p_notes), '') THEN
       RAISE EXCEPTION 'This payment idempotency key was already used with different payment details';
     END IF;
 
@@ -169,6 +170,8 @@ BEGIN
       OR v_existing_receipt.customer_id IS DISTINCT FROM p_customer_id
       OR ROUND(v_existing_receipt.amount, 2) IS DISTINCT FROM ROUND(p_amount, 2)
       OR v_existing_receipt.payment_method IS DISTINCT FROM p_payment_method
+      OR NULLIF(BTRIM(v_existing_receipt.notes), '') IS DISTINCT FROM NULLIF(BTRIM(p_notes), '')
+      OR v_existing_receipt.signature_hash IS DISTINCT FROM p_signature_hash
       OR (p_payment_id IS NOT NULL AND v_existing_receipt.payment_id IS DISTINCT FROM p_payment_id)
       OR (p_payment_id IS NULL AND v_existing_receipt.invoice_id IS DISTINCT FROM p_invoice_id) THEN
       RAISE EXCEPTION 'This receipt idempotency key was already used with different receipt details';
