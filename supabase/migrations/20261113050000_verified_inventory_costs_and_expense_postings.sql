@@ -24,7 +24,7 @@ ALTER TABLE public.journal_entries
   ADD CONSTRAINT journal_entries_source_type_check
   CHECK (source_type = ANY (ARRAY[
     'invoice'::text, 'payment'::text, 'receipt'::text, 'receipt_void'::text,
-    'stock_purchase'::text, 'petty_cash_expense'::text
+    'stock_purchase'::text, 'opening_stock_valuation'::text, 'petty_cash_expense'::text
   ]));
 
 ALTER TABLE public.inventory_transactions
@@ -111,7 +111,8 @@ CREATE OR REPLACE FUNCTION public.record_stock_purchase(
   p_reference_number text DEFAULT NULL,
   p_amount_paid numeric DEFAULT 0,
   p_payment_method public.payment_method DEFAULT 'cash',
-  p_notes text DEFAULT NULL
+  p_notes text DEFAULT NULL,
+  p_opening_unit_cost numeric DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -126,6 +127,10 @@ DECLARE
   v_inventory_account uuid;
   v_cash_account uuid;
   v_payable_account uuid;
+  v_equity_account uuid;
+  v_opening_journal_id uuid;
+  v_opening_entry_number text;
+  v_opening_value numeric(14,2) := 0;
   v_currency text;
   v_previous_quantity integer;
   v_new_quantity integer;
@@ -160,16 +165,23 @@ BEGIN
   END IF;
 
   v_previous_quantity := GREATEST(COALESCE(v_product.stock_quantity, 0), 0);
-  IF v_previous_quantity > 0 AND NOT COALESCE(v_product.cost_price_verified, false) THEN
-    RAISE EXCEPTION 'Existing stock has no verified cost. Record its opening stock value before adding a purchase.';
+  IF v_previous_quantity > 0 AND NOT COALESCE(v_product.cost_price_verified, false)
+     AND (p_opening_unit_cost IS NULL OR p_opening_unit_cost < 0) THEN
+    RAISE EXCEPTION 'Enter the actual unit cost of existing opening stock before adding a new purchase.';
   END IF;
 
   v_new_quantity := v_previous_quantity + p_quantity;
   IF v_previous_quantity = 0 THEN
     v_new_average_cost := ROUND(p_unit_cost, 4);
-  ELSE
+  ELSIF COALESCE(v_product.cost_price_verified, false) THEN
     v_new_average_cost := ROUND(
       ((v_previous_quantity * COALESCE(v_product.cost_price, 0)) + (p_quantity * p_unit_cost))
+      / v_new_quantity, 4
+    );
+  ELSE
+    v_opening_value := ROUND(v_previous_quantity * p_opening_unit_cost, 2);
+    v_new_average_cost := ROUND(
+      ((v_previous_quantity * p_opening_unit_cost) + (p_quantity * p_unit_cost))
       / v_new_quantity, 4
     );
   END IF;
@@ -198,6 +210,10 @@ BEGIN
   FROM public.chart_of_accounts
   WHERE code = '1200' AND account_type = 'asset' AND is_active
   LIMIT 1;
+  SELECT id INTO v_equity_account
+  FROM public.chart_of_accounts
+  WHERE code = '3000' AND account_type = 'equity' AND is_active
+  LIMIT 1;
   SELECT id INTO v_payable_account
   FROM public.chart_of_accounts
   WHERE code = '2000' AND account_type = 'liability' AND is_active
@@ -205,6 +221,33 @@ BEGIN
 
   IF v_inventory_account IS NULL OR v_payable_account IS NULL THEN
     RAISE EXCEPTION 'Inventory or Accounts Payable account is not configured';
+  END IF;
+  IF v_opening_value > 0 AND v_equity_account IS NULL THEN
+    RAISE EXCEPTION 'Owner equity account is not configured for opening stock valuation';
+  END IF;
+
+  SELECT COALESCE(currency_code, 'USD') INTO v_currency
+  FROM public.company_settings ORDER BY created_at LIMIT 1;
+  v_currency := COALESCE(v_currency, 'USD');
+
+  IF v_opening_value > 0 THEN
+    v_opening_entry_number := public.get_next_sequence('journal');
+    INSERT INTO public.journal_entries (
+      entry_number, entry_date, description, source_type, source_id, currency, created_by
+    )
+    VALUES (
+      v_opening_entry_number, CURRENT_DATE,
+      'Opening stock valuation - ' || v_product.name,
+      'opening_stock_valuation', p_product_id, v_currency, auth.uid()
+    )
+    RETURNING id INTO v_opening_journal_id;
+
+    INSERT INTO public.journal_lines (
+      journal_entry_id, line_number, account_id, description, debit, credit
+    )
+    VALUES
+      (v_opening_journal_id, 1, v_inventory_account, 'Opening inventory - ' || v_product.name, v_opening_value, 0),
+      (v_opening_journal_id, 2, v_equity_account, 'Opening stock equity - ' || v_product.name, 0, v_opening_value);
   END IF;
 
   IF v_amount_paid > 0 THEN
@@ -221,9 +264,6 @@ BEGIN
   END IF;
 
   v_entry_number := public.get_next_sequence('journal');
-  SELECT COALESCE(currency_code, 'USD') INTO v_currency
-  FROM public.company_settings ORDER BY created_at LIMIT 1;
-  v_currency := COALESCE(v_currency, 'USD');
 
   INSERT INTO public.journal_entries (
     entry_number, entry_date, description, source_type, source_id, currency, created_by
@@ -269,8 +309,8 @@ BEGIN
 END;
 $stock_purchase$;
 
-REVOKE ALL ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_stock_purchase(uuid, integer, numeric, text, text, numeric, public.payment_method, text, numeric) TO authenticated;
 
 -- Attach cost of sales to the same balanced journal as the invoice revenue.
 -- No COGS is posted unless every invoice line has a verified cost snapshot.
