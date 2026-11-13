@@ -238,6 +238,11 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   const uncostedItems = costCoverageQuery.data?.uncostedItems || [];
   const uncosted = costCoverageQuery.data?.uncostedLineCount || 0;
   const costCoverageComplete = costCoverageQuery.isSuccess && uncosted === 0;
+  // Petty cash is not a complete operating-expense workflow. Keep the final
+  // net-profit figure withheld until supplier and other operating expenses can
+  // be recorded, paid/reconciled and included in the ledger.
+  const expenseCaptureComplete = false;
+  const canDisplayNetProfit = costCoverageComplete && expenseCaptureComplete;
   const grossProfit = totals.revenue - totals.costOfGoodsSold;
   const netProfit = grossProfit - totals.operatingExpenses;
   const formatAmount = (amount: number) =>
@@ -256,7 +261,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       <CardHeader>
         <CardTitle>Profit &amp; Loss — All Recorded Time</CardTitle>
         <CardDescription>
-          Accrual-basis totals from posted invoices, verified cost of goods sold and recorded operating expenses.
+          Accrual-basis sales and verified product costs. Final net profit remains withheld until complete operating-expense capture is available.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -267,6 +272,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
             <Badge variant="destructive" className="gap-1"><CircleAlert className="h-3.5 w-3.5" />Profit withheld — {uncosted} sold line(s) without verified cost</Badge>
           )}
           <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice(s) checked</span>
+          <Badge variant="outline" className="border-warning/40 text-warning">Expense capture incomplete</Badge>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -296,13 +302,15 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
               <p className="font-medium">Net Profit / (Loss)</p>
               <p className="text-xs text-muted-foreground">Gross profit less operating expenses recorded in the system</p>
             </div>
-            {costCoverageComplete ? (
+            {canDisplayNetProfit ? (
               <div className={`flex items-center gap-2 text-right text-xl font-semibold tabular-nums ${netProfit < 0 ? 'text-destructive' : 'text-success'}`}>
                 {netProfit < 0 ? <TrendingDown className="h-5 w-5" /> : <TrendingUp className="h-5 w-5" />}
                 {formatAmount(netProfit)}
               </div>
             ) : (
-              <span className="text-sm font-semibold text-warning">Withheld until costs are verified</span>
+              <span className="text-sm font-semibold text-warning">
+                {costCoverageComplete ? 'Withheld — complete expense capture is not available' : 'Withheld until product costs are verified'}
+              </span>
             )}
           </div>
         </div>
@@ -362,9 +370,12 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           </div>
         )}
 
-        <p className="text-xs text-muted-foreground">
-          Stock purchases are recorded as Inventory assets, not immediate expenses. Their cost moves to Cost of Goods Sold when the related verified-cost products are sold. Net profit reflects expenses entered in Petty Cash; expenses that have not been recorded cannot be included. Tax collected is excluded from sales revenue.
-        </p>
+        <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
+          <p className="font-medium text-warning">Final net profit is not yet available</p>
+          <p className="mt-1 text-muted-foreground">
+            The current expense workflow captures petty-cash expenses, not every supplier and operating expense or unpaid expense liability. Unrecorded expenses are therefore missing from the ledger. This report shows recorded expense totals for transparency but deliberately withholds final net profit until a complete expense-entry and payment/reconciliation workflow is implemented. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
