@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(31);
+SELECT extensions.plan(38);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -62,6 +62,27 @@ SELECT i.id, p.id, 'Insufficient stock test line', 5, 50, 250
 FROM public.invoices i
 JOIN public.products p ON p.sku = 'TEST-PURCHASE-001'
 WHERE i.invoice_number = 'INV-TEST-STOCK-002';
+
+INSERT INTO public.products (
+  sku, name, current_price, cost_price, cost_price_verified,
+  stock_quantity, is_service, is_active
+)
+VALUES ('TEST-SERVICE-001', 'Direct service cost test item', 100, NULL, false, 0, true, true);
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date,
+  subtotal, tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TEST-SERVICE-001', id, 'draft', CURRENT_DATE, 100, 0, 100, 100
+FROM public.customers WHERE code = 'TEST-CUSTOMER-001';
+
+INSERT INTO public.invoice_items (
+  invoice_id, product_id, description, quantity, unit_price, line_total
+)
+SELECT i.id, p.id, 'Service labour and materials', 1, 100, 100
+FROM public.invoices i
+JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
+WHERE i.invoice_number = 'INV-TEST-SERVICE-001';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
 
@@ -293,6 +314,80 @@ SELECT extensions.is(
    WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001'),
   0::numeric,
   'Invoice revenue and COGS journal remains balanced'
+);
+
+SELECT extensions.lives_ok(
+  $$ UPDATE public.invoices
+     SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-SERVICE-001' $$,
+  'Service invoice can be issued without inventory movement'
+);
+
+SELECT extensions.lives_ok(
+  $$ SELECT public.record_invoice_item_direct_cost(
+    (SELECT ii.id FROM public.invoice_items ii
+     JOIN public.invoices i ON i.id = ii.invoice_id
+     WHERE i.invoice_number = 'INV-TEST-SERVICE-001'),
+    30.00, 'SERVICE-COST-TEST-001', CURRENT_DATE,
+    'cash', 'Service labour and materials'
+  ) $$,
+  'Accountant can post an evidenced direct service cost'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.invoice_item_direct_costs dc
+   JOIN public.invoice_items ii ON ii.id = dc.invoice_item_id
+   JOIN public.invoices i ON i.id = ii.invoice_id
+   WHERE i.invoice_number = 'INV-TEST-SERVICE-001'),
+  1,
+  'Direct service cost is linked to the invoice line'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   JOIN public.invoice_items ii ON ii.id = je.source_id
+   JOIN public.invoices i ON i.id = ii.invoice_id
+   WHERE je.source_type = 'direct_invoice_cost'
+     AND i.invoice_number = 'INV-TEST-SERVICE-001'
+     AND coa.code = '5000'),
+  30.00::numeric,
+  'Direct service cost is posted to Cost of Goods Sold'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.inventory_transactions it
+   JOIN public.products p ON p.id = it.product_id
+   WHERE p.sku = 'TEST-SERVICE-001'),
+  0,
+  'Service direct costs do not create inventory transactions'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit - jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   WHERE je.source_type = 'direct_invoice_cost'
+     AND je.source_id = (SELECT ii.id FROM public.invoice_items ii
+                         JOIN public.invoices i ON i.id = ii.invoice_id
+                         WHERE i.invoice_number = 'INV-TEST-SERVICE-001')),
+  0::numeric,
+  'Direct service cost journal is balanced'
+);
+
+SELECT extensions.throws_ok(
+  $$ SELECT public.record_invoice_item_direct_cost(
+    (SELECT ii.id FROM public.invoice_items ii
+     JOIN public.invoices i ON i.id = ii.invoice_id
+     WHERE i.invoice_number = 'INV-TEST-SERVICE-001'),
+    30.00, 'SERVICE-COST-TEST-001', CURRENT_DATE,
+    'cash', 'Duplicate service cost'
+  ) $$,
+  'P0001',
+  'A direct cost has already been recorded for this invoice line',
+  'Duplicate direct service cost is rejected'
 );
 
 SELECT extensions.throws_ok(
