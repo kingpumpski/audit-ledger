@@ -816,7 +816,9 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM public.journal_entries
-    WHERE source_id = OLD.id AND source_type IN ('stock_purchase','inventory_damage')
+    WHERE source_id = OLD.id AND source_type IN (
+      'stock_purchase','inventory_damage','inventory_count_adjustment','stock_purchase_reversal'
+    )
   ) OR (
     OLD.reference_type = 'invoice'
     AND EXISTS (
