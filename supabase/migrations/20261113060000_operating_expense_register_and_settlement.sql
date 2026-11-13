@@ -155,6 +155,9 @@ BEGIN
   SELECT * INTO v_expense FROM public.operating_expenses
   WHERE id = p_expense_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Operating expense not found'; END IF;
+  IF p_paid_on < v_expense.incurred_on THEN
+    RAISE EXCEPTION 'Payment date cannot be earlier than the expense incurred date; record prepayments through the prepayment workflow';
+  END IF;
   IF ROUND(p_amount, 2) > v_expense.amount - v_expense.amount_paid THEN
     RAISE EXCEPTION 'Payment exceeds the outstanding expense balance';
   END IF;
@@ -275,8 +278,9 @@ BEGIN
 
   SELECT * INTO v_account FROM public.chart_of_accounts
   WHERE id = p_expense_account_id AND account_type = 'expense' AND is_active = true
+    AND code NOT IN ('5000', '6500')
   FOR SHARE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Select an active expense account'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Select an active operating-expense account; Cost of Goods Sold and inventory damage must use their audited workflows'; END IF;
   SELECT id INTO v_payable_account FROM public.chart_of_accounts
   WHERE code = '2000' AND account_type = 'liability' AND is_active LIMIT 1;
   IF v_payable_account IS NULL THEN RAISE EXCEPTION 'Accounts Payable account is not configured'; END IF;
