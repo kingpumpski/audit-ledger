@@ -126,7 +126,7 @@ BEGIN
     RAISE EXCEPTION 'Only an admin or accountant can settle operating expenses';
   END IF;
   IF p_amount IS NULL OR p_amount <= 0 OR p_paid_on IS NULL
-     OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')
+     OR p_payment_method IS NULL OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')
      OR NULLIF(BTRIM(p_reference_number), '') IS NULL
      OR p_idempotency_key IS NULL THEN
     RAISE EXCEPTION 'Enter a positive payment amount, date, method, reference and idempotency key';
@@ -242,7 +242,7 @@ BEGIN
   IF p_due_on IS NOT NULL AND p_due_on < p_incurred_on THEN
     RAISE EXCEPTION 'Due date cannot be earlier than the expense date';
   END IF;
-  IF p_amount_paid > 0 AND (p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment') OR NULLIF(BTRIM(p_payment_reference), '') IS NULL) THEN
+  IF p_amount_paid > 0 AND (p_payment_method IS NULL OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment') OR NULLIF(BTRIM(p_payment_reference), '') IS NULL) THEN
     RAISE EXCEPTION 'A payment method and payment reference are required for the amount already paid';
   END IF;
 
