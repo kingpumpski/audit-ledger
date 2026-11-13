@@ -136,6 +136,7 @@ export function useInvoices() {
           tax_amount: calculation.tax_amount,
           tax_rate: calculation.nominal_tax_rate,
           sort_order: index,
+          tax_breakdown: calculation.taxes,
         };
       });
 
@@ -184,11 +185,41 @@ export function useInvoices() {
         sort_order: item.sort_order,
       }));
 
-      const { error: itemsError } = await supabase
+      const { data: createdItems, error: itemsError } = await supabase
         .from('invoice_items')
-        .insert(itemsToInsert);
+        .insert(itemsToInsert)
+        .select('id, sort_order');
 
       if (itemsError) throw itemsError;
+
+      const invoiceItemTaxRows = (createdItems || []).flatMap(createdItem => {
+        const processedItem = processedItems.find(item => item.sort_order === createdItem.sort_order);
+        return (processedItem?.tax_breakdown || []).map(tax => {
+          const rule = taxRules.find(candidate => candidate.id === tax.tax_id);
+          if (!rule?.liability_account_id) {
+            throw new Error(`Tax ${tax.code} has no liability account configured`);
+          }
+          return {
+            invoice_id: invoice.id,
+            invoice_item_id: createdItem.id,
+            tax_id: tax.tax_id,
+            tax_name: tax.name,
+            tax_code: tax.code,
+            tax_rate: tax.rate,
+            is_compound: tax.is_compound,
+            tax_order: tax.tax_order,
+            taxable_amount: tax.taxable_amount,
+            tax_amount: tax.tax_amount,
+            liability_account_id: rule.liability_account_id,
+          };
+        });
+      });
+      if (invoiceItemTaxRows.length > 0) {
+        const { error: itemTaxesError } = await supabase
+          .from('invoice_item_taxes')
+          .insert(invoiceItemTaxRows);
+        if (itemTaxesError) throw itemTaxesError;
+      }
 
       const invoiceTaxRows = [...taxTotals.values()].map(tax => ({
         invoice_id: invoice.id,
