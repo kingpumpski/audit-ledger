@@ -25,7 +25,8 @@ import { useReceipts } from '@/hooks/useReceipts';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useProducts } from '@/hooks/useProducts';
 import { useSettings } from '@/hooks/useSettings';
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { sumIssuedReceiptsInPeriod } from '@/lib/dashboard-metrics';
 
 const DashboardCharts = lazy(() => import('@/components/dashboard/DashboardCharts'));
 
@@ -63,8 +64,9 @@ export default function Dashboard() {
     return () => observer.disconnect();
   }, [isLoading]);
 
-  // Calculate period-consistent statistics. The revenue trend compares the
-  // current month's paid invoice value with the immediately preceding month.
+  // Compare money actually received in the current month with the prior month.
+  // Paid invoice creation dates are not reliable payment dates, especially when
+  // an invoice is paid weeks after it was issued or through partial payments.
   const stats = useMemo(() => {
     const now = new Date();
     const currentMonthStart = startOfMonth(now);
@@ -73,20 +75,16 @@ export default function Dashboard() {
     const lastMonthStart = startOfMonth(lastMonth);
     const lastMonthEnd = endOfMonth(lastMonth);
 
-    const paidInvoicesInPeriod = (start: Date, end: Date) =>
-      invoices
-        .filter(inv => {
-          if (inv.status !== 'paid' || !inv.created_at) return false;
-          const date = parseISO(inv.created_at);
-          return isWithinInterval(date, { start, end });
-        })
-        .reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
-
-    const totalRevenue = paidInvoicesInPeriod(currentMonthStart, currentMonthEnd);
-    const lastMonthRevenue = paidInvoicesInPeriod(lastMonthStart, lastMonthEnd);
-    const totalReceived = receipts
-      .filter(receipt => receipt.status === 'issued')
-      .reduce((sum, receipt) => sum + (receipt.amount || 0), 0);
+    const totalReceivedThisMonth = sumIssuedReceiptsInPeriod(
+      receipts,
+      currentMonthStart,
+      currentMonthEnd,
+    );
+    const lastMonthReceived = sumIssuedReceiptsInPeriod(
+      receipts,
+      lastMonthStart,
+      lastMonthEnd,
+    );
 
     const pendingPayments = invoices
       .filter(inv => ['issued', 'partially_paid'].includes(inv.status))
@@ -103,13 +101,12 @@ export default function Dashboard() {
       p.stock_quantity <= p.min_stock_level
     ).length;
 
-    const revenueChange = lastMonthRevenue > 0
-      ? ((totalRevenue - lastMonthRevenue) / lastMonthRevenue * 100).toFixed(1)
-      : totalRevenue > 0 ? 'New' : '0';
+    const revenueChange = lastMonthReceived > 0
+      ? ((totalReceivedThisMonth - lastMonthReceived) / lastMonthReceived * 100).toFixed(1)
+      : totalReceivedThisMonth > 0 ? 'New' : '0';
 
     return {
-      totalRevenue,
-      totalReceived,
+      totalReceivedThisMonth,
       pendingPayments,
       overdueAmount,
       overdueCount: overdueInvoices.length,
@@ -201,8 +198,8 @@ export default function Dashboard() {
 
   const statsCards = [
     {
-      title: 'Paid Invoices This Month',
-      value: `${currencySymbol}${stats.totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+      title: 'Money Received This Month',
+      value: `${currencySymbol}${stats.totalReceivedThisMonth.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
       change: stats.revenueChange === 'New' ? 'New' : `${parseFloat(stats.revenueChange) >= 0 ? '+' : ''}${stats.revenueChange}%`,
       trend: stats.revenueChange === 'New' || parseFloat(stats.revenueChange) >= 0 ? 'up' : 'down',
       icon: DollarSign,
