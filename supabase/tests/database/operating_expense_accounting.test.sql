@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(38);
+SELECT extensions.plan(40);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -287,13 +287,24 @@ SELECT extensions.is(
   'Expense reversal is recorded only once'
 );
 
+SELECT extensions.throws_ok(
+  $$ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    1.00, CURRENT_DATE, 'cash', 'REFUND-BEFORE-REVERSAL',
+    'e0000000-0000-4000-8000-000000000111'
+  ) $$,
+  'P0001',
+  'Reverse the supplier expense with approval evidence before recording its refund',
+  'Supplier refund cannot be recorded before the expense reversal is approved'
+);
+
 SELECT extensions.lives_ok(
-  $ SELECT public.reverse_unpaid_operating_expense(
+  $$ SELECT public.reverse_unpaid_operating_expense(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     'Supplier contract cancelled after payment',
     'CANCEL-APPROVAL-PAID-001',
     'e0000000-0000-4000-8000-000000000107'
-  ) $,
+  ) $$,
   'A partially or fully paid expense can be reversed without erasing its payment history'
 );
 
@@ -309,12 +320,23 @@ SELECT extensions.is(
   'Paid expense reversal recognizes the full supplier credit in Accounts Payable'
 );
 
+SELECT extensions.throws_ok(
+  $$ SELECT public.record_operating_expense_refund(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    1.00, CURRENT_DATE - 1, 'cash', 'REFUND-BEFORE-PAYMENT',
+    'e0000000-0000-4000-8000-000000000112'
+  ) $$,
+  'P0001',
+  'Supplier refund date cannot be earlier than the latest supplier payment',
+  'Supplier refund cannot be backdated before the latest payment'
+);
+
 SELECT extensions.lives_ok(
-  $ SELECT public.record_operating_expense_refund(
+  $$ SELECT public.record_operating_expense_refund(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     25.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-001',
     'e0000000-0000-4000-8000-000000000108'
-  ) $,
+  ) $$,
   'Accountant can record an evidenced partial supplier refund after expense reversal'
 );
 
@@ -368,11 +390,11 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_operating_expense_refund(
+  $$ SELECT public.record_operating_expense_refund(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     25.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-001',
     'e0000000-0000-4000-8000-000000000108'
-  ) $,
+  ) $$,
   'Retrying the same supplier refund is idempotent'
 );
 
@@ -385,11 +407,11 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.record_operating_expense_refund(
+  $$ SELECT public.record_operating_expense_refund(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     76.00, CURRENT_DATE, 'bank_transfer', 'SUPPLIER-REFUND-OVER-001',
     'e0000000-0000-4000-8000-000000000109'
-  ) $,
+  ) $$,
   'P0001',
   'Refund exceeds the amount actually paid to the supplier and not yet refunded',
   'Supplier refunds cannot exceed the amount actually paid and not already refunded'
@@ -407,11 +429,11 @@ SELECT extensions.throws_ok(
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000002', true);
 
 SELECT extensions.throws_ok(
-  $ SELECT public.record_operating_expense_refund(
+  $$ SELECT public.record_operating_expense_refund(
     (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
     1.00, CURRENT_DATE, 'cash', 'SUPPLIER-REFUND-UNAUTH-001',
     'e0000000-0000-4000-8000-000000000110'
-  ) $,
+  ) $$,
   'P0001',
   'Only an admin or accountant can record supplier refunds',
   'Cashier cannot record supplier refunds'
