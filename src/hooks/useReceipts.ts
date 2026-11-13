@@ -125,27 +125,20 @@ export function useReceipts() {
   });
 
   const updateReceiptMutation = useMutation({
-    mutationFn: async ({ id, data, notifyCustomer }: { 
+    mutationFn: async ({ id, data }: { 
       id: string; 
-      data: { notes?: string; payment_method?: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other' };
-      notifyCustomer?: boolean;
+      data: { notes?: string };
     }) => {
       const { error } = await supabase
         .from('receipts')
         .update({
           notes: data.notes,
-          payment_method: data.payment_method,
         })
         .eq('id', id)
         .eq('status', 'issued'); // Only allow editing issued receipts
 
       if (error) throw error;
 
-      // If notifyCustomer is true, send notification (implementation depends on SMS/email setup)
-      if (notifyCustomer) {
-        console.log('Customer notification requested for receipt update:', id);
-        // TODO: Invoke notification edge function when SMS/email is fully configured
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
