@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(44);
+SELECT extensions.plan(47);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -91,6 +91,39 @@ JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
 WHERE i.invoice_number = 'INV-TEST-SERVICE-001';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+
+SELECT extensions.throws_ok(
+  $$ INSERT INTO public.products (
+       sku, name, current_price, cost_price, stock_quantity, is_service, is_active
+     ) VALUES (
+       'TEST-UNRECORDED-OPENING-001', 'Unrecorded opening stock', 25, 10, 5, false, true
+     ) $$,
+  'P0001',
+  'New products must start with zero stock and no purchase cost; record an evidenced stock purchase in Inventory',
+  'Authenticated users cannot create products with unrecorded stock or purchase costs'
+);
+
+SELECT extensions.lives_ok(
+  $$ INSERT INTO public.products (
+       sku, name, current_price, cost_price, stock_quantity, is_service, is_active
+     ) VALUES (
+       'TEST-CATALOGUE-ONLY-001', 'Catalogue-only product', 25, NULL, 0, false, true
+     ) $$,
+  'Authenticated users can create a catalogue product without opening inventory'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products WHERE sku = 'TEST-CATALOGUE-ONLY-001'),
+  0,
+  'Catalogue-only product starts with zero stock'
+);
+
+SELECT extensions.is(
+  (SELECT cost_price FROM public.products WHERE sku = 'TEST-CATALOGUE-ONLY-001'),
+  NULL::numeric,
+  'Catalogue-only product starts without a purchase cost'
+);
+
 
 SELECT extensions.lives_ok(
   $$ SELECT public.record_inventory_damage(
