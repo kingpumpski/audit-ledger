@@ -27,7 +27,7 @@ import { sumCashReceivedInPeriod } from '@/lib/dashboard-metrics';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useProducts } from '@/hooks/useProducts';
 import { useSettings } from '@/hooks/useSettings';
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 
 const DashboardCharts = lazy(() => import('@/components/dashboard/DashboardCharts'));
 
