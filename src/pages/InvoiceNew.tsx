@@ -80,7 +80,6 @@ export default function InvoiceNew() {
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
