@@ -38,10 +38,10 @@ import { OperatingExpenseRegister } from '@/components/accounting/OperatingExpen
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
 
-type OperatingExpenseSummary = { amount: number | string; incurred_on: string; reversal: { id: string } | null };
+type OperatingExpenseSummary = { amount: number | string; incurred_on: string; reversal: { id: string; amount: number | string; created_at: string } | null };
 const operatingExpenseSummaryApi = supabase as unknown as {
   from: (table: 'operating_expenses') => {
-    select: (columns: 'amount, incurred_on, reversal:operating_expense_reversals(id)') => {
+    select: (columns: 'amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)') => {
       order: (column: 'incurred_on', options?: { ascending?: boolean }) => {
         range: (from: number, to: number) => PromiseLike<{
           data: OperatingExpenseSummary[] | null;
@@ -138,7 +138,7 @@ export default function Accounting() {
       while (true) {
         const { data, error } = await operatingExpenseSummaryApi
           .from('operating_expenses')
-          .select('amount, incurred_on, reversal:operating_expense_reversals(id)')
+          .select('amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)')
           .order('incurred_on', { ascending: true })
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -195,7 +195,7 @@ export default function Accounting() {
     const outstanding = invoices.filter(i => ['issued', 'overdue', 'partially_paid'].includes(i.status))
       .reduce((s, i) => s + (i.balance_due || 0), 0);
     const pettyCashExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
-    const supplierAndBusinessExpenses = operatingExpenseRecords.filter(expense => !expense.reversal).reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+    const supplierAndBusinessExpenses = operatingExpenseRecords.reduce((sum, expense) => sum + Number(expense.amount || 0) - Number(expense.reversal?.amount || 0), 0);
     const operatingExpenses = pettyCashExpenses + supplierAndBusinessExpenses;
     const pettyCashIncome = pettyCash.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
 
@@ -243,10 +243,13 @@ export default function Accounting() {
       const pettyExpenses = pettyCash
         .filter(pc => pc.type === 'expense' && new Date(pc.date) >= p.start && new Date(pc.date) < p.end)
         .reduce((s, pc) => s + Number(pc.amount), 0);
-      const supplierExpenses = operatingExpenseRecords
-        .filter(expense => !expense.reversal && new Date(expense.incurred_on) >= p.start && new Date(expense.incurred_on) < p.end)
+      const supplierExpensesIncurred = operatingExpenseRecords
+        .filter(expense => new Date(expense.incurred_on) >= p.start && new Date(expense.incurred_on) < p.end)
         .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-      const expenses = pettyExpenses + supplierExpenses;
+      const supplierExpenseReversals = operatingExpenseRecords
+        .filter(expense => expense.reversal && new Date(expense.reversal.created_at) >= p.start && new Date(expense.reversal.created_at) < p.end)
+        .reduce((sum, expense) => sum + Number(expense.reversal?.amount || 0), 0);
+      const expenses = pettyExpenses + supplierExpensesIncurred - supplierExpenseReversals;
       return { name: p.label, revenue, expenses };
     });
   }, [invoices, pettyCash, operatingExpenseRecords, timeFrame]);
