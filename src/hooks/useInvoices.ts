@@ -253,6 +253,7 @@ export function useInvoices() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
 
       if (result?.requiresDomainVerification) {
         toast({
