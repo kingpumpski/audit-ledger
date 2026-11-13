@@ -116,8 +116,8 @@ SELECT extensions.throws_ok(
 UPDATE public.invoice_item_taxes SET tax_amount=14
 WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
 SELECT extensions.throws_ok(
-  $ UPDATE public.invoices SET status='issued'
-     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  $$ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $$,
   'P0001',
   'Invoice line tax snapshots do not reconcile to invoice line tax amounts',
   'An invoice cannot be issued when line tax evidence differs from the invoice line'
@@ -129,8 +129,8 @@ WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-S
 UPDATE public.invoice_item_taxes SET tax_order=4
 WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
 SELECT extensions.throws_ok(
-  $ UPDATE public.invoices SET status='issued'
-     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  $$ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $$,
   'P0001',
   'Invoice line tax snapshot order is invalid',
   'An invoice cannot be issued with altered compound-tax ordering'
@@ -142,8 +142,8 @@ WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-S
 UPDATE public.invoice_taxes SET tax_amount=14
 WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001');
 SELECT extensions.throws_ok(
-  $ UPDATE public.invoices SET status='issued'
-     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  $$ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $$,
   'P0001',
   'Invoice-level tax totals do not reconcile to per-line tax snapshots',
   'An invoice cannot be issued when aggregated tax differs from line allocations'
@@ -154,8 +154,8 @@ WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-S
 -- Tax definitions can change while a draft is being edited; issue must revalidate them.
 UPDATE public.taxes SET rate=16 WHERE code='TAX-SNAPSHOT-001';
 SELECT extensions.throws_ok(
-  $ UPDATE public.invoices SET status='issued'
-     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $,
+  $$ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-001' $$,
   'P0001',
   'Invoice tax snapshot no longer matches the authoritative tax definition or issue date',
   'An invoice cannot be issued with stale tax-definition evidence'
@@ -191,8 +191,8 @@ SELECT extensions.throws_ok(
 );
 
 SELECT extensions.lives_ok(
-  $ UPDATE public.invoices SET status='issued'
-     WHERE invoice_number='INV-TAX-SNAPSHOT-002' $,
+  $$ UPDATE public.invoices SET status='issued'
+     WHERE invoice_number='INV-TAX-SNAPSHOT-002' $$,
   'Legacy draft without per-line snapshots remains issuable using its existing aggregate tax evidence'
 );
 
