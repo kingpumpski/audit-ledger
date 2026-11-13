@@ -70,6 +70,8 @@ export function RecordPaymentDialog({
   const { createPayment, isCreating } = usePayments();
   const { createReceipt, isCreating: isCreatingReceipt } = useReceipts();
   const [isOpen, setIsOpen] = useState(false);
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [receiptIdempotencyKey, setReceiptIdempotencyKey] = useState(() => crypto.randomUUID());
   const [formData, setFormData] = useState<PaymentFormData>({
     amount: balanceDue.toString(),
     payment_method: 'cash',
@@ -111,6 +113,7 @@ export function RecordPaymentDialog({
         payment_method: formData.payment_method,
         reference_number: formData.reference_number || undefined,
         notes: formData.notes || undefined,
+        idempotency_key: paymentIdempotencyKey,
       });
 
       // Auto-generate receipt if enabled
@@ -122,6 +125,7 @@ export function RecordPaymentDialog({
           amount,
           payment_method: formData.payment_method,
           notes: `Payment for invoice ${invoiceNumber}`,
+          idempotency_key: receiptIdempotencyKey,
         });
         toast({
           title: 'Payment recorded & receipt generated',
@@ -137,6 +141,8 @@ export function RecordPaymentDialog({
         notes: '',
         generate_receipt: true,
       });
+      setPaymentIdempotencyKey(crypto.randomUUID());
+      setReceiptIdempotencyKey(crypto.randomUUID());
       onPaymentRecorded?.();
     } catch (error) {
       console.error('Payment error:', error);
