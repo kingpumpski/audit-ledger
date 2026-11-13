@@ -1436,6 +1436,7 @@ export type Database = {
           p_payment_method: Database["public"]["Enums"]["payment_method"]
           p_reference_number?: string | null
           p_notes?: string | null
+          p_idempotency_key: string
         }
         Returns: string
       }
@@ -1446,6 +1447,7 @@ export type Database = {
           p_payment_id: string | null
           p_amount: number
           p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_idempotency_key: string
           p_notes?: string | null
           p_signature_data?: string | null
           p_signature_hash?: string | null
