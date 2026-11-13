@@ -374,8 +374,8 @@ export default function Inventory() {
                     <Input value={adjustForm.supplierName} onChange={e => setAdjustForm({ ...adjustForm, supplierName: e.target.value })} placeholder="Supplier name (optional)" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Supplier Reference</Label>
-                    <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Invoice / receipt number" />
+                    <Label>Supplier Reference *</Label>
+                    <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Required invoice / receipt reference" />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -410,6 +410,7 @@ export default function Inventory() {
                 recordAdjustment.isPending || adjustForm.quantity <= 0 ||
                 (adjustForm.type === 'purchase' && (
                   adjustForm.unitCost <= 0 ||
+                  !adjustForm.referenceNumber.trim() ||
                   adjustForm.amountPaid > adjustForm.quantity * adjustForm.unitCost ||
                   ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && adjustForm.openingUnitCost <= 0)
                 ))
