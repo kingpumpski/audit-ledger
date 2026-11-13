@@ -189,6 +189,7 @@ DECLARE
   v_credit_note_id uuid := gen_random_uuid();
   v_credit_note_number text;
   v_existing_id uuid;
+  v_existing_fingerprint text;
   v_fingerprint text;
   v_net numeric(15,2);
   v_tax_total numeric(15,2);
@@ -235,10 +236,11 @@ BEGIN
 
   v_fingerprint := md5(p_invoice_id::text || '|' || p_lines::text || '|' ||
     p_credit_note_date::text || '|' || BTRIM(p_reason) || '|' || BTRIM(p_reference_number));
-  SELECT id, request_fingerprint INTO v_existing_id, v_net
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+  SELECT id, request_fingerprint INTO v_existing_id, v_existing_fingerprint
   FROM public.credit_notes WHERE idempotency_key = p_idempotency_key;
   IF FOUND THEN
-    IF v_net::text IS DISTINCT FROM v_fingerprint THEN
+    IF v_existing_fingerprint IS DISTINCT FROM v_fingerprint THEN
       RAISE EXCEPTION 'This credit-note idempotency key was already used with different details';
     END IF;
     RETURN v_existing_id;
@@ -613,6 +615,7 @@ BEGIN
     RAISE EXCEPTION 'A positive amount, date, reference and idempotency key are required';
   END IF;
   v_fingerprint := md5(p_credit_note_id::text||'|'||p_invoice_id::text||'|'||p_amount::text||'|'||p_applied_on::text||'|'||BTRIM(p_reference_number));
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
   SELECT id,request_fingerprint INTO v_existing_id,v_existing_fingerprint
   FROM public.customer_credit_applications WHERE idempotency_key=p_idempotency_key;
   IF FOUND THEN
@@ -720,6 +723,7 @@ BEGIN
     RAISE EXCEPTION 'A positive refund, date, payment method, reference and idempotency key are required';
   END IF;
   v_fingerprint:=md5(p_credit_note_id::text||'|'||p_amount::text||'|'||p_refunded_on::text||'|'||p_payment_method::text||'|'||BTRIM(p_reference_number));
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
   SELECT id,request_fingerprint INTO v_existing_id,v_existing_fingerprint
   FROM public.customer_credit_refunds WHERE idempotency_key=p_idempotency_key;
   IF FOUND THEN
