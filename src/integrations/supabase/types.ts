@@ -1489,6 +1489,17 @@ export type Database = {
         }
         Returns: string
       }
+      record_stock_count_adjustment: {
+        Args: {
+          p_product_id: string
+          p_counted_quantity: number
+          p_counted_on: string
+          p_reason: string
+          p_reference_number: string
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
       set_historical_invoice_item_cost: {
         Args: {
           p_invoice_item_id: string
