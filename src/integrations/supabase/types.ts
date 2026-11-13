@@ -456,6 +456,7 @@ export type Database = {
           created_at: string
           id: string
           invoice_id: string
+          liability_account_id: string
           tax_amount: number
           tax_id: string
           tax_rate: number
@@ -465,6 +466,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_id: string
+          liability_account_id: string
           tax_amount: number
           tax_id: string
           tax_rate: number
@@ -474,6 +476,7 @@ export type Database = {
           created_at?: string
           id?: string
           invoice_id?: string
+          liability_account_id?: string
           tax_amount?: number
           tax_id?: string
           tax_rate?: number
@@ -1220,6 +1223,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           is_compound: boolean | null
+          liability_account_id: string | null
           name: string
           rate: number
           type: Database["public"]["Enums"]["tax_type"]
@@ -1235,6 +1239,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_compound?: boolean | null
+          liability_account_id?: string | null
           name: string
           rate: number
           type: Database["public"]["Enums"]["tax_type"]
@@ -1250,6 +1255,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           is_compound?: boolean | null
+          liability_account_id?: string | null
           name?: string
           rate?: number
           type?: Database["public"]["Enums"]["tax_type"]
