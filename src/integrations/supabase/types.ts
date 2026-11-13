@@ -1439,6 +1439,21 @@ export type Database = {
         }
         Returns: string
       }
+      create_receipt_with_payment: {
+        Args: {
+          p_customer_id: string
+          p_invoice_id: string | null
+          p_payment_id: string | null
+          p_amount: number
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string | null
+          p_signature_data?: string | null
+          p_signature_hash?: string | null
+          p_checksum?: string | null
+          p_issuer_name?: string | null
+        }
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
