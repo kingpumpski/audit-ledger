@@ -34,31 +34,15 @@ CREATE POLICY invoice_item_taxes_draft_insert
       WHERE i.id = invoice_item_taxes.invoice_id AND i.status = 'draft'
     )
   );
-CREATE POLICY invoice_item_taxes_draft_update
+-- Let the immutable trigger reject post-issue changes explicitly rather than
+-- silently filtering the row through RLS USING.
+CREATE POLICY invoice_item_taxes_role_update
   ON public.invoice_item_taxes FOR UPDATE TO authenticated
-  USING (
-    public.has_any_role(ARRAY['admin', 'accountant', 'cashier'])
-    AND EXISTS (
-      SELECT 1 FROM public.invoices i
-      WHERE i.id = invoice_item_taxes.invoice_id AND i.status = 'draft'
-    )
-  )
-  WITH CHECK (
-    public.has_any_role(ARRAY['admin', 'accountant', 'cashier'])
-    AND EXISTS (
-      SELECT 1 FROM public.invoices i
-      WHERE i.id = invoice_item_taxes.invoice_id AND i.status = 'draft'
-    )
-  );
-CREATE POLICY invoice_item_taxes_draft_delete
+  USING (public.has_any_role(ARRAY['admin', 'accountant', 'cashier']))
+  WITH CHECK (public.has_any_role(ARRAY['admin', 'accountant', 'cashier']));
+CREATE POLICY invoice_item_taxes_role_delete
   ON public.invoice_item_taxes FOR DELETE TO authenticated
-  USING (
-    public.has_any_role(ARRAY['admin', 'accountant', 'cashier'])
-    AND EXISTS (
-      SELECT 1 FROM public.invoices i
-      WHERE i.id = invoice_item_taxes.invoice_id AND i.status = 'draft'
-    )
-  );
+  USING (public.has_any_role(ARRAY['admin', 'accountant', 'cashier']));
 
 REVOKE ALL ON TABLE public.invoice_item_taxes FROM PUBLIC, anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.invoice_item_taxes TO authenticated;
