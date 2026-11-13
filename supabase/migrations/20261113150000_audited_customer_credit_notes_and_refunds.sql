@@ -1,3 +1,18 @@
+CREATE OR REPLACE FUNCTION public.invalidate_product_cost_verification()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $credit_note_cost_guard$
+BEGIN
+  IF NEW.cost_price IS DISTINCT FROM OLD.cost_price
+     AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.credit_note_rpc', true), '') <> 'on' THEN
+    NEW.cost_price_verified := false;
+  END IF;
+  RETURN NEW;
+END;
+$credit_note_cost_guard$;
+
 -- Audited customer credit notes, stock returns and customer-credit settlement.
 -- Issued invoices remain immutable; credits are separate documents and balanced journals.
 ALTER TABLE public.journal_entries
