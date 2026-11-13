@@ -80,6 +80,7 @@ export default function InvoiceNew() {
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [activeProductPickerId, setActiveProductPickerId] = useState<string | null>(null);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
@@ -522,48 +523,86 @@ export default function InvoiceNew() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-2 md:col-span-2">
                       <Label>Product (Optional)</Label>
-                      <Select 
-                        value={item.product_id || 'none'} 
-                        onValueChange={(v) => {
-                          if (v === '__add_product__') {
-                            setProductDialogTargetId(item.id);
-                            setIsProductDialogOpen(true);
-                          } else if (v === 'none') {
-                            updateItem(item.id, { product_id: undefined, tax_ids: generalTaxIds, taxes_manually_selected: false });
-                            setProductSearchQuery('');
-                          } else {
-                            selectProduct(item.id, v);
-                            setProductSearchQuery('');
-                          }
+                      <Popover
+                        open={activeProductPickerId === item.id}
+                        onOpenChange={(open) => {
+                          setActiveProductPickerId(open ? item.id : null);
+                          if (!open) setProductSearchQuery('');
                         }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select product or enter manually" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="p-2">
-                            <div className="relative">
-                              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                              <Input
-                                placeholder="Search products..."
-                                value={productSearchQuery}
-                                onChange={(e) => setProductSearchQuery(e.target.value)}
-                                className="pl-8"
-                              />
-                            </div>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={activeProductPickerId === item.id}
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="truncate">
+                              {products.find(product => product.id === item.product_id)?.name || 'Select product or enter manually'}
+                            </span>
+                            <Search className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+                          <div className="relative mb-2">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              autoFocus
+                              placeholder="Search by product name or SKU..."
+                              value={productSearchQuery}
+                              onChange={(event) => setProductSearchQuery(event.target.value)}
+                              className="pl-8"
+                            />
                           </div>
-                          <SelectItem value="none">-- Enter manually --</SelectItem>
-                          {filteredProducts.map(product => (
-                            <SelectItem key={product.id} value={product.id}>
-                              <div className="flex justify-between items-center gap-4">
-                                <span>{product.name}</span>
-                                <span className="text-muted-foreground">{currencySymbol}{product.current_price}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="__add_product__">+ Add new product…</SelectItem>
-                        </SelectContent>
-                      </Select>
+                          <div className="max-h-64 space-y-1 overflow-y-auto">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="w-full justify-start font-normal"
+                              onClick={() => {
+                                updateItem(item.id, { product_id: undefined, tax_ids: generalTaxIds, taxes_manually_selected: false });
+                                setActiveProductPickerId(null);
+                                setProductSearchQuery('');
+                              }}
+                            >
+                              -- Enter manually --
+                            </Button>
+                            {filteredProducts.map(product => (
+                              <Button
+                                key={product.id}
+                                type="button"
+                                variant="ghost"
+                                className="h-auto w-full justify-between gap-3 py-2 text-left font-normal"
+                                onClick={() => {
+                                  selectProduct(item.id, product.id);
+                                  setActiveProductPickerId(null);
+                                  setProductSearchQuery('');
+                                }}
+                              >
+                                <span className="min-w-0 truncate">{product.name} <span className="text-muted-foreground">({product.sku})</span></span>
+                                <span className="shrink-0 text-muted-foreground">{currencySymbol}{product.current_price}</span>
+                              </Button>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                              <p className="px-3 py-4 text-center text-sm text-muted-foreground">No matching products found.</p>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                setProductDialogTargetId(item.id);
+                                setIsProductDialogOpen(true);
+                                setActiveProductPickerId(null);
+                                setProductSearchQuery('');
+                              }}
+                            >
+                              + Add new product…
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
