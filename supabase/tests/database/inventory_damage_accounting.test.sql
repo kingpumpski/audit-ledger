@@ -290,39 +290,36 @@ SELECT extensions.lives_ok(
   'Invoice with available verified stock can be issued'
 );
 
-SELECT extensions.lives_ok(
-  $$ INSERT INTO public.journal_entries (
-       entry_number, entry_date, description, source_type, source_id, currency, created_by
-     )
-     SELECT public.get_next_sequence('journal'), CURRENT_DATE,
-            'Inventory integration test invoice', 'invoice', id, 'USD',
-            'd0000000-0000-4000-8000-000000000001'
-     FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001' $$,
-  'Issued invoice journal can be created'
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.journal_entries
+   WHERE source_type = 'invoice'
+     AND source_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001')),
+  1,
+  'Issuing an invoice automatically creates exactly one linked journal entry'
 );
 
-SELECT extensions.lives_ok(
-  $$ INSERT INTO public.journal_lines (
-       journal_entry_id, line_number, account_id, description, debit, credit
-     )
-     SELECT je.id, 1, coa.id, 'Test accounts receivable', 100, 0
-     FROM public.journal_entries je
-     JOIN public.chart_of_accounts coa ON coa.code = '1100'
-     JOIN public.invoices i ON i.id = je.source_id
-     WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001' $$,
-  'Invoice receivable line posts stock relief and COGS trigger'
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'invoice'
+     AND je.source_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001')
+     AND coa.code = '1100'),
+  100.00::numeric,
+  'Invoice issue posts accounts receivable'
 );
 
-SELECT extensions.lives_ok(
-  $$ INSERT INTO public.journal_lines (
-       journal_entry_id, line_number, account_id, description, debit, credit
-     )
-     SELECT je.id, 2, coa.id, 'Test sales revenue', 0, 100
-     FROM public.journal_entries je
-     JOIN public.chart_of_accounts coa ON coa.code = '4000'
-     JOIN public.invoices i ON i.id = je.source_id
-     WHERE je.source_type = 'invoice' AND i.invoice_number = 'INV-TEST-STOCK-001' $$,
-  'Invoice revenue line posts successfully'
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'invoice'
+     AND je.source_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001')
+     AND coa.code = '4000'),
+  100.00::numeric,
+  'Invoice issue posts sales revenue'
 );
 
 SELECT extensions.is(
@@ -440,7 +437,7 @@ SELECT extensions.throws_ok(
      SET status = 'issued'
      WHERE invoice_number = 'INV-TEST-STOCK-002' $$,
   'P0001',
-  'Insufficient stock for Stock purchase test product. Available: 4, requested: 5',
+  'Insufficient stock for Stock purchase test product. Available: 4, requested: 5.000',
   'Invoice issue is rejected when stock is insufficient'
 );
 
