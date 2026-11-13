@@ -449,17 +449,17 @@ export default function InvoiceNew() {
                   <Label>Due Date *</Label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start">
+                      <Button type="button" variant="outline" className="w-full justify-start font-normal">
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {format(dueDate, 'PPP')}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                    <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
                         selected={dueDate}
                         onSelect={(date) => date && setDueDate(date)}
-                         />
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -528,8 +528,12 @@ export default function InvoiceNew() {
                           if (v === '__add_product__') {
                             setProductDialogTargetId(item.id);
                             setIsProductDialogOpen(true);
-                          } else if (v !== 'none') {
+                          } else if (v === 'none') {
+                            updateItem(item.id, { product_id: undefined });
+                            setProductSearchQuery('');
+                          } else {
                             selectProduct(item.id, v);
+                            setProductSearchQuery('');
                           }
                         }}
                       >
