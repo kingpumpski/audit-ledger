@@ -112,6 +112,43 @@ GRANT EXECUTE ON FUNCTION public.record_invoice_payment(
   uuid, uuid, numeric, public.payment_method, uuid, text, text
 ) TO authenticated;
 
+-- Backward-compatible six-argument RPC for clients deployed before the
+-- idempotency-key rollout. New clients use the seven-argument overload.
+CREATE FUNCTION public.record_invoice_payment(
+  p_invoice_id uuid,
+  p_customer_id uuid,
+  p_amount numeric,
+  p_payment_method public.payment_method,
+  p_reference_number text DEFAULT NULL,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $
+BEGIN
+  RETURN public.record_invoice_payment(
+    p_invoice_id,
+    p_customer_id,
+    p_amount,
+    p_payment_method,
+    gen_random_uuid(),
+    p_reference_number,
+    p_notes
+  );
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.record_invoice_payment(
+  uuid, uuid, numeric, public.payment_method, text, text
+) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.record_invoice_payment(
+  uuid, uuid, numeric, public.payment_method, text, text
+) TO authenticated;
+
+
 -- Replace the atomic receipt RPC with an idempotent version. The advisory lock
 -- ensures two simultaneous retries with the same key cannot create two payments.
 DROP FUNCTION IF EXISTS public.create_receipt_with_payment(
