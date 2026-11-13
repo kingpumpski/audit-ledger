@@ -54,6 +54,30 @@ const operatingExpenseSummaryApi = supabase as unknown as {
 
 
 
+
+type PettyCashReversalRow = {
+  id: string;
+  petty_cash_transaction_id: string;
+  amount: number | string;
+  reversed_on: string;
+  reason: string;
+  reference_number: string;
+};
+const pettyCashReversalApi = supabase as unknown as {
+  from: (table: 'petty_cash_expense_reversals') => {
+    select: (columns: string) => {
+      order: (column: string, options?: { ascending?: boolean }) => PromiseLike<{
+        data: PettyCashReversalRow[] | null;
+        error: { message: string } | null;
+      }>;
+    };
+  };
+  rpc: (name: 'reverse_petty_cash_expense', args: Record<string, unknown>) => PromiseLike<{
+    data: string | null;
+    error: { message: string } | null;
+  }>;
+};
+
 type TimeFrame = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'yearly';
 
 export default function Accounting() {
@@ -95,6 +119,13 @@ export default function Accounting() {
 
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('monthly');
   const [isPettyCashOpen, setIsPettyCashOpen] = useState(false);
+  const [pettyCashToReverse, setPettyCashToReverse] = useState<{ id: string; description: string; amount: number | string } | null>(null);
+  const [pettyCashReversalForm, setPettyCashReversalForm] = useState({
+    reversedOn: format(new Date(), 'yyyy-MM-dd'),
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'mobile_payment',
+    reason: '',
+    reference: '',
+  });
   const [pettyCashForm, setPettyCashForm] = useState({
     description: '', amount: 0, type: 'expense' as string, category: '', reference_number: '',
     payment_method: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other',
@@ -128,6 +159,26 @@ export default function Accounting() {
       return rows;
     },
   });
+
+
+  const pettyCashReversalsQuery = useQuery({
+    queryKey: ['petty-cash-reversals'],
+    queryFn: async (): Promise<PettyCashReversalRow[]> => {
+      const { data, error } = await pettyCashReversalApi
+        .from('petty_cash_expense_reversals')
+        .select('id, petty_cash_transaction_id, amount, reversed_on, reason, reference_number')
+        .order('reversed_on', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  });
+  const pettyCashReversals = pettyCashReversalsQuery.data || [];
+  const pettyCashReversalById = useMemo(
+    () => new Map(pettyCashReversals.map(reversal => [reversal.petty_cash_transaction_id, reversal])),
+    [pettyCashReversals],
+  );
 
   const { data: operatingExpenseRecords = [], isError: operatingExpensesError, isLoading: operatingExpensesLoading } = useQuery({
     queryKey: ['operating-expenses-summary'],
@@ -179,6 +230,35 @@ export default function Accounting() {
     },
   });
 
+
+  const reversePettyCashExpense = useMutation({
+    mutationFn: async () => {
+      if (!pettyCashToReverse) throw new Error('Select a petty-cash expense to reverse.');
+      if (!pettyCashReversalForm.reason.trim() || !pettyCashReversalForm.reference.trim()) {
+        throw new Error('A reversal reason and refund/correction reference are required.');
+      }
+      const { error } = await pettyCashReversalApi.rpc('reverse_petty_cash_expense', {
+        p_transaction_id: pettyCashToReverse.id,
+        p_reversed_on: pettyCashReversalForm.reversedOn,
+        p_payment_method: pettyCashReversalForm.paymentMethod,
+        p_reason: pettyCashReversalForm.reason.trim(),
+        p_reference_number: pettyCashReversalForm.reference.trim(),
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      toast({ title: 'Petty-cash expense reversed', description: 'A separate cash/bank refund journal was posted. The original expense remains in the audit history.' });
+      setPettyCashToReverse(null);
+      setPettyCashReversalForm({ reversedOn: format(new Date(), 'yyyy-MM-dd'), paymentMethod: 'cash', reason: '', reference: '' });
+    },
+    onError: error => toast({ title: 'Could not reverse petty-cash expense', description: error.message, variant: 'destructive' }),
+  });
+
   // Financial calculations
   const financials = useMemo(() => {
     const totalRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.total_amount || 0), 0);
@@ -194,7 +274,7 @@ export default function Accounting() {
     const totalReceived = invoicePaymentsReceived + standaloneReceiptsReceived;
     const outstanding = invoices.filter(i => ['issued', 'overdue', 'partially_paid'].includes(i.status))
       .reduce((s, i) => s + (i.balance_due || 0), 0);
-    const pettyCashExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
+    const pettyCashExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount) - Number(pettyCashReversalById.get(p.id)?.amount || 0), 0);
     const supplierAndBusinessExpenses = operatingExpenseRecords.reduce((sum, expense) => sum + Number(expense.amount || 0) - Number(expense.reversal?.amount || 0), 0);
     const operatingExpenses = pettyCashExpenses + supplierAndBusinessExpenses;
     const pettyCashIncome = pettyCash.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
@@ -202,7 +282,7 @@ export default function Accounting() {
     // Profit is calculated in the dedicated report only when verified product costs
     // and recorded expense coverage meet its safeguards.
     return { totalRevenue, totalInvoiced, totalTax, totalDiscounts, totalReceived, outstanding, operatingExpenses, pettyCashIncome };
-  }, [invoices, receipts, payments, pettyCash, operatingExpenseRecords]);
+  }, [invoices, receipts, payments, pettyCash, pettyCashReversalById, operatingExpenseRecords]);
 
   // Revenue trend data
   const trendData = useMemo(() => {
@@ -243,16 +323,19 @@ export default function Accounting() {
       const pettyExpenses = pettyCash
         .filter(pc => pc.type === 'expense' && new Date(pc.date) >= p.start && new Date(pc.date) < p.end)
         .reduce((s, pc) => s + Number(pc.amount), 0);
+      const pettyExpenseReversals = pettyCashReversals
+        .filter(reversal => new Date(reversal.reversed_on) >= p.start && new Date(reversal.reversed_on) < p.end)
+        .reduce((sum, reversal) => sum + Number(reversal.amount), 0);
       const supplierExpensesIncurred = operatingExpenseRecords
         .filter(expense => new Date(expense.incurred_on) >= p.start && new Date(expense.incurred_on) < p.end)
         .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
       const supplierExpenseReversals = operatingExpenseRecords
         .filter(expense => expense.reversal && new Date(expense.reversal.created_at) >= p.start && new Date(expense.reversal.created_at) < p.end)
         .reduce((sum, expense) => sum + Number(expense.reversal?.amount || 0), 0);
-      const expenses = pettyExpenses + supplierExpensesIncurred - supplierExpenseReversals;
+      const expenses = pettyExpenses - pettyExpenseReversals + supplierExpensesIncurred - supplierExpenseReversals;
       return { name: p.label, revenue, expenses };
     });
-  }, [invoices, pettyCash, operatingExpenseRecords, timeFrame]);
+  }, [invoices, pettyCash, pettyCashReversals, operatingExpenseRecords, timeFrame]);
 
   const paymentMethodData = useMemo(() => {
     const methods: Record<string, number> = {};
@@ -497,7 +580,7 @@ export default function Accounting() {
                 </div>
               </div>
               <table className="data-table">
-                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th></tr></thead>
+                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th>Correction</th></tr></thead>
                 <tbody>
                   {pettyCash.slice(0, 20).map(tx => (
                     <tr key={tx.id}>
@@ -507,6 +590,17 @@ export default function Accounting() {
                       <td><Badge className={tx.type === 'income' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}>{tx.type}</Badge></td>
                       <td className={cn('font-medium', tx.type === 'income' ? 'text-success' : 'text-destructive')}>
                         {tx.type === 'income' ? '+' : '-'}{currencySymbol}{Number(tx.amount).toLocaleString()}
+                      </td>
+                      <td>
+                        {tx.type === 'expense' ? (
+                          pettyCashReversalById.has(tx.id) ? (
+                            <Badge variant="outline">Reversed · {pettyCashReversalById.get(tx.id)?.reference_number}</Badge>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => setPettyCashToReverse({ id: tx.id, description: tx.description, amount: tx.amount })}>
+                              Reverse
+                            </Button>
+                          )
+                        ) : '—'}
                       </td>
                     </tr>
                   ))}
@@ -560,6 +654,50 @@ export default function Accounting() {
           </div>
         </TabsContent>
       </Tabs>
+
+
+      <Dialog open={!!pettyCashToReverse} onOpenChange={open => { if (!open) setPettyCashToReverse(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse Petty-Cash Expense</DialogTitle>
+            <DialogDescription>
+              {pettyCashToReverse ? `Record the actual refund/correction for “${pettyCashToReverse.description}” (${currencySymbol}${Number(pettyCashToReverse.amount).toFixed(2)}). The original transaction will remain unchanged.` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Refund / correction date *</Label>
+              <Input type="date" value={pettyCashReversalForm.reversedOn} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reversedOn: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Refund received into *</Label>
+              <Select value={pettyCashReversalForm.paymentMethod} onValueChange={v => setPettyCashReversalForm({ ...pettyCashReversalForm, paymentMethod: v as typeof pettyCashReversalForm.paymentMethod })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea value={pettyCashReversalForm.reason} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reason: e.target.value })} placeholder="Explain why the expense is being reversed and confirm the refund/correction." />
+            </div>
+            <div className="space-y-2">
+              <Label>Refund / approval reference *</Label>
+              <Input value={pettyCashReversalForm.reference} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reference: e.target.value })} placeholder="Receipt, bank reference or approval number" />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setPettyCashToReverse(null)}>Cancel</Button>
+              <Button onClick={() => reversePettyCashExpense.mutate()} disabled={reversePettyCashExpense.isPending || !pettyCashReversalForm.reason.trim() || !pettyCashReversalForm.reference.trim()}>
+                {reversePettyCashExpense.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Post Reversal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Petty Cash Dialog */}
       <Dialog open={isPettyCashOpen} onOpenChange={setIsPettyCashOpen}>
