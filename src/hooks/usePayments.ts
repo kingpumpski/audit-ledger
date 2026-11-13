@@ -42,6 +42,8 @@ export function usePayments() {
       if (error) throw error;
       return data as PaymentWithRelations[];
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const createPaymentMutation = useMutation({
