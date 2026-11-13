@@ -82,9 +82,15 @@ BEGIN
      AND NEW.incurred_on = OLD.incurred_on
      AND NEW.due_on IS NOT DISTINCT FROM OLD.due_on
      AND NEW.initial_amount_paid = OLD.initial_amount_paid
+     AND NEW.initial_payment_method IS NOT DISTINCT FROM OLD.initial_payment_method
+     AND NEW.initial_payment_reference IS NOT DISTINCT FROM OLD.initial_payment_reference
+     AND NEW.notes IS NOT DISTINCT FROM OLD.notes
+     AND NEW.idempotency_key = OLD.idempotency_key
+     AND NEW.recorded_by IS NOT DISTINCT FROM OLD.recorded_by
+     AND NEW.created_at = OLD.created_at
      AND NEW.amount_paid >= OLD.amount_paid
      AND NEW.amount_paid <= NEW.amount
-     AND NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
+     AND NEW.updated_at > OLD.updated_at THEN
     RETURN NEW;
   END IF;
   RAISE EXCEPTION 'Posted operating expenses and payments are immutable; use a controlled reversal workflow';
@@ -195,7 +201,7 @@ BEGIN
 
   PERFORM set_config('app.expense_settlement_rpc', 'on', true);
   UPDATE public.operating_expenses
-  SET amount_paid = amount_paid + ROUND(p_amount, 2), updated_at = now()
+  SET amount_paid = amount_paid + ROUND(p_amount, 2), updated_at = clock_timestamp()
   WHERE id = p_expense_id;
 
   RETURN v_payment_id;
@@ -225,6 +231,7 @@ DECLARE
   v_existing public.operating_expenses%ROWTYPE;
   v_account public.chart_of_accounts%ROWTYPE;
   v_payable_account uuid;
+  v_journal_id uuid;
   v_expense_id uuid;
   v_entry_number text;
   v_currency text;
@@ -298,15 +305,14 @@ BEGIN
     v_entry_number, p_incurred_on,
     'Operating expense - ' || BTRIM(p_vendor_name) || ' - ' || BTRIM(p_description),
     'operating_expense', v_expense_id, v_currency, auth.uid()
-  ) RETURNING id INTO v_payable_account;
+  ) RETURNING id INTO v_journal_id;
 
-  -- Replace the temporary variable with the journal id; keeping all posting in this transaction.
   INSERT INTO public.journal_lines (
     journal_entry_id, line_number, account_id, description, debit, credit
   ) VALUES (
-    v_payable_account, 1, p_expense_account_id, BTRIM(p_description), ROUND(p_amount, 2), 0
+    v_journal_id, 1, p_expense_account_id, BTRIM(p_description), ROUND(p_amount, 2), 0
   ), (
-    v_payable_account, 2,
+    v_journal_id, 2,
     (SELECT id FROM public.chart_of_accounts WHERE code = '2000' AND account_type = 'liability' AND is_active LIMIT 1),
     'Accrued supplier payable - ' || BTRIM(p_vendor_name), 0, ROUND(p_amount, 2)
   );
