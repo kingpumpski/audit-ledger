@@ -346,34 +346,28 @@ export default function Products() {
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Price ({currencySymbol}) *</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.current_price || ''}
-                      onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
-
+                <div className="space-y-2">
+                  <Label>Price ({currencySymbol}) *</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.current_price || ''}
+                    onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
+                    placeholder="0.00"
+                  />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Min Stock Level</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={formData.min_stock_level || ''}
-                      onChange={(e) => setFormData({ ...formData, min_stock_level: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                      disabled={formData.is_service}
-                    />
-                  </div>
-
+                <div className="space-y-2">
+                  <Label>Min Stock Level</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.min_stock_level || ''}
+                    onChange={(e) => setFormData({ ...formData, min_stock_level: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    disabled={formData.is_service}
+                  />
                 </div>
 
                 <p className="text-sm text-muted-foreground">
