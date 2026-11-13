@@ -99,9 +99,14 @@ ALTER TABLE public.invoice_taxes
 CREATE OR REPLACE FUNCTION public.set_default_tax_liability_account()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = public
-AS $$
+SECURITY DEFINER
+SET search_path = ''
+AS $
 BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'You are not authorized to configure tax liability accounts';
+  END IF;
+
   IF NEW.liability_account_id IS NULL THEN
     SELECT id INTO NEW.liability_account_id
     FROM public.chart_of_accounts
@@ -129,9 +134,14 @@ FOR EACH ROW EXECUTE FUNCTION public.set_default_tax_liability_account();
 CREATE OR REPLACE FUNCTION public.snapshot_invoice_tax_liability_account()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = public
-AS $$
+SECURITY DEFINER
+SET search_path = ''
+AS $
 BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
+    RAISE EXCEPTION 'You are not authorized to create invoice tax snapshots';
+  END IF;
+
   IF NEW.liability_account_id IS NULL THEN
     SELECT liability_account_id INTO NEW.liability_account_id
     FROM public.taxes
@@ -452,6 +462,10 @@ DECLARE
   v_new_paid numeric(14,2);
   v_new_balance numeric(14,2);
 BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
+    RAISE EXCEPTION 'You are not authorized to post invoice payments';
+  END IF;
+
   SELECT * INTO v_invoice
   FROM public.invoices
   WHERE id = NEW.invoice_id
