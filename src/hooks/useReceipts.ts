@@ -19,6 +19,7 @@ interface CreateReceiptData {
   amount: number;
   payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
   notes?: string;
+  reference_number?: string;
   signature_data?: string;
   idempotency_key: string;
 }
@@ -93,6 +94,7 @@ export function useReceipts() {
         p_idempotency_key: receiptData.idempotency_key,
         p_notes: receiptData.notes || null,
         p_signature_data: receiptData.signature_data || null,
+        p_reference_number: receiptData.reference_number || null,
         p_signature_hash: signatureHash,
         p_checksum: checksum,
         p_issuer_name: profile?.full_name || user.email || 'Unknown',
