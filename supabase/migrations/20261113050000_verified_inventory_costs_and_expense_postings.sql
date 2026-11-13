@@ -1499,3 +1499,58 @@ FOR EACH ROW
 EXECUTE FUNCTION public.guard_posted_invoice_soft_deletion();
 
 REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, anon, authenticated;
+
+
+-- These integrity triggers must inspect protected accounting rows even when the
+-- caller's SELECT policies do not expose those rows. Run the checks with the
+-- migration owner privileges and a locked-down search_path.
+CREATE OR REPLACE FUNCTION public.guard_issued_invoice_item_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $issued_invoice_item_guard_v2$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.invoices
+  WHERE id = OLD.invoice_id;
+
+  IF v_status IN ('issued', 'partially_paid', 'paid', 'overdue')
+     AND (NEW.product_id IS DISTINCT FROM OLD.product_id
+       OR NEW.quantity IS DISTINCT FROM OLD.quantity
+       OR NEW.unit_price IS DISTINCT FROM OLD.unit_price
+       OR NEW.description IS DISTINCT FROM OLD.description) THEN
+    RAISE EXCEPTION 'Issued invoice lines are immutable; use a credit note or audited correction';
+  END IF;
+  RETURN NEW;
+END;
+$issued_invoice_item_guard_v2$;
+
+REVOKE ALL ON FUNCTION public.guard_issued_invoice_item_mutations() FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.guard_posted_invoice_soft_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $invoice_delete_guard_v2$
+BEGIN
+  IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL AND (
+    EXISTS (
+      SELECT 1 FROM public.journal_entries
+      WHERE source_type = 'invoice' AND source_id = OLD.id
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.payments
+      WHERE invoice_id = OLD.id AND deleted_at IS NULL
+    )
+  ) THEN
+    RAISE EXCEPTION 'An invoice with posted accounting or payment history cannot be deleted; use an audited credit note or reversal';
+  END IF;
+  RETURN NEW;
+END;
+$invoice_delete_guard_v2$;
+
+REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, anon, authenticated;
