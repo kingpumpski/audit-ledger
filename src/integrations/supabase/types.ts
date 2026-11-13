@@ -1500,6 +1500,17 @@ export type Database = {
         }
         Returns: string
       }
+      reverse_stock_purchase: {
+        Args: {
+          p_purchase_transaction_id: string
+          p_reversed_on: string
+          p_refund_payment_method: Database["public"]["Enums"]["payment_method"] | null
+          p_reason: string
+          p_reference_number: string
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
       set_historical_invoice_item_cost: {
         Args: {
           p_invoice_item_id: string
