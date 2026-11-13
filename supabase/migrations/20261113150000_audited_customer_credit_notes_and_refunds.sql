@@ -204,6 +204,9 @@ DECLARE
   v_unit_cost numeric(14,4);
   v_previous_quantity integer;
   v_new_quantity integer;
+  v_previous_cost numeric(14,4);
+  v_new_cost numeric(14,4);
+  v_current_cost_verified boolean;
   v_is_service boolean;
   v_is_inventory boolean;
   v_subtotal numeric(15,2) := 0;
@@ -554,13 +557,28 @@ BEGIN
     GROUP BY product_id
     ORDER BY product_id
   LOOP
-    SELECT COALESCE(stock_quantity,0) INTO v_previous_quantity
+    SELECT COALESCE(stock_quantity,0),cost_price,cost_price_verified
+    INTO v_previous_quantity,v_previous_cost,v_current_cost_verified
     FROM public.products WHERE id=v_request.product_id FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Returned product no longer exists'; END IF;
+    IF v_previous_quantity > 0 AND (NOT COALESCE(v_current_cost_verified,false) OR v_previous_cost IS NULL) THEN
+      RAISE EXCEPTION 'Current stock valuation is unverified; reconcile inventory cost before posting a physical stock return';
+    END IF;
     v_new_quantity := v_previous_quantity + v_request.quantity;
+    IF v_previous_quantity = 0 THEN
+      v_new_cost := v_request.unit_cost;
+    ELSE
+      v_new_cost := ROUND(
+        ((v_previous_quantity * v_previous_cost) + (v_request.quantity * v_request.unit_cost))
+        / NULLIF(v_new_quantity,0),
+        4
+      );
+    END IF;
 
     UPDATE public.products
-    SET stock_quantity = v_new_quantity
+    SET stock_quantity = v_new_quantity,
+        cost_price = v_new_cost,
+        cost_price_verified = true
     WHERE id=v_request.product_id;
 
     INSERT INTO public.inventory_transactions (
