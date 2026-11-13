@@ -179,8 +179,8 @@ export default function Products() {
         description: formData.description,
         category: formData.category,
         current_price: formData.current_price,
-        cost_price: formData.cost_price,
-        stock_quantity: formData.is_service ? null : formData.stock_quantity,
+        cost_price: null,
+        stock_quantity: formData.is_service ? null : 0,
         min_stock_level: formData.is_service ? null : formData.min_stock_level,
         unit: formData.unit,
         is_service: formData.is_service,
@@ -220,8 +220,8 @@ export default function Products() {
           description: item.description || '',
           category: item.category || 'Uncategorized',
           current_price: parseFloat(item.price || item.current_price) || 0,
-          cost_price: parseFloat(item.cost_price) || 0,
-          stock_quantity: parseInt(item.stock_quantity) || null,
+          cost_price: null,
+          stock_quantity: item.is_service === 'true' ? null : 0,
           unit: item.unit || 'piece',
           is_service: item.is_service === 'true',
           is_active: true,
@@ -236,8 +236,8 @@ export default function Products() {
   };
 
   const sampleCSVData = [
-    { name: 'Sample Product', description: 'Product description', category: 'Electronics', price: '99.99', cost_price: '60.00', stock_quantity: '100', unit: 'piece', is_service: 'false' },
-    { name: 'Consulting Service', description: 'Hourly consulting', category: 'Services', price: '150.00', cost_price: '0', stock_quantity: '', unit: 'hour', is_service: 'true' },
+    { name: 'Sample Product', description: 'Product description', category: 'Electronics', price: '99.99', unit: 'piece', is_service: 'false' },
+    { name: 'Consulting Service', description: 'Hourly consulting', category: 'Services', price: '150.00', unit: 'hour', is_service: 'true' },
   ];
 
   return (
@@ -252,7 +252,7 @@ export default function Products() {
             onImport={handleImportProducts}
             sampleData={sampleCSVData}
             requiredFields={['name', 'price']}
-            optionalFields={['description', 'category', 'cost_price', 'stock_quantity', 'unit', 'is_service']}
+            optionalFields={['description', 'category', 'unit', 'is_service']}
           />
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
@@ -358,31 +358,10 @@ export default function Products() {
                       placeholder="0.00"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Cost Price ({currencySymbol})</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formData.cost_price || ''}
-                      onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
-                      placeholder="0.00"
-                    />
-                  </div>
+
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Stock Quantity</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={formData.stock_quantity || ''}
-                      onChange={(e) => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) || 0 })}
-                      placeholder="0"
-                      disabled={formData.is_service}
-                    />
-                  </div>
                   <div className="space-y-2">
                     <Label>Min Stock Level</Label>
                     <Input
@@ -394,7 +373,12 @@ export default function Products() {
                       disabled={formData.is_service}
                     />
                   </div>
+
                 </div>
+
+                <p className="text-sm text-muted-foreground">
+                  Products are created with zero stock and no verified purchase cost. Record stock purchases in Inventory to establish quantities, weighted-average cost and the corresponding accounting entries.
+                </p>
 
                 <div className="flex items-center gap-6">
                   <label className="flex items-center gap-2 cursor-pointer">
