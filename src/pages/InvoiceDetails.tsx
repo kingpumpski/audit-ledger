@@ -200,7 +200,8 @@ export default function InvoiceDetails() {
   }
 
   const canEdit = invoice.status !== 'paid' && invoice.status !== 'canceled';
-  const canDelete = invoice.status === 'draft' || invoice.status === 'canceled';
+  // Only drafts with no posted financial history may be deleted.
+  const canDelete = invoice.status === 'draft';
   // Issued invoices have posted revenue/receivables and may have reduced stock.
   // Until a credit-note workflow exists, only drafts can be canceled safely.
   const canCancel = invoice.status === 'draft';
