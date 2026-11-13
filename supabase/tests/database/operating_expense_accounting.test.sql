@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(20);
+SELECT extensions.plan(27);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -220,6 +220,83 @@ SELECT extensions.throws_ok(
   'P0001',
   'Posted operating expenses and payments are immutable; use a controlled reversal workflow',
   'Posted settlement cannot be directly deleted'
+);
+
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_operating_expense(
+    'Cancelled office service', 'Example Telecom', 'OPEX-REVERSAL-001',
+    (SELECT id FROM public.chart_of_accounts
+     WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500') ORDER BY code LIMIT 1),
+    CURRENT_DATE, CURRENT_DATE + 7, 75.00, 0,
+    NULL, NULL, 'Service cancelled before payment',
+    'e0000000-0000-4000-8000-000000000105'
+  ) $,
+  'An unpaid expense can be recorded before reversal'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.reverse_unpaid_operating_expense(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001'),
+    'Supplier cancelled the service',
+    'CANCEL-APPROVAL-001',
+    'e0000000-0000-4000-8000-000000000106'
+  ) $,
+  'Accountant can reverse a fully unpaid expense with a reason and evidence reference'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'operating_expense_reversal'
+     AND je.source_id = (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001')
+     AND coa.code = '2000'),
+  75.00::numeric,
+  'Expense reversal debits Accounts Payable'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+   WHERE je.source_type = 'operating_expense_reversal'
+     AND je.source_id = (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001')
+     AND coa.id = (SELECT expense_account_id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001')),
+  75.00::numeric,
+  'Expense reversal credits the original expense account'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.reverse_unpaid_operating_expense(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-REVERSAL-001'),
+    'Supplier cancelled the service',
+    'CANCEL-APPROVAL-001',
+    'e0000000-0000-4000-8000-000000000106'
+  ) $,
+  'Retrying the same reversal request is idempotent'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expense_reversals r
+   JOIN public.operating_expenses e ON e.id = r.operating_expense_id
+   WHERE e.reference_number = 'OPEX-REVERSAL-001'),
+  1,
+  'Expense reversal is recorded only once'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.reverse_unpaid_operating_expense(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    'Attempt reversal after supplier payment',
+    'CANCEL-APPROVAL-PAID-001',
+    'e0000000-0000-4000-8000-000000000107'
+  ) $,
+  'P0001',
+  'An expense with any recorded payment cannot be reversed until the supplier-refund workflow is available',
+  'Paid expenses are blocked until supplier refunds can be accounted for'
 );
 
 SELECT extensions.finish();
