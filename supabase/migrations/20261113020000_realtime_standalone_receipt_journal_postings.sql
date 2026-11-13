@@ -608,3 +608,6 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Make the newly created RPC signatures visible to PostgREST immediately.
+NOTIFY pgrst, 'reload schema';
