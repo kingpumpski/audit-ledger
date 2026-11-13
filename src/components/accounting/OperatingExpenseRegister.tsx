@@ -225,7 +225,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
             <div className="space-y-2 sm:col-span-2"><Label>Expense account</Label>
               <Select value={form.accountId} onValueChange={value => setForm({ ...form, accountId: value })}>
                 <SelectTrigger><SelectValue placeholder="Choose an expense account" /></SelectTrigger>
-                <SelectContent>{(accountsQuery.data || []).map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{(accountsQuery.data || []).filter(account => !['5000', '6500'].includes(account.code)).map(account => <SelectItem key={account.id} value={account.id}>{account.code} · {account.name}</SelectItem>)}</SelectContent>
               </Select>
               {accountsQuery.isError && <p className="text-xs text-destructive">Expense accounts could not be loaded.</p>}
             </div>
@@ -248,7 +248,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
           <DialogHeader><DialogTitle>Settle Supplier Expense</DialogTitle><DialogDescription>{settlement?.expense_number} · Outstanding {settlement ? money(Number(settlement.amount) - Number(settlement.amount_paid), currencySymbol) : ''}</DialogDescription></DialogHeader>
           <div className="space-y-4 py-3">
             <div className="space-y-2"><Label>Payment amount</Label><Input type="number" min="0.01" step="0.01" value={payment.amount} onChange={e => setPayment({ ...payment, amount: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Payment date</Label><Input type="date" value={payment.paidOn} onChange={e => setPayment({ ...payment, paidOn: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Payment date</Label><Input type="date" min={settlement?.incurred_on} value={payment.paidOn} onChange={e => setPayment({ ...payment, paidOn: e.target.value })} /></div>
             <div className="space-y-2"><Label>Payment method</Label><Select value={payment.method} onValueChange={value => setPayment({ ...payment, method: value as PaymentMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="bank_transfer">Bank transfer</SelectItem><SelectItem value="mobile_payment">Mobile Money</SelectItem></SelectContent></Select></div>
             <div className="space-y-2"><Label>Payment reference</Label><Input value={payment.reference} onChange={e => setPayment({ ...payment, reference: e.target.value })} /></div>
           </div>
