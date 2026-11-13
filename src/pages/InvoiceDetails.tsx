@@ -9,6 +9,7 @@ import { useInvoice, useInvoices } from '@/hooks/useInvoices';
 import { useSettings } from '@/hooks/useSettings';
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog';
 import { EditInvoiceDialog } from '@/components/invoices/EditInvoiceDialog';
+import { CreateCreditNoteDialog } from '@/components/invoices/CreateCreditNoteDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -202,8 +203,8 @@ export default function InvoiceDetails() {
   const canEdit = invoice.status !== 'paid' && invoice.status !== 'canceled';
   // Only drafts with no posted financial history may be deleted.
   const canDelete = invoice.status === 'draft';
-  // Issued invoices have posted revenue/receivables and may have reduced stock.
-  // Until a credit-note workflow exists, only drafts can be canceled safely.
+  // Issued invoices have posted revenue, receivables and potentially stock movements.
+  // Corrections are issued as separate credit notes; direct cancellation stays draft-only.
   const canCancel = invoice.status === 'draft';
 
   return (
@@ -277,7 +278,10 @@ export default function InvoiceDetails() {
               Issue Invoice
             </Button>
           )}
-          {(invoice.status === 'issued' || invoice.status === 'partially_paid' || invoice.status === 'overdue') && (
+          {(['issued', 'partially_paid', 'paid', 'overdue'] as const).includes(invoice.status as 'issued' | 'partially_paid' | 'paid' | 'overdue') && (
+            <CreateCreditNoteDialog invoice={invoice} currencySymbol={currencySymbol} />
+          )}
+          {(invoice.status === 'issued' || invoice.status === 'partially_paid' || invoice.status === 'overdue') && (invoice.balance_due || 0) > 0 && (
             <RecordPaymentDialog
               invoiceId={invoice.id}
               customerId={invoice.customer_id}
