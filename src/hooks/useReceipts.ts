@@ -161,6 +161,7 @@ export function useReceipts() {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
       queryClient.invalidateQueries({ queryKey: ['receipt'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       toast({ title: 'Receipt voided', description: 'Any standalone receipt payment has been reversed from its linked invoice.' });
     },
     onError: (error) => {
