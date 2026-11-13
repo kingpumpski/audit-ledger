@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(44);
+SELECT extensions.plan(45);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -317,6 +317,14 @@ SELECT extensions.is(
   13.3333::numeric,
   'Returning goods at original cost recomputes the current weighted-average inventory valuation'
 );
+
+SELECT extensions.is(
+  (SELECT cost_price_verified FROM public.products WHERE sku='TEST-CN-STOCK-001'),
+  true,
+  'Audited stock return retains verified status for the recomputed weighted-average cost'
+);
+
+
 
 
 
