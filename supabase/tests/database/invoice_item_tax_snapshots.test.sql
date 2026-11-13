@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(4);
+SELECT extensions.plan(6);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -69,6 +69,47 @@ SELECT extensions.is(
    WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001')),
   15.00::numeric,
   'Invoice line preserves its exact tax amount and liability allocation'
+);
+
+INSERT INTO public.invoices (
+  invoice_number, customer_id, status, issue_date, subtotal,
+  tax_amount, total_amount, balance_due
+)
+SELECT 'INV-TAX-SNAPSHOT-002', id, 'draft', CURRENT_DATE, 100, 15, 115, 115
+FROM public.customers WHERE code='TAX-SNAPSHOT-CUSTOMER';
+
+INSERT INTO public.invoice_items (
+  invoice_id, description, quantity, unit_price, tax_rate, tax_amount, line_total
+)
+SELECT id, 'Second draft invoice line', 1, 100, 15, 15, 115
+FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-002';
+
+SELECT extensions.throws_ok(
+  $ UPDATE public.invoice_item_taxes SET tax_rate=99
+     WHERE invoice_id=(SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001') $,
+  'P0001',
+  'Tax snapshot must match the active authoritative tax definition',
+  'A client cannot rewrite the authoritative tax rate in a line snapshot'
+);
+
+SELECT extensions.throws_ok(
+  $ INSERT INTO public.invoice_item_taxes (
+       invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
+       tax_rate, is_compound, tax_order, taxable_amount, tax_amount,
+       liability_account_id
+     )
+     SELECT i2.id, ii1.id, t.id, t.name, t.code, t.rate, t.is_compound,
+            0, 100, 15, t.liability_account_id
+     FROM public.invoices i2
+     JOIN public.invoice_items ii1 ON ii1.invoice_id = (
+       SELECT id FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001'
+     )
+     CROSS JOIN public.taxes t
+     WHERE i2.invoice_number='INV-TAX-SNAPSHOT-002'
+       AND t.code='TAX-SNAPSHOT-001' $,
+  'P0001',
+  'Tax snapshot invoice line does not belong to the specified invoice',
+  'A tax snapshot cannot attach another invoice line to a different invoice'
 );
 
 UPDATE public.invoices SET status='issued'
