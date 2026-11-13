@@ -28,9 +28,9 @@ CREATE FUNCTION public.record_invoice_payment(
   p_customer_id uuid,
   p_amount numeric,
   p_payment_method public.payment_method,
-  p_reference_number text,
-  p_notes text,
-  p_idempotency_key uuid
+  p_idempotency_key uuid,
+  p_reference_number text DEFAULT NULL,
+  p_notes text DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -105,11 +105,11 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.record_invoice_payment(
-  uuid, uuid, numeric, public.payment_method, text, text, uuid
+  uuid, uuid, numeric, public.payment_method, uuid, text, text
 ) FROM PUBLIC, anon;
 
 GRANT EXECUTE ON FUNCTION public.record_invoice_payment(
-  uuid, uuid, numeric, public.payment_method, text, text, uuid
+  uuid, uuid, numeric, public.payment_method, uuid, text, text
 ) TO authenticated;
 
 -- Replace the atomic receipt RPC with an idempotent version. The advisory lock
@@ -221,9 +221,9 @@ BEGIN
       p_customer_id,
       ROUND(p_amount, 2),
       p_payment_method,
+      p_idempotency_key,
       NULL,
-      NULLIF(BTRIM(p_notes), ''),
-      p_idempotency_key
+      NULLIF(BTRIM(p_notes), '')
     );
   END IF;
 
