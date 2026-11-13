@@ -209,19 +209,10 @@ export function useInvoices() {
 
   const issueInvoiceMutation = useMutation({
     mutationFn: async (invoiceId: string): Promise<{ requiresDomainVerification?: boolean }> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      const { error } = await supabase
-        .from('invoices')
-        .update({
-          status: 'issued',
-          issued_at: new Date().toISOString(),
-          issued_by: user.id,
-          is_locked: true,
-        })
-        .eq('id', invoiceId)
-        .eq('status', 'draft');
+      // Issuing the invoice and posting its balanced journal entry happen in one database transaction.
+      const { error } = await supabase.rpc('issue_invoice', {
+        p_invoice_id: invoiceId,
+      });
 
       if (error) throw error;
 
