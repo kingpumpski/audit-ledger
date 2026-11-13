@@ -1,57 +1,20 @@
-import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSidebarItems } from '@/config/sidebarConfig';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  LayoutDashboard,
-  FileText,
-  Receipt,
-  Users,
-  Package,
-  Percent,
-  Calculator,
-  Shield,
-  ClipboardList,
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ElementType;
-  badge?: number;
-  roles?: string[];
-}
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Sales & Invoices', href: '/invoices', icon: FileText },
-  { label: 'Money Received', href: '/receipts', icon: Receipt },
-  { label: 'Customers', href: '/customers', icon: Users },
-  { label: 'Products & Services', href: '/products', icon: Package },
-  { label: 'Accounting Tools', href: '/accounting', icon: BookOpen, roles: ['admin', 'accountant', 'auditor'] },
-  { label: 'Stock', href: '/inventory', icon: Package, roles: ['admin', 'accountant', 'cashier'] },
-  { label: 'Taxes', href: '/taxes', icon: Calculator, roles: ['admin', 'accountant'] },
-  { label: 'Discounts', href: '/discounts', icon: Percent, roles: ['admin', 'accountant'] },
-  { label: 'Business Reports', href: '/reports', icon: ClipboardList, roles: ['admin', 'accountant', 'auditor'] },
-  { label: 'Activity History', href: '/audit-logs', icon: Shield, roles: ['admin', 'auditor'] },
-];
+import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function AppSidebar() {
   const { collapsed: isCollapsed, setCollapsed: setIsCollapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { roles } = useAuth();
-  const location = useLocation();
+  const { roles, userPersona } = useAuth();
 
   const handleToggle = () => {
     setIsCollapsed(!isCollapsed);
   };
 
-  const filteredNavItems = navItems.filter((item) =>
+  const filteredNavItems = getSidebarItems(userPersona).filter((item) =>
     !item.roles || roles.some((role) => item.roles?.includes(role))
   );
 
@@ -86,29 +49,26 @@ export function AppSidebar() {
         </div>
 
         <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto p-2 custom-scrollbar">
-          {filteredNavItems.map((item) => (
-            <NavLink
-              key={item.href}
-              to={item.href}
-              title={isCollapsed ? item.label : undefined}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) => cn(
-                'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                isActive && 'nav-link-active'
-              )}
-            >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
-              {!isCollapsed && (
-                <>
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-xs">{item.badge}</Badge>
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {filteredNavItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                title={isCollapsed ? item.name : undefined}
+                aria-label={item.name}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) => cn(
+                  'relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                  'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                  isActive && 'nav-link-active'
+                )}
+              >
+                <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                {!isCollapsed && <span className="flex-1">{item.name}</span>}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
     </aside>
