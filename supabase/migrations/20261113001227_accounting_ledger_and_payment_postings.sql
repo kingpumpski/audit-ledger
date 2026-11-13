@@ -157,7 +157,7 @@ INSERT INTO public.sequences (name, prefix, current_value, padding)
 VALUES ('journal', 'JRN-', 0, 6)
 ON CONFLICT (name) DO NOTHING;
 
-CREATE OR REPLACE FUNCTION public.issue_invoice(p_invoice_id uuid)
+CREATE OR REPLACE FUNCTION public.post_invoice_journal(p_invoice_id uuid)
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -180,7 +180,14 @@ DECLARE
   v_credits numeric(14,2);
 BEGIN
   IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
-    RAISE EXCEPTION 'You are not authorized to issue invoices';
+    RAISE EXCEPTION 'You are not authorized to post invoice journals';
+  END IF;
+
+  SELECT id INTO v_journal_id
+  FROM public.journal_entries
+  WHERE source_type = 'invoice' AND source_id = p_invoice_id;
+  IF v_journal_id IS NOT NULL THEN
+    RETURN v_journal_id;
   END IF;
 
   SELECT * INTO v_invoice
@@ -188,14 +195,11 @@ BEGIN
   WHERE id = p_invoice_id AND deleted_at IS NULL
   FOR UPDATE;
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Invoice not found';
-  END IF;
-  IF v_invoice.status <> 'draft' THEN
-    RAISE EXCEPTION 'Only draft invoices can be issued';
+  IF NOT FOUND OR v_invoice.status <> 'issued' THEN
+    RAISE EXCEPTION 'Only an issued invoice can be posted to the ledger';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.invoice_items WHERE invoice_id = p_invoice_id) THEN
-    RAISE EXCEPTION 'An invoice must contain at least one line item before it can be issued';
+    RAISE EXCEPTION 'An invoice must contain at least one line item before it can be posted';
   END IF;
   IF COALESCE(v_invoice.total_amount, 0) <= 0 THEN
     RAISE EXCEPTION 'Invoice total must be greater than zero';
@@ -225,13 +229,6 @@ BEGIN
     RAISE EXCEPTION 'Invoice tax total is invalid';
   END IF;
   v_revenue_total := ROUND(COALESCE(v_invoice.total_amount, 0) - v_tax_total, 2);
-
-  UPDATE public.invoices
-  SET status = 'issued',
-      issued_at = now(),
-      issued_by = auth.uid(),
-      is_locked = true
-  WHERE id = p_invoice_id;
 
   v_entry_number := public.get_next_sequence('journal');
   SELECT COALESCE(currency_code, 'USD') INTO v_currency
@@ -297,8 +294,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Preserve legacy invoices that have an aggregate tax amount but no tax snapshots,
-  -- and route any rounding residual to the default Sales Tax Payable account.
   IF v_tax_total - v_tax_snapshot_total > 0.01 THEN
     INSERT INTO public.journal_lines (
       journal_entry_id, line_number, account_id, description, debit, credit
@@ -325,14 +320,25 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.record_invoice_payment(
-  p_invoice_id uuid,
-  p_customer_id uuid,
-  p_amount numeric,
-  p_payment_method public.payment_method,
-  p_reference_number text DEFAULT NULL,
-  p_notes text DEFAULT NULL
-)
+CREATE OR REPLACE FUNCTION public.post_invoice_journal_after_issue()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'issued' THEN
+    PERFORM public.post_invoice_journal(NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER post_invoice_journal_after_issue
+AFTER UPDATE OF status ON public.invoices
+FOR EACH ROW EXECUTE FUNCTION public.post_invoice_journal_after_issue();
+
+CREATE OR REPLACE FUNCTION public.issue_invoice(p_invoice_id uuid)
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -340,30 +346,64 @@ SET search_path = ''
 AS $$
 DECLARE
   v_invoice public.invoices%ROWTYPE;
-  v_payment_id uuid;
-  v_payment_number text;
   v_journal_id uuid;
-  v_entry_number text;
-  v_receivable_account uuid;
-  v_payment_account uuid;
-  v_currency text;
-  v_new_paid numeric(14,2);
-  v_new_balance numeric(14,2);
-  v_line_debits numeric(14,2);
-  v_line_credits numeric(14,2);
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
+    RAISE EXCEPTION 'You are not authorized to issue invoices';
+  END IF;
+
+  SELECT * INTO v_invoice
+  FROM public.invoices
+  WHERE id = p_invoice_id AND deleted_at IS NULL
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice not found';
+  END IF;
+  IF v_invoice.status <> 'draft' THEN
+    RAISE EXCEPTION 'Only draft invoices can be issued';
+  END IF;
+
+  UPDATE public.invoices
+  SET status = 'issued',
+      issued_at = now(),
+      issued_by = auth.uid(),
+      is_locked = true
+  WHERE id = p_invoice_id;
+
+  SELECT id INTO v_journal_id
+  FROM public.journal_entries
+  WHERE source_type = 'invoice' AND source_id = p_invoice_id;
+
+  IF v_journal_id IS NULL THEN
+    RAISE EXCEPTION 'Invoice was issued but its journal entry was not created';
+  END IF;
+
+  RETURN v_journal_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_invoice_payment_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_invoice public.invoices%ROWTYPE;
 BEGIN
   IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
     RAISE EXCEPTION 'You are not authorized to record payments';
   END IF;
 
-  IF p_amount IS NULL OR ROUND(p_amount, 2) <= 0 THEN
+  IF NEW.amount IS NULL OR ROUND(NEW.amount, 2) <= 0 THEN
     RAISE EXCEPTION 'Payment amount must be greater than zero';
   END IF;
 
   SELECT * INTO v_invoice
   FROM public.invoices
-  WHERE id = p_invoice_id
-    AND customer_id = p_customer_id
+  WHERE id = NEW.invoice_id
+    AND customer_id = NEW.customer_id
     AND deleted_at IS NULL
   FOR UPDATE;
 
@@ -373,17 +413,60 @@ BEGIN
   IF v_invoice.status NOT IN ('issued', 'partially_paid', 'overdue') THEN
     RAISE EXCEPTION 'Only issued invoices with an outstanding balance can receive payments';
   END IF;
-
-  IF ROUND(p_amount, 2) > ROUND(COALESCE(v_invoice.balance_due, v_invoice.total_amount, 0), 2) THEN
+  IF ROUND(NEW.amount, 2) > ROUND(COALESCE(v_invoice.balance_due, v_invoice.total_amount, 0), 2) THEN
     RAISE EXCEPTION 'Payment amount exceeds the remaining invoice balance';
   END IF;
+
+  NEW.processed_by := auth.uid();
+  NEW.payment_date := COALESCE(NEW.payment_date, now());
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER validate_invoice_payment_insert
+BEFORE INSERT ON public.payments
+FOR EACH ROW EXECUTE FUNCTION public.validate_invoice_payment_insert();
+
+CREATE OR REPLACE FUNCTION public.apply_invoice_payment_and_post_journal()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_invoice public.invoices%ROWTYPE;
+  v_entry_number text;
+  v_journal_id uuid;
+  v_receivable_account uuid;
+  v_payment_account uuid;
+  v_currency text;
+  v_new_paid numeric(14,2);
+  v_new_balance numeric(14,2);
+BEGIN
+  SELECT * INTO v_invoice
+  FROM public.invoices
+  WHERE id = NEW.invoice_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice not found while posting payment';
+  END IF;
+
+  v_new_paid := ROUND(COALESCE(v_invoice.amount_paid, 0) + NEW.amount, 2);
+  v_new_balance := GREATEST(0, ROUND(COALESCE(v_invoice.total_amount, 0) - v_new_paid, 2));
+
+  UPDATE public.invoices
+  SET amount_paid = v_new_paid,
+      balance_due = v_new_balance,
+      status = CASE WHEN v_new_balance <= 0 THEN 'paid'::public.invoice_status ELSE 'partially_paid'::public.invoice_status END
+  WHERE id = NEW.invoice_id;
 
   SELECT id INTO v_receivable_account
   FROM public.chart_of_accounts
   WHERE code = '1100' AND account_type = 'asset' AND is_active
   LIMIT 1;
 
-  IF p_payment_method = 'cash' THEN
+  IF NEW.payment_method = 'cash' THEN
     SELECT id INTO v_payment_account
     FROM public.chart_of_accounts
     WHERE code = '1000' AND account_type = 'asset' AND is_active
@@ -399,6 +482,59 @@ BEGIN
     RAISE EXCEPTION 'Required cash, bank or receivable accounts are not configured';
   END IF;
 
+  v_entry_number := public.get_next_sequence('journal');
+  SELECT COALESCE(currency_code, 'USD') INTO v_currency
+  FROM public.company_settings
+  ORDER BY created_at
+  LIMIT 1;
+  v_currency := COALESCE(v_currency, 'USD');
+
+  INSERT INTO public.journal_entries (
+    entry_number, entry_date, description, source_type, source_id, currency, created_by
+  )
+  VALUES (
+    v_entry_number, COALESCE(NEW.payment_date::date, CURRENT_DATE),
+    'Payment ' || NEW.payment_number || ' received for invoice ' || v_invoice.invoice_number,
+    'payment', NEW.id, v_currency, auth.uid()
+  )
+  RETURNING id INTO v_journal_id;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  )
+  VALUES
+    (v_journal_id, 1, v_payment_account, 'Cash/bank received - ' || NEW.payment_number, ROUND(NEW.amount, 2), 0),
+    (v_journal_id, 2, v_receivable_account, 'Accounts receivable settled - ' || NEW.payment_number, 0, ROUND(NEW.amount, 2));
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER apply_invoice_payment_and_post_journal
+AFTER INSERT ON public.payments
+FOR EACH ROW EXECUTE FUNCTION public.apply_invoice_payment_and_post_journal();
+
+CREATE OR REPLACE FUNCTION public.record_invoice_payment(
+  p_invoice_id uuid,
+  p_customer_id uuid,
+  p_amount numeric,
+  p_payment_method public.payment_method,
+  p_reference_number text DEFAULT NULL,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_payment_id uuid;
+  v_payment_number text;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
+    RAISE EXCEPTION 'You are not authorized to record payments';
+  END IF;
+
   v_payment_number := public.get_next_sequence('payment');
   INSERT INTO public.payments (
     payment_number, invoice_id, customer_id, amount, payment_method,
@@ -411,53 +547,16 @@ BEGIN
   )
   RETURNING id INTO v_payment_id;
 
-  v_new_paid := ROUND(COALESCE(v_invoice.amount_paid, 0) + p_amount, 2);
-  v_new_balance := GREATEST(0, ROUND(COALESCE(v_invoice.total_amount, 0) - v_new_paid, 2));
-
-  UPDATE public.invoices
-  SET amount_paid = v_new_paid,
-      balance_due = v_new_balance,
-      status = CASE WHEN v_new_balance <= 0 THEN 'paid'::public.invoice_status ELSE 'partially_paid'::public.invoice_status END
-  WHERE id = p_invoice_id;
-
-  v_entry_number := public.get_next_sequence('journal');
-  SELECT COALESCE(currency_code, 'USD') INTO v_currency
-  FROM public.company_settings
-  ORDER BY created_at
-  LIMIT 1;
-  v_currency := COALESCE(v_currency, 'USD');
-
-  INSERT INTO public.journal_entries (
-    entry_number, entry_date, description, source_type, source_id, currency, created_by
-  )
-  VALUES (
-    v_entry_number, CURRENT_DATE,
-    'Payment ' || v_payment_number || ' received for invoice ' || v_invoice.invoice_number,
-    'payment', v_payment_id, v_currency, auth.uid()
-  )
-  RETURNING id INTO v_journal_id;
-
-  INSERT INTO public.journal_lines (
-    journal_entry_id, line_number, account_id, description, debit, credit
-  )
-  VALUES
-    (v_journal_id, 1, v_payment_account, 'Cash/bank received - ' || v_payment_number, ROUND(p_amount, 2), 0),
-    (v_journal_id, 2, v_receivable_account, 'Accounts receivable settled - ' || v_payment_number, 0, ROUND(p_amount, 2));
-
-  SELECT ROUND(COALESCE(SUM(debit), 0), 2), ROUND(COALESCE(SUM(credit), 0), 2)
-  INTO v_line_debits, v_line_credits
-  FROM public.journal_lines
-  WHERE journal_entry_id = v_journal_id;
-
-  IF v_line_debits <> v_line_credits THEN
-    RAISE EXCEPTION 'Payment journal is not balanced';
-  END IF;
-
   RETURN v_payment_id;
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.post_invoice_journal(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.post_invoice_journal_after_issue() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.issue_invoice(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.validate_invoice_payment_insert() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.apply_invoice_payment_and_post_journal() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.record_invoice_payment(uuid, uuid, numeric, public.payment_method, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.post_invoice_journal(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.issue_invoice(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.record_invoice_payment(uuid, uuid, numeric, public.payment_method, text, text) TO authenticated;
