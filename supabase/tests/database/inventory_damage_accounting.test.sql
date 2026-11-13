@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(47);
+SELECT extensions.plan(48);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -91,6 +91,7 @@ JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
 WHERE i.invoice_number = 'INV-TEST-SERVICE-001';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.throws_ok(
   $$ INSERT INTO public.products (
