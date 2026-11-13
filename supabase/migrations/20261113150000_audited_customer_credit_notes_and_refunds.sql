@@ -191,10 +191,10 @@ CREATE POLICY customer_credit_applications_finance_read ON public.customer_credi
 CREATE POLICY customer_credit_refunds_finance_read ON public.customer_credit_refunds
   FOR SELECT TO authenticated USING (public.has_any_role(ARRAY['admin','accountant','auditor']));
 
-GRANT SELECT ON public.credit_notes, public.credit_note_lines, public.credit_note_line_taxes,
-  public.customer_credit_applications, public.customer_credit_refunds TO authenticated;
 REVOKE ALL ON public.credit_notes, public.credit_note_lines, public.credit_note_line_taxes,
   public.customer_credit_applications, public.customer_credit_refunds FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.credit_notes, public.credit_note_lines, public.credit_note_line_taxes,
+  public.customer_credit_applications, public.customer_credit_refunds TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.guard_credit_note_records()
 RETURNS trigger
