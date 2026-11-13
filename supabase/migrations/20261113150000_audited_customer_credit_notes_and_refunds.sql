@@ -835,3 +835,64 @@ END;
 $posted_inventory_guard_credit_note$;
 
 REVOKE ALL ON FUNCTION public.guard_posted_inventory_transaction_mutations() FROM PUBLIC,anon,authenticated;
+
+
+CREATE OR REPLACE FUNCTION public.get_customer_credit_balances(p_customer_id uuid)
+RETURNS TABLE (
+  credit_note_id uuid,
+  credit_note_number text,
+  original_invoice_id uuid,
+  original_invoice_number text,
+  credit_note_date date,
+  reason text,
+  credit_amount numeric(15,2),
+  applied_amount numeric(15,2),
+  refunded_amount numeric(15,2),
+  remaining_amount numeric(15,2)
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $get_customer_credit_balances$
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant','auditor']) THEN
+    RAISE EXCEPTION 'You are not authorized to view customer credit balances';
+  END IF;
+  IF p_customer_id IS NULL THEN
+    RAISE EXCEPTION 'A customer is required to retrieve customer credit balances';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    cn.id,
+    cn.credit_note_number,
+    cn.invoice_id,
+    i.invoice_number,
+    cn.credit_note_date,
+    cn.reason,
+    cn.customer_credit_amount::numeric(15,2),
+    COALESCE(app.applied_amount,0)::numeric(15,2),
+    COALESCE(ref.refunded_amount,0)::numeric(15,2),
+    GREATEST(
+      cn.customer_credit_amount - COALESCE(app.applied_amount,0) - COALESCE(ref.refunded_amount,0),
+      0
+    )::numeric(15,2)
+  FROM public.credit_notes cn
+  JOIN public.invoices i ON i.id=cn.invoice_id
+  LEFT JOIN (
+    SELECT credit_note_id, SUM(amount) AS applied_amount
+    FROM public.customer_credit_applications
+    GROUP BY credit_note_id
+  ) app ON app.credit_note_id=cn.id
+  LEFT JOIN (
+    SELECT credit_note_id, SUM(amount) AS refunded_amount
+    FROM public.customer_credit_refunds
+    GROUP BY credit_note_id
+  ) ref ON ref.credit_note_id=cn.id
+  WHERE cn.customer_id=p_customer_id
+  ORDER BY cn.credit_note_date DESC, cn.created_at DESC;
+END;
+$get_customer_credit_balances$;
+
+REVOKE ALL ON FUNCTION public.get_customer_credit_balances(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_customer_credit_balances(uuid) TO authenticated;
