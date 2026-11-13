@@ -79,9 +79,10 @@ export function usePayments() {
 
       return payment;
     },
-    onSuccess: () => {
+    onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', payment.invoice_id] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
       toast({ title: 'Payment recorded successfully' });
