@@ -715,8 +715,8 @@ SELECT extensions.throws_ok(
 );
 
 SELECT extensions.lives_ok(
-  $ UPDATE public.invoices SET status = 'issued'
-     WHERE invoice_number = 'INV-TEST-SERVICE-001' $,
+  $$ UPDATE public.invoices SET status = 'issued'
+     WHERE invoice_number = 'INV-TEST-SERVICE-001' $$,
   'Service-only invoice can be issued without an inventory cost snapshot'
 );
 
@@ -734,7 +734,7 @@ SELECT extensions.is(
 
 SELECT extensions.lives_ok(
   $ UPDATE public.invoices SET status = 'issued'
-     WHERE invoice_number = 'INV-TEST-MIXED-001' $,
+     WHERE invoice_number = 'INV-TEST-MIXED-001' $$,
   'Mixed physical-product and service invoice can be issued'
 );
 
