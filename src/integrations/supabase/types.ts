@@ -1459,6 +1459,7 @@ export type Database = {
           p_signature_hash?: string | null
           p_checksum?: string | null
           p_issuer_name?: string | null
+          p_reference_number?: string | null
         }
         Returns: string
       }
