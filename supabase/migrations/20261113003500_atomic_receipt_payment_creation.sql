@@ -22,7 +22,6 @@ DECLARE
   v_user_id uuid := auth.uid();
   v_invoice_id uuid := p_invoice_id;
   v_payment_id uuid := p_payment_id;
-  v_payment_number text;
   v_receipt_number text;
   v_receipt_id uuid;
   v_existing_payment public.payments%ROWTYPE;
@@ -72,29 +71,18 @@ BEGIN
       RAISE EXCEPTION 'A receipt has already been issued for this payment';
     END IF;
   ELSIF v_invoice_id IS NOT NULL THEN
-    v_payment_number := public.get_next_sequence('payment');
-
-    INSERT INTO public.payments (
-      payment_number,
-      invoice_id,
-      customer_id,
-      amount,
-      payment_method,
-      notes,
-      processed_by,
-      payment_date
-    )
-    VALUES (
-      v_payment_number,
+    -- Reuse the established payment RPC so invoice balances, payment
+    -- validation and accounting journal posting remain identical to the
+    -- application's normal payment workflow. Nested function work remains
+    -- inside this transaction and rolls back if receipt creation fails.
+    v_payment_id := public.record_invoice_payment(
       v_invoice_id,
       p_customer_id,
       ROUND(p_amount, 2),
       p_payment_method,
-      NULLIF(BTRIM(p_notes), ''),
-      v_user_id,
-      now()
-    )
-    RETURNING id INTO v_payment_id;
+      NULL,
+      NULLIF(BTRIM(p_notes), '')
+    );
   END IF;
 
   v_receipt_number := public.get_next_sequence('receipt');
