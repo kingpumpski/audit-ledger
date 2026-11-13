@@ -126,7 +126,7 @@ RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
-AS $
+AS $compat$
 BEGIN
   RETURN public.record_invoice_payment(
     p_invoice_id,
@@ -138,8 +138,7 @@ BEGIN
     p_notes
   );
 END;
-$;
-
+$compat$;
 REVOKE ALL ON FUNCTION public.record_invoice_payment(
   uuid, uuid, numeric, public.payment_method, text, text
 ) FROM PUBLIC, anon;
