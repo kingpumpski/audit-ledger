@@ -94,7 +94,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
         'ml-0',
         collapsed ? 'md:ml-16' : 'md:ml-64'
       )}>
-        <header className="sticky top-0 z-50 flex min-h-16 w-full items-center justify-between gap-4 border-b border-border bg-background/95 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85 sm:px-6">
+        <header className="sticky top-0 z-50 flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               type="button"
@@ -115,8 +115,8 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
             )}
           </div>
 
-          <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-2">
-            <div className="relative hidden w-40 sm:block md:w-48 lg:w-64">
+          <div className="ml-auto flex w-full min-w-0 items-center justify-end gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-40 sm:flex-none md:w-48 lg:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="Search application features"
