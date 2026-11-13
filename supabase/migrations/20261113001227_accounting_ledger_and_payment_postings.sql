@@ -109,8 +109,13 @@ BEGIN
     LIMIT 1;
   END IF;
 
-  IF NEW.liability_account_id IS NULL THEN
-    RAISE EXCEPTION 'A tax liability account is required. Configure Sales Tax Payable (2100) or select another liability account.';
+  IF NEW.liability_account_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.chart_of_accounts
+    WHERE id = NEW.liability_account_id
+      AND account_type = 'liability'
+      AND is_active
+  ) THEN
+    RAISE EXCEPTION 'A tax liability account is required and must be an active liability account.';
   END IF;
 
   RETURN NEW;
@@ -140,8 +145,12 @@ BEGIN
     LIMIT 1;
   END IF;
 
-  IF NEW.liability_account_id IS NULL THEN
-    RAISE EXCEPTION 'Unable to resolve a tax liability account for invoice tax snapshot';
+  IF NEW.liability_account_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.chart_of_accounts
+    WHERE id = NEW.liability_account_id
+      AND account_type = 'liability'
+  ) THEN
+    RAISE EXCEPTION 'Invoice tax snapshot must reference a liability account';
   END IF;
 
   RETURN NEW;
