@@ -31,6 +31,9 @@ INSERT INTO public.invoice_items (
 SELECT id, 'Tax snapshot test line', 1, 100, 15, 15, 115
 FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001';
 
+SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+
 INSERT INTO public.taxes (
   code, name, type, rate, is_compound, is_active,
   liability_account_id, effective_from
