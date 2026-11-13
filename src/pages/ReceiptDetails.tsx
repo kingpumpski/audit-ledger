@@ -333,8 +333,8 @@ export default function ReceiptDetails() {
         receipt={receipt}
         open={isEditing}
         onOpenChange={setIsEditing}
-        onSave={async (id, data, notifyCustomer) => {
-          await updateReceipt({ id, data, notifyCustomer });
+        onSave={async (id, data) => {
+          await updateReceipt({ id, data });
         }}
         isUpdating={isUpdating}
       />
