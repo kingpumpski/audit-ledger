@@ -335,10 +335,160 @@ AFTER INSERT ON public.receipts
 FOR EACH ROW
 EXECUTE FUNCTION public.post_unapplied_receipt_journal();
 
+-- Backfill previously issued invoices. A status-change trigger cannot
+-- retroactively post invoices that were already issued before this migration.
+DO $
+DECLARE
+  v_invoice record;
+  v_ar_account uuid;
+  v_revenue_account uuid;
+  v_default_tax_account uuid;
+  v_journal_id uuid;
+  v_entry_number text;
+  v_currency text;
+  v_tax_total numeric(14,2);
+  v_revenue_total numeric(14,2);
+  v_tax_snapshot_total numeric(14,2);
+  v_line_number integer;
+  v_tax_row record;
+  v_debits numeric(14,2);
+  v_credits numeric(14,2);
+BEGIN
+  SELECT id INTO v_ar_account
+  FROM public.chart_of_accounts
+  WHERE code = '1100' AND account_type = 'asset' AND is_active
+  LIMIT 1;
+
+  SELECT id INTO v_revenue_account
+  FROM public.chart_of_accounts
+  WHERE code = '4000' AND account_type = 'revenue' AND is_active
+  LIMIT 1;
+
+  SELECT id INTO v_default_tax_account
+  FROM public.chart_of_accounts
+  WHERE code = '2100' AND account_type = 'liability' AND is_active
+  LIMIT 1;
+
+  IF v_ar_account IS NULL OR v_revenue_account IS NULL OR v_default_tax_account IS NULL THEN
+    RAISE EXCEPTION 'Required accounts are not configured for issued invoice backfill';
+  END IF;
+
+  FOR v_invoice IN
+    SELECT i.*
+    FROM public.invoices i
+    WHERE i.deleted_at IS NULL
+      AND i.status IN ('issued', 'partially_paid', 'paid', 'overdue')
+      AND NOT EXISTS (
+        SELECT 1 FROM public.journal_entries j
+        WHERE j.source_type = 'invoice' AND j.source_id = i.id
+      )
+    ORDER BY i.issue_date, i.created_at, i.id
+  LOOP
+    IF COALESCE(v_invoice.total_amount, 0) <= 0 THEN
+      RAISE EXCEPTION 'Cannot backfill issued invoice % with a non-positive total', v_invoice.invoice_number;
+    END IF;
+
+    v_tax_total := ROUND(COALESCE(v_invoice.tax_amount, 0), 2);
+    IF v_tax_total < 0 OR v_tax_total > ROUND(v_invoice.total_amount, 2) THEN
+      RAISE EXCEPTION 'Invalid tax total on issued invoice %', v_invoice.invoice_number;
+    END IF;
+    v_revenue_total := ROUND(v_invoice.total_amount - v_tax_total, 2);
+    v_tax_snapshot_total := 0;
+    v_line_number := 1;
+
+    v_entry_number := public.get_next_sequence('journal');
+    SELECT COALESCE(currency_code, 'USD') INTO v_currency
+    FROM public.company_settings
+    ORDER BY created_at
+    LIMIT 1;
+    v_currency := COALESCE(v_currency, 'USD');
+
+    INSERT INTO public.journal_entries (
+      entry_number, entry_date, description, source_type, source_id, currency, created_by
+    )
+    VALUES (
+      v_entry_number,
+      COALESCE(v_invoice.issue_date, CURRENT_DATE),
+      'Invoice ' || v_invoice.invoice_number || ' issued (opening ledger backfill)',
+      'invoice',
+      v_invoice.id,
+      v_currency,
+      COALESCE(v_invoice.issued_by, v_invoice.created_by)
+    )
+    RETURNING id INTO v_journal_id;
+
+    INSERT INTO public.journal_lines (
+      journal_entry_id, line_number, account_id, description, debit, credit
+    )
+    VALUES (
+      v_journal_id, v_line_number, v_ar_account,
+      'Accounts receivable - ' || v_invoice.invoice_number,
+      ROUND(v_invoice.total_amount, 2), 0
+    );
+    v_line_number := v_line_number + 1;
+
+    IF v_revenue_total > 0 THEN
+      INSERT INTO public.journal_lines (
+        journal_entry_id, line_number, account_id, description, debit, credit
+      )
+      VALUES (
+        v_journal_id, v_line_number, v_revenue_account,
+        'Sales revenue - ' || v_invoice.invoice_number,
+        0, v_revenue_total
+      );
+      v_line_number := v_line_number + 1;
+    END IF;
+
+    FOR v_tax_row IN
+      SELECT liability_account_id, ROUND(SUM(tax_amount), 2) AS tax_amount
+      FROM public.invoice_taxes
+      WHERE invoice_id = v_invoice.id
+      GROUP BY liability_account_id
+      ORDER BY liability_account_id
+    LOOP
+      IF v_tax_row.tax_amount > 0 THEN
+        INSERT INTO public.journal_lines (
+          journal_entry_id, line_number, account_id, description, debit, credit
+        )
+        VALUES (
+          v_journal_id, v_line_number, v_tax_row.liability_account_id,
+          'Tax payable - ' || v_invoice.invoice_number,
+          0, v_tax_row.tax_amount
+        );
+        v_line_number := v_line_number + 1;
+        v_tax_snapshot_total := v_tax_snapshot_total + v_tax_row.tax_amount;
+      END IF;
+    END LOOP;
+
+    IF v_tax_total - v_tax_snapshot_total > 0 THEN
+      INSERT INTO public.journal_lines (
+        journal_entry_id, line_number, account_id, description, debit, credit
+      )
+      VALUES (
+        v_journal_id, v_line_number, v_default_tax_account,
+        'Unallocated tax payable - ' || v_invoice.invoice_number,
+        0, ROUND(v_tax_total - v_tax_snapshot_total, 2)
+      );
+    ELSIF v_tax_snapshot_total - v_tax_total > 0 THEN
+      RAISE EXCEPTION 'Invoice tax snapshots do not reconcile for invoice %', v_invoice.invoice_number;
+    END IF;
+
+    SELECT ROUND(COALESCE(SUM(debit), 0), 2), ROUND(COALESCE(SUM(credit), 0), 2)
+    INTO v_debits, v_credits
+    FROM public.journal_lines
+    WHERE journal_entry_id = v_journal_id;
+
+    IF v_debits <> v_credits THEN
+      RAISE EXCEPTION 'Backfilled invoice journal is not balanced for %', v_invoice.invoice_number;
+    END IF;
+  END LOOP;
+END;
+$;
+
 -- Backfill already-issued receipts that were not linked to a payment. This
 -- includes standalone/unapplied receipts and legacy invoice receipts without
 -- payment rows, so the ledger is complete from the migration onward.
-DO $$
+DO $
 DECLARE
   v_receipt record;
 BEGIN
