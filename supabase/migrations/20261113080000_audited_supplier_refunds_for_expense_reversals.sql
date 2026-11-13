@@ -206,8 +206,11 @@ BEGIN
   IF ROUND(p_amount, 2) > v_expense.amount_paid - v_refunded THEN
     RAISE EXCEPTION 'Refund exceeds the amount actually paid to the supplier and not yet refunded';
   END IF;
-  IF p_refunded_on < v_expense.incurred_on THEN
-    RAISE EXCEPTION 'Supplier refund date cannot be earlier than the expense incurred date';
+  IF p_refunded_on < COALESCE(
+    (SELECT max(paid_on) FROM public.operating_expense_payments WHERE operating_expense_id = p_expense_id),
+    v_expense.incurred_on
+  ) THEN
+    RAISE EXCEPTION 'Supplier refund date cannot be earlier than the latest supplier payment';
   END IF;
 
   SELECT id INTO v_payable_account
