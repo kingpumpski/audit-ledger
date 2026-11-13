@@ -399,8 +399,8 @@ export default function Receipts() {
         receipt={editingReceipt}
         open={!!editingReceipt}
         onOpenChange={(open) => !open && setEditingReceipt(null)}
-        onSave={async (id, data, notifyCustomer) => {
-          await updateReceipt({ id, data, notifyCustomer });
+        onSave={async (id, data) => {
+          await updateReceipt({ id, data });
         }}
         isUpdating={isUpdating}
       />
