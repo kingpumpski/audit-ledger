@@ -337,7 +337,7 @@ EXECUTE FUNCTION public.post_unapplied_receipt_journal();
 
 -- Backfill previously issued invoices. A status-change trigger cannot
 -- retroactively post invoices that were already issued before this migration.
-DO $
+DO $invoice_backfill$
 DECLARE
   v_invoice record;
   v_ar_account uuid;
@@ -483,7 +483,7 @@ BEGIN
     END IF;
   END LOOP;
 END;
-$;
+$invoice_backfill$;
 
 -- Backfill already-issued receipts that were not linked to a payment. This
 -- includes standalone/unapplied receipts and legacy invoice receipts without
