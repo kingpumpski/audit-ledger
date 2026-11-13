@@ -93,7 +93,7 @@ SELECT extensions.throws_ok(
 );
 
 SELECT extensions.throws_ok(
-  $ INSERT INTO public.invoice_item_taxes (
+  $$ INSERT INTO public.invoice_item_taxes (
        invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
        tax_rate, is_compound, tax_order, taxable_amount, tax_amount,
        liability_account_id
