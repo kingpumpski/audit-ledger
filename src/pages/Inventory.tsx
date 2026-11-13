@@ -31,9 +31,10 @@ export default function Inventory() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [adjustIdempotencyKey, setAdjustIdempotencyKey] = useState(() => crypto.randomUUID());
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustForm, setAdjustForm] = useState({
-    type: 'purchase' as string,
+    type: 'purchase' as 'purchase' | 'damage',
     quantity: 0,
     notes: '',
     unitCost: 0,
@@ -90,32 +91,41 @@ export default function Inventory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      if (adjustForm.type === 'purchase') {
-        const { error } = await supabase.rpc('record_stock_purchase', {
+      if (adjustForm.type === 'damage') {
+        const { error } = await supabase.rpc('record_inventory_damage', {
           p_product_id: selectedProduct.id,
           p_quantity: adjustForm.quantity,
-          p_unit_cost: adjustForm.unitCost,
-          p_opening_unit_cost: (selectedProduct.stock_quantity || 0) > 0 && !selectedProduct.cost_price_verified ? adjustForm.openingUnitCost : null,
-          p_supplier_name: adjustForm.supplierName || null,
-          p_reference_number: adjustForm.referenceNumber || null,
-          p_amount_paid: adjustForm.amountPaid,
-          p_payment_method: adjustForm.paymentMethod,
+          p_reference_number: adjustForm.referenceNumber,
+          p_idempotency_key: adjustIdempotencyKey,
           p_notes: adjustForm.notes || null,
         });
         if (error) throw error;
         return;
       }
 
-      throw new Error('Manual stock changes are temporarily disabled. Use a documented stock purchase; sales must be recorded through invoices, and returns/losses require an audited inventory workflow.');
+      const { error } = await supabase.rpc('record_stock_purchase', {
+        p_product_id: selectedProduct.id,
+        p_quantity: adjustForm.quantity,
+        p_unit_cost: adjustForm.unitCost,
+        p_opening_unit_cost: (selectedProduct.stock_quantity || 0) > 0 && !selectedProduct.cost_price_verified ? adjustForm.openingUnitCost : null,
+        p_supplier_name: adjustForm.supplierName || null,
+        p_reference_number: adjustForm.referenceNumber || null,
+        p_amount_paid: adjustForm.amountPaid,
+        p_payment_method: adjustForm.paymentMethod,
+        p_notes: adjustForm.notes || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      toast({ title: 'Stock purchase recorded with verified actual cost' });
+      queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: adjustForm.type === 'damage' ? 'Stock damage recorded and posted to the ledger' : 'Stock purchase recorded with verified actual cost' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
       setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
+      setAdjustIdempotencyKey(crypto.randomUUID());
     },
     onError: (error) => {
       toast({ title: 'Failed to update stock', description: error.message, variant: 'destructive' });
@@ -228,7 +238,7 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setIsAdjustOpen(true); }}>
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
                             <ArrowUpDown className="h-3 w-3 mr-1" />
                             Adjust
                           </Button>
@@ -283,17 +293,33 @@ export default function Inventory() {
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Record Stock Purchase - {selectedProduct?.name}</DialogTitle>
+            <DialogTitle>{adjustForm.type === 'damage' ? 'Record Stock Damage' : 'Record Stock Purchase'} - {selectedProduct?.name}</DialogTitle>
             <DialogDescription>
               Current stock: {selectedProduct?.stock_quantity ?? 0} units
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-4 pr-2">
-            <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
-              Only evidenced stock purchases can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Returns, damage and count adjustments will be enabled after their audited accounting workflows are implemented.
-            </div>
             <div className="space-y-2">
-              <Label>Purchase Quantity</Label>
+              <Label>Inventory action</Label>
+              <Select value={adjustForm.type} onValueChange={value => setAdjustForm({ ...adjustForm, type: value as 'purchase' | 'damage', quantity: 0, referenceNumber: '', notes: '' })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="purchase">Record stock purchase</SelectItem>
+                  <SelectItem value="damage">Record stock damage / shrinkage</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {adjustForm.type === 'damage' ? (
+              <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                Damage is valued at the product's verified weighted-average purchase cost and posted as Inventory Shrinkage against Inventory. A damage report or supporting reference is required. Products without verified purchase cost cannot be written off yet.
+              </div>
+            ) : (
+              <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                Only evidenced stock purchases and documented damage can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Customer returns and count corrections remain blocked until their audited workflows are implemented.
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>{adjustForm.type === 'damage' ? 'Units Damaged' : 'Purchase Quantity'}</Label>
               <Input
                 type="number"
                 min="0"
@@ -351,12 +377,18 @@ export default function Inventory() {
                 </div>
               </>
             )}
+            {adjustForm.type === 'damage' && (
+              <div className="space-y-2">
+                <Label>Damage Report / Reference *</Label>
+                <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Incident or damage report reference" />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
                 value={adjustForm.notes}
                 onChange={e => setAdjustForm({ ...adjustForm, notes: e.target.value })}
-                placeholder="Purchase details and supporting notes..."
+                placeholder={adjustForm.type === 'damage' ? 'Describe the damage, spoilage or loss...' : 'Purchase details and supporting notes...'}
                 rows={2}
               />
             </div>
@@ -369,10 +401,14 @@ export default function Inventory() {
                   !adjustForm.referenceNumber.trim() ||
                   adjustForm.amountPaid > adjustForm.quantity * adjustForm.unitCost ||
                   ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && adjustForm.openingUnitCost <= 0)
+                )) ||
+                (adjustForm.type === 'damage' && (
+                  !adjustForm.referenceNumber.trim() || !selectedProduct?.cost_price_verified ||
+                  (selectedProduct?.stock_quantity || 0) < adjustForm.quantity
                 ))
               }>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Record Purchase
+                {adjustForm.type === 'damage' ? 'Record Damage' : 'Record Purchase'}
               </Button>
             </div>
           </div>
