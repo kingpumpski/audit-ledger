@@ -137,12 +137,12 @@ SELECT extensions.throws_ok(
 
 SELECT set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000001',true);
 SELECT extensions.throws_ok(
-  $ SELECT public.record_stock_count_adjustment(
+  $$ SELECT public.record_stock_count_adjustment(
     (SELECT id FROM public.products WHERE sku='TEST-COUNT-DATE-001'),
     9, CURRENT_DATE - 1, 'Attempt to backdate after an inventory movement',
     'COUNT-SHEET-BACKDATED-001',
     'd1000000-0000-4000-8000-000000000104'
-  ) $,
+  ) $$,
   'P0001',
   'The count date cannot predate the latest recorded inventory movement',
   'Stock-count corrections cannot be backdated before the latest movement'
