@@ -813,3 +813,213 @@ EXECUTE FUNCTION public.guard_posted_petty_cash_mutations();
 
 REVOKE ALL ON FUNCTION public.guard_posted_inventory_transaction_mutations() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.guard_posted_petty_cash_mutations() FROM PUBLIC, anon, authenticated;
+
+
+-- Enforce inventory integrity at the database boundary. Product quantity changes
+-- are permitted only inside the audited purchase or invoice-posting routines.
+CREATE OR REPLACE FUNCTION public.guard_product_inventory_value_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $product_inventory_guard$
+BEGIN
+  IF (NEW.stock_quantity IS DISTINCT FROM OLD.stock_quantity
+      OR NEW.cost_price IS DISTINCT FROM OLD.cost_price
+      OR NEW.cost_price_verified IS DISTINCT FROM OLD.cost_price_verified)
+     AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase or invoice posting workflows';
+  END IF;
+  RETURN NEW;
+END;
+$product_inventory_guard$;
+
+CREATE TRIGGER guard_product_inventory_value_changes
+BEFORE UPDATE OF stock_quantity, cost_price, cost_price_verified ON public.products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_product_inventory_value_changes();
+
+-- Allow the controlled invoice-issue routine to snapshot the verified cost
+-- without opening a direct client-side path to historical cost edits.
+CREATE OR REPLACE FUNCTION public.guard_invoice_item_cost_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $cost_change_guard$
+BEGIN
+  IF (NEW.unit_cost IS DISTINCT FROM OLD.unit_cost
+      OR NEW.cost_source IS DISTINCT FROM OLD.cost_source
+      OR NEW.cost_reference IS DISTINCT FROM OLD.cost_reference
+      OR NEW.cost_notes IS DISTINCT FROM OLD.cost_notes
+      OR NEW.cost_verified_by IS DISTINCT FROM OLD.cost_verified_by
+      OR NEW.cost_verified_at IS DISTINCT FROM OLD.cost_verified_at)
+     AND COALESCE(current_setting('app.historical_cost_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Historical item costs must be updated through an audited cost verification or invoice issue action';
+  END IF;
+  RETURN NEW;
+END;
+$cost_change_guard$;
+
+-- Validate available stock and take a final verified cost snapshot atomically
+-- when an invoice is issued. A missing verified cost is retained as NULL so
+-- the P&L correctly withholds profit rather than inventing a cost.
+CREATE OR REPLACE FUNCTION public.prepare_invoice_stock_issue()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $prepare_invoice_stock$
+DECLARE
+  v_line record;
+  v_product public.products%ROWTYPE;
+BEGIN
+  IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status = 'issued' THEN
+    PERFORM set_config('app.invoice_stock_posting', 'on', true);
+
+    FOR v_line IN
+      SELECT product_id, SUM(quantity) AS quantity
+      FROM public.invoice_items
+      WHERE invoice_id = NEW.id AND product_id IS NOT NULL
+      GROUP BY product_id
+      ORDER BY product_id
+    LOOP
+      SELECT * INTO v_product
+      FROM public.products
+      WHERE id = v_line.product_id AND deleted_at IS NULL
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'An invoice contains a product that no longer exists';
+      END IF;
+
+      IF COALESCE(v_product.is_service, false) THEN
+        CONTINUE;
+      END IF;
+
+      IF v_line.quantity <= 0 OR v_line.quantity <> trunc(v_line.quantity) THEN
+        RAISE EXCEPTION 'Stocked product quantities must be positive whole units';
+      END IF;
+
+      IF COALESCE(v_product.stock_quantity, 0) < v_line.quantity THEN
+        RAISE EXCEPTION 'Insufficient stock for %. Available: %, requested: %',
+          v_product.name, COALESCE(v_product.stock_quantity, 0), v_line.quantity;
+      END IF;
+
+      UPDATE public.invoice_items ii
+      SET unit_cost = CASE
+            WHEN COALESCE(v_product.cost_price_verified, false) THEN v_product.cost_price
+            ELSE NULL
+          END,
+          cost_source = CASE
+            WHEN COALESCE(v_product.cost_price_verified, false) THEN 'verified_weighted_average'
+            ELSE NULL
+          END
+      WHERE ii.invoice_id = NEW.id
+        AND ii.product_id = v_product.id
+        AND (ii.unit_cost IS DISTINCT FROM CASE
+              WHEN COALESCE(v_product.cost_price_verified, false) THEN v_product.cost_price
+              ELSE NULL
+            END
+          OR ii.cost_source IS DISTINCT FROM CASE
+              WHEN COALESCE(v_product.cost_price_verified, false) THEN 'verified_weighted_average'
+              ELSE NULL
+            END);
+    END LOOP;
+  END IF;
+  RETURN NEW;
+END;
+$prepare_invoice_stock$;
+
+CREATE TRIGGER prepare_invoice_stock_issue
+BEFORE UPDATE OF status ON public.invoices
+FOR EACH ROW
+EXECUTE FUNCTION public.prepare_invoice_stock_issue();
+
+-- Reduce inventory once, when the invoice's receivable journal is created.
+-- This is the only supported stock-sale path; COGS is added by the existing
+-- journal-line trigger using the same invoice-item cost snapshots.
+CREATE OR REPLACE FUNCTION public.post_invoice_inventory_movement()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $invoice_inventory_posting$
+DECLARE
+  v_line record;
+  v_product public.products%ROWTYPE;
+  v_new_quantity integer;
+BEGIN
+  IF NEW.source_type <> 'invoice' OR NEW.source_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.inventory_transactions
+    WHERE reference_type = 'invoice'
+      AND reference_id = NEW.source_id
+      AND type = 'sale'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM set_config('app.invoice_stock_posting', 'on', true);
+
+  FOR v_line IN
+    SELECT product_id, SUM(quantity) AS quantity,
+           CASE WHEN bool_and(unit_cost IS NOT NULL)
+             THEN ROUND(SUM(quantity * unit_cost) / NULLIF(SUM(quantity), 0), 4)
+             ELSE NULL
+           END AS unit_cost,
+           CASE WHEN bool_and(unit_cost IS NOT NULL)
+             THEN ROUND(SUM(quantity * unit_cost), 2)
+             ELSE NULL
+           END AS total_cost
+    FROM public.invoice_items
+    WHERE invoice_id = NEW.source_id AND product_id IS NOT NULL
+    GROUP BY product_id
+    ORDER BY product_id
+  LOOP
+    SELECT * INTO v_product
+    FROM public.products
+    WHERE id = v_line.product_id AND deleted_at IS NULL
+    FOR UPDATE;
+
+    IF NOT FOUND OR COALESCE(v_product.is_service, false) THEN
+      CONTINUE;
+    END IF;
+
+    IF v_line.quantity <= 0 OR v_line.quantity <> trunc(v_line.quantity)
+       OR COALESCE(v_product.stock_quantity, 0) < v_line.quantity THEN
+      RAISE EXCEPTION 'Invoice inventory movement failed for product %; stock changed after issue validation', v_line.product_id;
+    END IF;
+
+    v_new_quantity := v_product.stock_quantity - v_line.quantity;
+    UPDATE public.products
+    SET stock_quantity = v_new_quantity
+    WHERE id = v_product.id;
+
+    INSERT INTO public.inventory_transactions (
+      product_id, type, quantity, previous_quantity, new_quantity,
+      unit_cost, total_cost, reference_id, reference_type, notes, performed_by
+    )
+    VALUES (
+      v_product.id, 'sale', v_line.quantity, v_product.stock_quantity, v_new_quantity,
+      v_line.unit_cost, v_line.total_cost, NEW.source_id, 'invoice',
+      'Stock relieved for issued invoice journal ' || NEW.entry_number, NEW.created_by
+    );
+  END LOOP;
+
+  RETURN NEW;
+END;
+$invoice_inventory_posting$;
+
+CREATE TRIGGER post_invoice_inventory_movement_after_journal
+AFTER INSERT ON public.journal_entries
+FOR EACH ROW
+WHEN (NEW.source_type = 'invoice')
+EXECUTE FUNCTION public.post_invoice_inventory_movement();
+
+REVOKE ALL ON FUNCTION public.guard_product_inventory_value_changes() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.prepare_invoice_stock_issue() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.post_invoice_inventory_movement() FROM PUBLIC, anon, authenticated;
