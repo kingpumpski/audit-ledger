@@ -52,6 +52,7 @@ interface LineItem {
   discount_type?: 'fixed' | 'percentage';
   discount_value?: number;
   tax_ids?: string[];
+  taxes_manually_selected?: boolean;
 }
 
 export default function InvoiceNew() {
@@ -97,16 +98,21 @@ export default function InvoiceNew() {
   const generalTaxIds = activeTaxes.filter(t => !t.applies_to_category).map(t => t.id);
 
   useEffect(() => {
-    if (activeTaxes.length === 0) return;
-    setItems(current => current.map(item => item.tax_ids === undefined
-      ? { ...item, tax_ids: generalTaxIds }
-      : item));
-  }, [activeTaxes, generalTaxIds.join('|')]);
+    setItems(current => current.map(item => {
+      if (item.taxes_manually_selected) return item;
+      const product = products.find(candidate => candidate.id === item.product_id);
+      const defaultTaxIds = activeTaxes.filter(tax =>
+        !tax.applies_to_category ||
+        tax.applies_to_category.toLowerCase() === (product?.category || '').toLowerCase()
+      ).map(tax => tax.id);
+      return { ...item, tax_ids: defaultTaxIds };
+    }));
+  }, [activeTaxes, products]);
 
   const addItem = () => {
     setItems([
       ...items,
-      { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_ids: generalTaxIds }
+      { id: crypto.randomUUID(), description: '', quantity: 1, unit_price: 0, tax_ids: generalTaxIds, taxes_manually_selected: false }
     ]);
   };
 
@@ -129,6 +135,7 @@ export default function InvoiceNew() {
         description: product.name,
         unit_price: product.current_price,
         tax_ids: activeTaxes.filter(tax => !tax.applies_to_category || tax.applies_to_category.toLowerCase() === (product.category || '').toLowerCase()).map(tax => tax.id),
+        taxes_manually_selected: false,
       });
     }
   };
@@ -514,7 +521,7 @@ export default function InvoiceNew() {
                           }).map(tax => (
                             <label key={tax.id} className="flex items-center justify-between gap-2 text-sm">
                               <span>{tax.name} ({tax.rate}%){tax.is_compound ? ' · compound' : ''}</span>
-                              <input type="checkbox" checked={(item.tax_ids || []).includes(tax.id)} onChange={e => updateItem(item.id, { tax_ids: e.target.checked ? [...(item.tax_ids || []), tax.id] : (item.tax_ids || []).filter(id => id !== tax.id) })} />
+                              <input type="checkbox" checked={(item.tax_ids || []).includes(tax.id)} onChange={e => updateItem(item.id, { taxes_manually_selected: true, tax_ids: e.target.checked ? [...(item.tax_ids || []), tax.id] : (item.tax_ids || []).filter(id => id !== tax.id) })} />
                             </label>
                           ))}
                         </div>
