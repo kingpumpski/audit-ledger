@@ -1554,3 +1554,224 @@ END;
 $invoice_delete_guard_v2$;
 
 REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, anon, authenticated;
+
+
+-- Audited inventory damage/shrinkage: stock is relieved at verified weighted
+-- average cost and the same transaction posts Inventory Shrinkage expense.
+ALTER TABLE public.inventory_transactions
+  ADD COLUMN IF NOT EXISTS idempotency_key uuid;
+
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_transactions_idempotency_key_uidx
+  ON public.inventory_transactions(idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+
+ALTER TABLE public.journal_entries
+  DROP CONSTRAINT IF EXISTS journal_entries_source_type_check;
+ALTER TABLE public.journal_entries
+  ADD CONSTRAINT journal_entries_source_type_check
+  CHECK (source_type = ANY (ARRAY[
+    'invoice'::text, 'payment'::text, 'receipt'::text, 'receipt_void'::text,
+    'stock_purchase'::text, 'opening_stock_valuation'::text,
+    'petty_cash_expense'::text, 'direct_invoice_cost'::text,
+    'inventory_damage'::text
+  ]));
+
+INSERT INTO public.chart_of_accounts (
+  code, name, description, account_type, account_subtype, is_system, is_active
+)
+VALUES (
+  '6500',
+  'Inventory Shrinkage & Damage',
+  'Verified cost of stock lost through damage, spoilage or shrinkage.',
+  'expense',
+  'other_expense',
+  true,
+  true
+)
+ON CONFLICT (code) DO NOTHING;
+
+DO $inventory_damage_account$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.chart_of_accounts
+    WHERE code = '6500' AND account_type = 'expense' AND is_active = true
+  ) THEN
+    RAISE EXCEPTION 'Chart of accounts code 6500 must be an active expense account';
+  END IF;
+END;
+$inventory_damage_account$;
+
+-- Extend the guarded inventory update path only for the audited adjustment RPC.
+CREATE OR REPLACE FUNCTION public.guard_product_inventory_value_changes()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $product_inventory_guard_v2$
+BEGIN
+  IF (NEW.stock_quantity IS DISTINCT FROM OLD.stock_quantity
+      OR NEW.cost_price IS DISTINCT FROM OLD.cost_price
+      OR NEW.cost_price_verified IS DISTINCT FROM OLD.cost_price_verified)
+     AND COALESCE(current_setting('app.stock_purchase_rpc', true), '') <> 'on'
+     AND COALESCE(current_setting('app.invoice_stock_posting', true), '') <> 'on'
+     AND COALESCE(current_setting('app.inventory_adjustment_rpc', true), '') <> 'on' THEN
+    RAISE EXCEPTION 'Stock quantity and verified inventory valuation can only be changed by audited purchase, invoice or adjustment workflows';
+  END IF;
+  RETURN NEW;
+END;
+$product_inventory_guard_v2$;
+
+CREATE OR REPLACE FUNCTION public.guard_posted_inventory_transaction_mutations()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $posted_inventory_guard_v2$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'An authenticated user is required to change inventory records';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_entries
+    WHERE source_id = OLD.id
+      AND source_type IN ('stock_purchase', 'inventory_damage')
+  ) THEN
+    RAISE EXCEPTION 'An inventory transaction with a posted journal is immutable; record an audited reversal instead';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$posted_inventory_guard_v2$;
+
+CREATE OR REPLACE FUNCTION public.record_inventory_damage(
+  p_product_id uuid,
+  p_quantity integer,
+  p_reference_number text,
+  p_idempotency_key uuid,
+  p_notes text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $inventory_damage$
+DECLARE
+  v_product public.products%ROWTYPE;
+  v_existing public.inventory_transactions%ROWTYPE;
+  v_transaction_id uuid;
+  v_journal_id uuid;
+  v_entry_number text;
+  v_inventory_account uuid;
+  v_damage_account uuid;
+  v_currency text;
+  v_new_quantity integer;
+  v_total_cost numeric(14,2);
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'Only an admin or accountant can record stock damage';
+  END IF;
+  IF p_quantity IS NULL OR p_quantity <= 0 THEN
+    RAISE EXCEPTION 'Damage quantity must be a positive whole number';
+  END IF;
+  IF NULLIF(BTRIM(p_reference_number), '') IS NULL THEN
+    RAISE EXCEPTION 'A damage report, incident reference or supporting document reference is required';
+  END IF;
+  IF p_idempotency_key IS NULL THEN
+    RAISE EXCEPTION 'An idempotency key is required to record stock damage';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+
+  SELECT * INTO v_existing
+  FROM public.inventory_transactions
+  WHERE idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_existing.type <> 'damage'
+      OR v_existing.product_id <> p_product_id
+      OR v_existing.quantity <> p_quantity
+      OR v_existing.reference_number IS DISTINCT FROM BTRIM(p_reference_number) THEN
+      RAISE EXCEPTION 'This damage idempotency key was already used with different details';
+    END IF;
+    RETURN v_existing.id;
+  END IF;
+
+  SELECT * INTO v_product
+  FROM public.products
+  WHERE id = p_product_id AND deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND OR COALESCE(v_product.is_service, false) THEN
+    RAISE EXCEPTION 'Select an active physical product';
+  END IF;
+  IF COALESCE(v_product.stock_quantity, 0) < p_quantity THEN
+    RAISE EXCEPTION 'Damage quantity exceeds available stock';
+  END IF;
+  IF NOT COALESCE(v_product.cost_price_verified, false)
+     OR v_product.cost_price IS NULL OR v_product.cost_price < 0 THEN
+    RAISE EXCEPTION 'Verify the actual purchase cost before recording inventory damage';
+  END IF;
+
+  v_new_quantity := COALESCE(v_product.stock_quantity, 0) - p_quantity;
+  v_total_cost := ROUND(p_quantity * v_product.cost_price, 2);
+
+  SELECT id INTO v_inventory_account
+  FROM public.chart_of_accounts
+  WHERE code = '1200' AND account_type = 'asset' AND is_active
+  LIMIT 1;
+  SELECT id INTO v_damage_account
+  FROM public.chart_of_accounts
+  WHERE code = '6500' AND account_type = 'expense' AND is_active
+  LIMIT 1;
+  IF v_inventory_account IS NULL OR v_damage_account IS NULL THEN
+    RAISE EXCEPTION 'Inventory or Inventory Shrinkage account is not configured';
+  END IF;
+
+  PERFORM set_config('app.inventory_adjustment_rpc', 'on', true);
+  UPDATE public.products
+  SET stock_quantity = v_new_quantity
+  WHERE id = p_product_id;
+
+  INSERT INTO public.inventory_transactions (
+    product_id, type, quantity, previous_quantity, new_quantity,
+    unit_cost, total_cost, reference_type, reference_number, notes,
+    performed_by, idempotency_key
+  )
+  VALUES (
+    p_product_id, 'damage', p_quantity, v_product.stock_quantity, v_new_quantity,
+    v_product.cost_price, v_total_cost, 'inventory_damage', BTRIM(p_reference_number),
+    NULLIF(BTRIM(p_notes), ''), auth.uid(), p_idempotency_key
+  )
+  RETURNING id INTO v_transaction_id;
+
+  v_entry_number := public.get_next_sequence('journal');
+  SELECT COALESCE(currency_code, 'USD') INTO v_currency
+  FROM public.company_settings ORDER BY created_at LIMIT 1;
+  v_currency := COALESCE(v_currency, 'USD');
+
+  INSERT INTO public.journal_entries (
+    entry_number, entry_date, description, source_type, source_id, currency, created_by
+  )
+  VALUES (
+    v_entry_number, CURRENT_DATE,
+    'Inventory damage - ' || v_product.name || ' - ' || BTRIM(p_reference_number),
+    'inventory_damage', v_transaction_id, v_currency, auth.uid()
+  )
+  RETURNING id INTO v_journal_id;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  )
+  VALUES
+    (v_journal_id, 1, v_damage_account, 'Inventory damage - ' || v_product.name, v_total_cost, 0),
+    (v_journal_id, 2, v_inventory_account, 'Inventory written off - ' || v_product.name, 0, v_total_cost);
+
+  RETURN v_transaction_id;
+END;
+$inventory_damage$;
+
+REVOKE ALL ON FUNCTION public.record_inventory_damage(uuid, integer, text, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.record_inventory_damage(uuid, integer, text, uuid, text) TO authenticated;
