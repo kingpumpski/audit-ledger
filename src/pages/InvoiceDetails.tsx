@@ -201,7 +201,9 @@ export default function InvoiceDetails() {
 
   const canEdit = invoice.status !== 'paid' && invoice.status !== 'canceled';
   const canDelete = invoice.status === 'draft' || invoice.status === 'canceled';
-  const canCancel = invoice.status !== 'paid' && invoice.status !== 'canceled';
+  // Issued invoices have posted revenue/receivables and may have reduced stock.
+  // Until a credit-note workflow exists, only drafts can be canceled safely.
+  const canCancel = invoice.status === 'draft';
 
   return (
     <AppLayout
@@ -221,7 +223,7 @@ export default function InvoiceDetails() {
               <Edit className="mr-2 h-4 w-4" /> Edit
             </Button>
           )}
-          {canCancel && invoice.status !== 'draft' && (
+          {canCancel && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" disabled={isCanceling}>
@@ -239,6 +241,15 @@ export default function InvoiceDetails() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          )}
+          {!canCancel && invoice.status !== 'canceled' && (
+            <Button
+              variant="outline"
+              disabled
+              title="Issued invoices require an audited credit note or reversal before cancellation."
+            >
+              <XCircle className="mr-2 h-4 w-4" /> Cancel Invoice
+            </Button>
           )}
           {canDelete && (
             <AlertDialog>
