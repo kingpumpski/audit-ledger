@@ -100,8 +100,15 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000002',true);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'test.invoice_item_tax_snapshot_visible_count',
+  (SELECT count(*)::text FROM public.invoice_item_taxes),
+  true
+);
+RESET ROLE;
 SELECT extensions.is(
-  (SELECT count(*)::integer FROM public.invoice_item_taxes),
+  current_setting('test.invoice_item_tax_snapshot_visible_count')::integer,
   0,
   'Cashier cannot read finance-only tax allocation snapshots'
 );
