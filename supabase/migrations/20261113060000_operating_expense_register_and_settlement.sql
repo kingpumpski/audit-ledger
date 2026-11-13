@@ -62,6 +62,7 @@ CREATE POLICY operating_expenses_finance_read
 CREATE POLICY operating_expense_payments_finance_read
   ON public.operating_expense_payments FOR SELECT TO authenticated
   USING (public.has_any_role(ARRAY['admin', 'accountant', 'auditor']));
+REVOKE ALL ON TABLE public.operating_expenses, public.operating_expense_payments FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.operating_expenses, public.operating_expense_payments TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.guard_operating_expense_mutations()
@@ -206,6 +207,7 @@ BEGIN
   UPDATE public.operating_expenses
   SET amount_paid = amount_paid + ROUND(p_amount, 2), updated_at = clock_timestamp()
   WHERE id = p_expense_id;
+  PERFORM set_config('app.expense_settlement_rpc', 'off', true);
 
   RETURN v_payment_id;
 END;
@@ -268,8 +270,14 @@ BEGIN
        OR v_existing.due_on IS DISTINCT FROM p_due_on
        OR v_existing.amount <> ROUND(p_amount, 2)
        OR v_existing.initial_amount_paid <> ROUND(p_amount_paid, 2)
-       OR v_existing.initial_payment_method IS DISTINCT FROM CASE WHEN p_amount_paid > 0 THEN p_payment_method ELSE NULL END
-       OR v_existing.initial_payment_reference IS DISTINCT FROM CASE WHEN p_amount_paid > 0 THEN BTRIM(p_payment_reference) ELSE NULL END
+       OR (p_amount_paid > 0 AND (
+         v_existing.initial_payment_method IS DISTINCT FROM p_payment_method
+         OR v_existing.initial_payment_reference IS DISTINCT FROM BTRIM(p_payment_reference)
+       ))
+       OR (p_amount_paid = 0 AND (
+         v_existing.initial_payment_method IS NOT NULL
+         OR v_existing.initial_payment_reference IS NOT NULL
+       ))
        OR v_existing.notes IS DISTINCT FROM NULLIF(BTRIM(p_notes), '') THEN
       RAISE EXCEPTION 'This expense idempotency key was already used with different details';
     END IF;
