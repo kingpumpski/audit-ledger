@@ -574,6 +574,8 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.set_default_tax_liability_account() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.snapshot_invoice_tax_liability_account() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.post_invoice_journal(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.post_invoice_journal_after_issue() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.issue_invoice(uuid) FROM PUBLIC, anon;
