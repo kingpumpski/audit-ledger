@@ -59,6 +59,23 @@ export function useReceipts() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      // An invoice-linked receipt represents money received, so create the payment
+      // through the same atomic payment-and-ledger workflow when no payment exists yet.
+      let paymentId = receiptData.payment_id || null;
+      if (receiptData.invoice_id && !paymentId) {
+        const { data: createdPaymentId, error: paymentError } = await supabase.rpc('record_invoice_payment', {
+          p_invoice_id: receiptData.invoice_id,
+          p_customer_id: receiptData.customer_id,
+          p_amount: receiptData.amount,
+          p_payment_method: receiptData.payment_method,
+          p_reference_number: null,
+          p_notes: receiptData.notes || null,
+        });
+        if (paymentError) throw paymentError;
+        if (!createdPaymentId) throw new Error('Payment was not created');
+        paymentId = createdPaymentId;
+      }
+
       // Get user profile for issuer name
       const { data: profile } = await supabase
         .from('profiles')
@@ -96,7 +113,7 @@ export function useReceipts() {
           receipt_number: receiptNumber,
           customer_id: receiptData.customer_id,
           invoice_id: receiptData.invoice_id || null,
-          payment_id: receiptData.payment_id || null,
+          payment_id: paymentId,
           amount: receiptData.amount,
           payment_method: receiptData.payment_method,
           notes: receiptData.notes,
@@ -112,30 +129,6 @@ export function useReceipts() {
         .single();
 
       if (receiptError) throw receiptError;
-
-      // If linked to invoice, update invoice payment status
-      if (receiptData.invoice_id && !receiptData.payment_id) {
-        const { data: invoice } = await supabase
-          .from('invoices')
-          .select('total_amount, amount_paid')
-          .eq('id', receiptData.invoice_id)
-          .single();
-
-        if (invoice) {
-          const newAmountPaid = (invoice.amount_paid || 0) + receiptData.amount;
-          const newBalanceDue = (invoice.total_amount || 0) - newAmountPaid;
-          const newStatus = newBalanceDue <= 0 ? 'paid' : 'partially_paid';
-
-          await supabase
-            .from('invoices')
-            .update({
-              amount_paid: newAmountPaid,
-              balance_due: Math.max(0, newBalanceDue),
-              status: newStatus,
-            })
-            .eq('id', receiptData.invoice_id);
-        }
-      }
 
       return receipt;
     },
