@@ -521,6 +521,17 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Make the posting idempotent if an invoice journal is repaired or replayed.
+  IF EXISTS (
+    SELECT 1
+    FROM public.journal_lines jl
+    JOIN public.chart_of_accounts coa ON coa.id = jl.account_id
+    WHERE jl.journal_entry_id = NEW.journal_entry_id
+      AND coa.code = '5000'
+  ) THEN
+    RETURN NEW;
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM public.invoice_items
     WHERE invoice_id = v_invoice_id AND unit_cost IS NULL
