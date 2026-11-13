@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(62);
+SELECT extensions.plan(63);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -677,6 +677,19 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+
+
+SELECT extensions.throws_ok(
+  $ SELECT public.reverse_petty_cash_expense(
+       (SELECT id FROM public.petty_cash_transactions WHERE reference_number = 'PETTY-IMMUTABLE-001'),
+       CURRENT_DATE - 1, 'cash', 'Invalid earlier refund date',
+       'PETTY-REFUND-EARLY',
+       'd0000000-0000-4000-8000-000000000204'
+     ) $,
+  'P0001',
+  'Refund date cannot be earlier than the original petty-cash expense date',
+  'Petty-cash reversal cannot predate the original expense'
+);
 
 SELECT * FROM extensions.finish();
 
