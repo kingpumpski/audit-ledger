@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(53);
+SELECT extensions.plan(62);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -580,6 +580,103 @@ SELECT extensions.throws_ok(
   'An expense with a posted journal is immutable; record an audited reversal instead',
   'Posted petty-cash expense cannot be deleted'
 );
+
+
+SELECT extensions.lives_ok(
+  $ SELECT public.reverse_petty_cash_expense(
+       (SELECT id FROM public.petty_cash_transactions WHERE reference_number = 'PETTY-IMMUTABLE-001'),
+       CURRENT_DATE, 'cash', 'Supplier returned petty cash expense',
+       'PETTY-REFUND-001',
+       'd0000000-0000-4000-8000-000000000201'
+     ) $,
+  'Accountant can reverse a petty-cash expense with a refund reference'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.petty_cash_expense_reversals r
+   JOIN public.petty_cash_transactions p ON p.id = r.petty_cash_transaction_id
+   WHERE p.reference_number = 'PETTY-IMMUTABLE-001'),
+  1,
+  'Petty-cash reversal creates one immutable audit record'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit - jl.credit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   WHERE je.source_type = 'petty_cash_expense_reversal'
+     AND je.source_id = (SELECT id FROM public.petty_cash_transactions
+                         WHERE reference_number = 'PETTY-IMMUTABLE-001')),
+  0::numeric,
+  'Petty-cash reversal journal is balanced'
+);
+
+SELECT extensions.is(
+  (SELECT round(sum(jl.debit), 2)
+   FROM public.journal_lines jl
+   JOIN public.journal_entries je ON je.id = jl.journal_entry_id
+   WHERE je.source_type = 'petty_cash_expense_reversal'
+     AND je.source_id = (SELECT id FROM public.petty_cash_transactions
+                         WHERE reference_number = 'PETTY-IMMUTABLE-001')),
+  12.50::numeric,
+  'Petty-cash reversal debits cash for the actual refund amount'
+);
+
+SELECT extensions.is(
+  public.reverse_petty_cash_expense(
+    (SELECT id FROM public.petty_cash_transactions WHERE reference_number = 'PETTY-IMMUTABLE-001'),
+    CURRENT_DATE, 'cash', 'Supplier returned petty cash expense',
+    'PETTY-REFUND-001',
+    'd0000000-0000-4000-8000-000000000201'
+  ),
+  (SELECT id FROM public.petty_cash_expense_reversals
+   WHERE reference_number = 'PETTY-REFUND-001'),
+  'Petty-cash reversal retry with identical details is idempotent'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.reverse_petty_cash_expense(
+       (SELECT id FROM public.petty_cash_transactions WHERE reference_number = 'PETTY-IMMUTABLE-001'),
+       CURRENT_DATE, 'cash', 'Duplicate reversal',
+       'PETTY-REFUND-002',
+       'd0000000-0000-4000-8000-000000000202'
+     ) $,
+  'P0001',
+  'This petty-cash expense has already been reversed',
+  'A petty-cash expense cannot be reversed twice'
+);
+
+SELECT extensions.throws_ok(
+  $ UPDATE public.petty_cash_expense_reversals
+     SET reason = 'Changed after posting'
+     WHERE reference_number = 'PETTY-REFUND-001' $,
+  'P0001',
+  'Posted petty-cash expense reversals are immutable',
+  'Petty-cash reversal evidence cannot be edited'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.petty_cash_transactions
+   WHERE reference_number = 'PETTY-IMMUTABLE-001' AND amount = 12.50),
+  1,
+  'Original petty-cash expense is preserved after reversal'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.reverse_petty_cash_expense(
+       (SELECT id FROM public.petty_cash_transactions WHERE reference_number = 'PETTY-IMMUTABLE-001'),
+       CURRENT_DATE, 'cash', 'Cashier must not reverse',
+       'PETTY-REFUND-CASHIER',
+       'd0000000-0000-4000-8000-000000000203'
+     ) $,
+  'P0001',
+  'Only an admin or accountant can reverse petty-cash expenses',
+  'Cashier cannot reverse petty-cash expenses'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
 
 SELECT * FROM extensions.finish();
 
