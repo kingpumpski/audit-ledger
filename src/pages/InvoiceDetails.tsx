@@ -58,22 +58,65 @@ export default function InvoiceDetails() {
 
   const handlePrintInvoice = async () => {
     if (!invoice) return;
+
+    // Open the window synchronously inside the click handler. Opening it only
+    // after the PDF request completes is commonly blocked by browser popup rules.
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast({
+        title: 'Pop-up blocked',
+        description: 'Allow pop-ups for this site, then try printing the invoice again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsPrinting(true);
+    printWindow.document.write('<!doctype html><title>Preparing invoice…</title><p style="font:16px sans-serif;padding:24px">Preparing invoice for printing…</p>');
+    printWindow.document.close();
+
     try {
-      const response = await supabase.functions.invoke('generate-invoice-pdf', {
+      const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
         body: { invoiceId: invoice.id, returnHtml: true },
       });
-      if (response.data) {
-        const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        }
+      if (error) throw error;
+
+      const htmlContent = typeof data === 'string'
+        ? data
+        : data && typeof data.html === 'string'
+          ? data.html
+          : null;
+      if (!htmlContent || !htmlContent.toLowerCase().includes('<html')) {
+        throw new Error('The invoice PDF service returned an invalid document.');
       }
+
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+
+      // Wait for embedded images and fonts so the printed copy is complete.
+      await Promise.all(Array.from(printWindow.document.images).map((image) =>
+        image.complete
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              image.addEventListener('load', () => resolve(), { once: true });
+              image.addEventListener('error', () => resolve(), { once: true });
+            })
+      ));
+      if (printWindow.document.fonts?.ready) {
+        await printWindow.document.fonts.ready;
+      }
+      printWindow.focus();
+      printWindow.print();
+      toast({ title: 'Invoice ready to print', description: 'Use your browser print dialog to print or save as PDF.' });
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
+      printWindow.close();
+      console.error('Failed to generate invoice for printing:', error);
+      toast({
+        title: 'Invoice could not be printed',
+        description: getErrorMessage(error, 'The invoice document could not be generated. Please try again.'),
+        variant: 'destructive',
+      });
     } finally {
       setIsPrinting(false);
     }
