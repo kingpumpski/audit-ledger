@@ -610,4 +610,5 @@ END;
 $$;
 
 -- Make the newly created RPC signatures visible to PostgREST immediately.
+-- Explicit schema reload also clears stale function signatures after deployment.
 NOTIFY pgrst, 'reload schema';
