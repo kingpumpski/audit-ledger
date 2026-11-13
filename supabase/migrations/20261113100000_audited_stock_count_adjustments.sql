@@ -215,7 +215,7 @@ BEGIN
   IF v_delta > 0 THEN
     SELECT id INTO v_variance_account
     FROM public.chart_of_accounts
-    WHERE code = '4900' AND account_type = 'income' AND is_active LIMIT 1;
+    WHERE code = '4900' AND account_type = 'revenue' AND is_active LIMIT 1;
   ELSE
     SELECT id INTO v_variance_account
     FROM public.chart_of_accounts
