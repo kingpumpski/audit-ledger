@@ -1464,3 +1464,38 @@ FOR EACH ROW
 EXECUTE FUNCTION public.guard_issued_invoice_cancellation();
 
 REVOKE ALL ON FUNCTION public.guard_issued_invoice_cancellation() FROM PUBLIC, anon, authenticated;
+
+
+-- A source invoice with payments or a journal posting is accounting evidence,
+-- not a disposable draft. Soft deletion must not hide it from operational views
+-- while leaving its receivable/revenue/payment history in the ledger.
+CREATE OR REPLACE FUNCTION public.guard_posted_invoice_soft_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $invoice_delete_guard$
+BEGIN
+  IF OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL AND (
+    EXISTS (
+      SELECT 1 FROM public.journal_entries
+      WHERE source_type = 'invoice' AND source_id = OLD.id
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.payments
+      WHERE invoice_id = OLD.id AND deleted_at IS NULL
+    )
+  ) THEN
+    RAISE EXCEPTION 'An invoice with posted accounting or payment history cannot be deleted; use an audited credit note or reversal';
+  END IF;
+  RETURN NEW;
+END;
+$invoice_delete_guard$;
+
+DROP TRIGGER IF EXISTS guard_posted_invoice_soft_deletion ON public.invoices;
+CREATE TRIGGER guard_posted_invoice_soft_deletion
+BEFORE UPDATE OF deleted_at ON public.invoices
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_posted_invoice_soft_deletion();
+
+REVOKE ALL ON FUNCTION public.guard_posted_invoice_soft_deletion() FROM PUBLIC, anon, authenticated;
