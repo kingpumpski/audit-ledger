@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(48);
+SELECT extensions.plan(53);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -370,6 +370,25 @@ SELECT extensions.is(
   'Invoice creates one linked stock-sale transaction'
 );
 
+SELECT extensions.throws_ok(
+  $ UPDATE public.inventory_transactions
+     SET quantity = quantity + 1
+     WHERE type = 'sale' AND reference_type = 'invoice'
+       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $,
+  'P0001',
+  'An inventory transaction with a posted journal is immutable; record an audited reversal instead',
+  'Invoice-linked stock-sale movement cannot be edited after posting'
+);
+
+SELECT extensions.throws_ok(
+  $ DELETE FROM public.inventory_transactions
+     WHERE type = 'sale' AND reference_type = 'invoice'
+       AND reference_id = (SELECT id FROM public.invoices WHERE invoice_number = 'INV-TEST-STOCK-001') $,
+  'P0001',
+  'An inventory transaction with a posted journal is immutable; record an audited reversal instead',
+  'Invoice-linked stock-sale movement cannot be deleted after posting'
+);
+
 SELECT extensions.is(
   (SELECT round(sum(jl.debit), 2)
    FROM public.journal_lines jl
@@ -530,6 +549,36 @@ SELECT extensions.throws_ok(
   'P0001',
   'Verify the actual purchase cost before recording inventory damage',
   'Unverified purchase cost cannot be written off'
+);
+
+
+SELECT extensions.lives_ok(
+  $ INSERT INTO public.petty_cash_transactions (
+       date, description, amount, type, category, reference_number,
+       recorded_by, payment_method
+     ) VALUES (
+       CURRENT_DATE, 'Test petty cash expense', 12.50, 'expense',
+       'Office', 'PETTY-IMMUTABLE-001',
+       'd0000000-0000-4000-8000-000000000001', 'cash'
+     ) $,
+  'Accountant can record an evidenced petty-cash expense'
+);
+
+SELECT extensions.throws_ok(
+  $ UPDATE public.petty_cash_transactions
+     SET amount = 15.00
+     WHERE reference_number = 'PETTY-IMMUTABLE-001' $,
+  'P0001',
+  'An expense with a posted journal is immutable; record an audited reversal instead',
+  'Posted petty-cash expense cannot be edited'
+);
+
+SELECT extensions.throws_ok(
+  $ DELETE FROM public.petty_cash_transactions
+     WHERE reference_number = 'PETTY-IMMUTABLE-001' $,
+  'P0001',
+  'An expense with a posted journal is immutable; record an audited reversal instead',
+  'Posted petty-cash expense cannot be deleted'
 );
 
 SELECT * FROM extensions.finish();
