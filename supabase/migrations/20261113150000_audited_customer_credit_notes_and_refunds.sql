@@ -138,7 +138,7 @@ CREATE POLICY customer_credit_refunds_finance_read ON public.customer_credit_ref
 GRANT SELECT ON public.credit_notes, public.credit_note_lines, public.credit_note_line_taxes,
   public.customer_credit_applications, public.customer_credit_refunds TO authenticated;
 REVOKE ALL ON public.credit_notes, public.credit_note_lines, public.credit_note_line_taxes,
-  public.customer_credit_applications, public.customer_credit_refunds FROM PUBLIC, anon;
+  public.customer_credit_applications, public.customer_credit_refunds FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.guard_credit_note_records()
 RETURNS trigger
