@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
+import type { UserPersona } from '@/config/sidebarConfig';
 
 type AppRole = 'admin' | 'accountant' | 'cashier' | 'auditor';
 
@@ -21,6 +21,8 @@ interface AuthContextType {
   session: Session | null;
   profile: UserProfile | null;
   roles: AppRole[];
+  userPersona: UserPersona;
+  setUserPersona: (persona: UserPersona) => Promise<void>;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null }>;
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
+  const [userPersona, setUserPersonaState] = useState<UserPersona>('simplified');
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -75,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        const savedPersona = session?.user.user_metadata?.user_persona;
+        setUserPersonaState(savedPersona === 'expert' ? 'expert' : 'simplified');
 
         if (session?.user) {
           // Use setTimeout to avoid Supabase client deadlock
@@ -94,6 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      const savedPersona = session?.user.user_metadata?.user_persona;
+      setUserPersonaState(savedPersona === 'expert' ? 'expert' : 'simplified');
       
       if (session?.user) {
         fetchProfile(session.user.id);
@@ -128,6 +135,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setProfile(null);
     setRoles([]);
+    setUserPersonaState('simplified');
+  };
+
+  const setUserPersona = async (persona: UserPersona) => {
+    if (persona !== 'expert' && persona !== 'simplified') {
+      throw new Error('Invalid navigation preference');
+    }
+    const { data, error } = await supabase.auth.updateUser({
+      data: { user_persona: persona },
+    });
+    if (error) throw error;
+    setUserPersonaState(persona);
+    if (data.user) setUser(data.user);
   };
 
   const hasRole = (role: AppRole) => roles.includes(role);
@@ -140,6 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       profile,
       roles,
+      userPersona,
+      setUserPersona,
       isLoading,
       signIn,
       signUp,
