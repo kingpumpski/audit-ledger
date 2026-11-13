@@ -86,6 +86,11 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
         void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
@@ -186,6 +191,34 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
       setReversalForm({ reason: '', reference: '' });
     },
     onError: error => toast({ title: 'Could not reverse expense', description: error.message, variant: 'destructive' }),
+  });
+
+  const recordRefund = useMutation({
+    mutationFn: async () => {
+      if (!refund) throw new Error('Select a reversed expense.');
+      const amount = Number(refundForm.amount);
+      const refunded = (refund.refunds || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const refundable = Math.max(0, Number(refund.amount_paid || 0) - refunded);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > refundable || !refundForm.reference.trim()) {
+        throw new Error('Enter a positive refund within the unrefunded amount actually paid, with a supporting reference.');
+      }
+      const { error } = await expenseApi.rpc('record_operating_expense_refund', {
+        p_expense_id: refund.id,
+        p_amount: amount,
+        p_refunded_on: refundForm.refundedOn,
+        p_payment_method: refundForm.method,
+        p_reference_number: refundForm.reference.trim(),
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refreshAccounting();
+      toast({ title: 'Supplier refund recorded', description: 'The actual cash/bank receipt and Accounts Payable clearing have been posted.' });
+      setRefund(null);
+      setRefundForm({ amount: '', refundedOn: today(), method: 'cash', reference: '' });
+    },
+    onError: error => toast({ title: 'Could not record supplier refund', description: error.message, variant: 'destructive' }),
   });
 
   const totals = useMemo(() => (expensesQuery.data || []).reduce((result, expense) => {
