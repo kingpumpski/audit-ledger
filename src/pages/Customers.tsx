@@ -17,14 +17,17 @@ import {
 } from '@/components/ui/dialog';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { Plus, Search, Loader2, Mail, Phone, Eye, Trash2 } from 'lucide-react';
+import { Plus, Search, Loader2, Mail, Phone, Eye, Trash2, Edit } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Customers() {
-  const { customers, isLoading, createCustomer, deleteCustomer, isCreating } = useCustomers();
+  const { customers, isLoading, createCustomer, updateCustomerAsync, deleteCustomer, isCreating } = useCustomers();
   const { formatCurrency } = useCurrency();
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<(typeof customers)[number] | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editFormData, setEditFormData] = useState({ name: '', email: '', phone: '' });
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -46,6 +49,32 @@ export default function Customers() {
     });
     setIsDialogOpen(false);
     setFormData({ name: '', email: '', phone: '' });
+  };
+
+  const openEditDialog = (customer: (typeof customers)[number]) => {
+    setEditingCustomer(customer);
+    setEditFormData({
+      name: customer.name || '',
+      email: customer.email || '',
+      phone: customer.phone || '',
+    });
+  };
+
+  const handleUpdateCustomer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingCustomer || !editFormData.name.trim()) return;
+    setIsSavingEdit(true);
+    try {
+      await updateCustomerAsync({
+        id: editingCustomer.id,
+        name: editFormData.name.trim(),
+        email: editFormData.email.trim() || null,
+        phone: editFormData.phone.trim() || null,
+      });
+      setEditingCustomer(null);
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -207,6 +236,16 @@ export default function Customers() {
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label={`Edit ${customer.name}`}
+                          title="Edit customer"
+                          onClick={() => openEditDialog(customer)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
@@ -228,6 +267,36 @@ export default function Customers() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editingCustomer} onOpenChange={(open) => !open && setEditingCustomer(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+            <DialogDescription>Correct the customer details without creating a duplicate record.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateCustomer} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-customer-name">Company/Customer Name *</Label>
+              <Input id="edit-customer-name" value={editFormData.name} onChange={e => setEditFormData(v => ({ ...v, name: e.target.value }))} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-customer-email">Email</Label>
+              <Input id="edit-customer-email" type="email" value={editFormData.email} onChange={e => setEditFormData(v => ({ ...v, email: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-customer-phone">Phone</Label>
+              <Input id="edit-customer-phone" value={editFormData.phone} onChange={e => setEditFormData(v => ({ ...v, phone: e.target.value }))} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingCustomer(null)}>Cancel</Button>
+              <Button type="submit" disabled={isSavingEdit || !editFormData.name.trim()}>
+                {isSavingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
