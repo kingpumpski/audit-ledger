@@ -70,8 +70,22 @@ export function RecordPaymentDialog({
   const { createPayment, isCreating } = usePayments();
   const { createReceipt, isCreating: isCreatingReceipt } = useReceipts();
   const [isOpen, setIsOpen] = useState(false);
-  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() => crypto.randomUUID());
-  const [receiptIdempotencyKey, setReceiptIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() => {
+    const storageKey = `audit-ledger:payment:${invoiceId}:idempotency-key`;
+    const existingKey = window.sessionStorage.getItem(storageKey);
+    if (existingKey) return existingKey;
+    const nextKey = crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, nextKey);
+    return nextKey;
+  });
+  const [receiptIdempotencyKey, setReceiptIdempotencyKey] = useState(() => {
+    const storageKey = `audit-ledger:payment-receipt:${invoiceId}:idempotency-key`;
+    const existingKey = window.sessionStorage.getItem(storageKey);
+    if (existingKey) return existingKey;
+    const nextKey = crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, nextKey);
+    return nextKey;
+  });
   const [formData, setFormData] = useState<PaymentFormData>({
     amount: balanceDue.toString(),
     payment_method: 'cash',
@@ -141,8 +155,12 @@ export function RecordPaymentDialog({
         notes: '',
         generate_receipt: true,
       });
-      setPaymentIdempotencyKey(crypto.randomUUID());
-      setReceiptIdempotencyKey(crypto.randomUUID());
+      const nextPaymentKey = crypto.randomUUID();
+      const nextReceiptKey = crypto.randomUUID();
+      setPaymentIdempotencyKey(nextPaymentKey);
+      setReceiptIdempotencyKey(nextReceiptKey);
+      window.sessionStorage.setItem(`audit-ledger:payment:${invoiceId}:idempotency-key`, nextPaymentKey);
+      window.sessionStorage.setItem(`audit-ledger:payment-receipt:${invoiceId}:idempotency-key`, nextReceiptKey);
       onPaymentRecorded?.();
     } catch (error) {
       console.error('Payment error:', error);
