@@ -18,14 +18,14 @@ INSERT INTO public.chart_of_accounts
 VALUES
   ('4900', 'Inventory Count Variance Gain',
    'Income recognized when an evidenced stock count identifies additional inventory.',
-   'income', 'other_income', true, true)
+   'revenue', 'other_revenue', true, true)
 ON CONFLICT (code) DO NOTHING;
 
 DO $inventory_count_accounts$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM public.chart_of_accounts
-    WHERE code = '4900' AND account_type = 'income' AND is_active
+    WHERE code = '4900' AND account_type = 'revenue' AND is_active
   ) THEN
     RAISE EXCEPTION 'Chart of accounts code 4900 must be an active income account';
   END IF;
