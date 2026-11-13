@@ -284,8 +284,9 @@ BEGIN
     SELECT * FROM jsonb_to_recordset(p_lines) AS x(invoice_item_id uuid, quantity numeric)
     ORDER BY invoice_item_id
   LOOP
-    IF v_request.invoice_item_id IS NULL OR v_request.quantity IS NULL OR v_request.quantity <= 0 THEN
-      RAISE EXCEPTION 'Every credit line requires a valid invoice item and positive quantity';
+    IF v_request.invoice_item_id IS NULL OR v_request.quantity IS NULL OR v_request.quantity <= 0
+       OR v_request.quantity <> ROUND(v_request.quantity,3) THEN
+      RAISE EXCEPTION 'Every credit line requires a valid invoice item and a positive quantity with at most three decimal places';
     END IF;
 
     SELECT * INTO v_item
@@ -610,7 +611,7 @@ BEGIN
   IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant']) THEN
     RAISE EXCEPTION 'Only an admin or accountant can apply customer credit';
   END IF;
-  IF p_amount IS NULL OR p_amount <= 0 OR p_applied_on IS NULL
+  IF p_amount IS NULL OR p_amount <= 0 OR p_amount <> ROUND(p_amount,2) OR p_applied_on IS NULL
      OR p_idempotency_key IS NULL OR NULLIF(BTRIM(p_reference_number),'') IS NULL THEN
     RAISE EXCEPTION 'A positive amount, date, reference and idempotency key are required';
   END IF;
@@ -634,12 +635,18 @@ BEGIN
     - COALESCE((SELECT SUM(amount) FROM public.customer_credit_refunds WHERE credit_note_id=v_note.id),0)
   INTO v_remaining;
   IF p_amount > v_remaining THEN RAISE EXCEPTION 'Application exceeds the remaining customer credit'; END IF;
+  IF p_applied_on < v_note.credit_note_date THEN
+    RAISE EXCEPTION 'Customer credit application date cannot be earlier than the credit note';
+  END IF;
 
   SELECT * INTO v_invoice FROM public.invoices
   WHERE id=p_invoice_id AND deleted_at IS NULL FOR UPDATE;
   IF NOT FOUND OR v_invoice.customer_id<>v_note.customer_id
      OR v_invoice.status NOT IN ('issued','partially_paid','overdue') THEN
     RAISE EXCEPTION 'Select an active outstanding invoice belonging to the same customer';
+  END IF;
+  IF p_applied_on < v_invoice.issue_date THEN
+    RAISE EXCEPTION 'Customer credit application date cannot be earlier than the target invoice';
   END IF;
   IF p_amount > COALESCE(v_invoice.balance_due,0) THEN
     RAISE EXCEPTION 'Application exceeds the selected invoice balance';
@@ -717,7 +724,7 @@ BEGIN
   IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant']) THEN
     RAISE EXCEPTION 'Only an admin or accountant can refund customer credit';
   END IF;
-  IF p_amount IS NULL OR p_amount<=0 OR p_refunded_on IS NULL
+  IF p_amount IS NULL OR p_amount<=0 OR p_amount <> ROUND(p_amount,2) OR p_refunded_on IS NULL
      OR p_payment_method IS NULL OR p_idempotency_key IS NULL
      OR NULLIF(BTRIM(p_reference_number),'') IS NULL THEN
     RAISE EXCEPTION 'A positive refund, date, payment method, reference and idempotency key are required';
