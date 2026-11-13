@@ -472,7 +472,7 @@ BEGIN
   IF v_total <= 0 OR v_paid < 0 OR v_unpaid < 0 THEN
     RAISE EXCEPTION 'Original purchase values are invalid; reversal is blocked';
   END IF;
-  IF v_paid > 0 AND p_refund_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment') THEN
+  IF v_paid > 0 AND (p_refund_payment_method IS NULL OR p_refund_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')) THEN
     RAISE EXCEPTION 'Record the actual supplier refund method for the amount previously paid';
   END IF;
   IF v_paid = 0 AND p_refund_payment_method IS NOT NULL THEN
