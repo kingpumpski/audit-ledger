@@ -54,6 +54,8 @@ export function useReceipts() {
       if (error) throw error;
       return data as ReceiptWithRelations[];
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const createReceiptMutation = useMutation({
