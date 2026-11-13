@@ -37,6 +37,33 @@ type UncostedInvoiceLine = {
 
 type CostInput = { unitCost: string; reference: string; notes: string; incurredOn: string; paymentMethod: 'cash' | 'bank_transfer' };
 
+type DirectInvoiceCostRecord = {
+  invoice_item_id: string;
+  amount: number | string;
+};
+
+type DirectCostApi = {
+  from: (table: 'invoice_item_direct_costs') => {
+    select: (columns: 'invoice_item_id, amount') => PromiseLike<{
+      data: DirectInvoiceCostRecord[] | null;
+      error: { message: string } | null;
+    }>;
+  };
+  rpc: (
+    functionName: 'record_invoice_item_direct_cost',
+    args: {
+      p_invoice_item_id: string;
+      p_amount: number;
+      p_reference: string;
+      p_incurred_on: string;
+      p_payment_method: 'cash' | 'bank_transfer';
+      p_notes: string | null;
+    }
+  ) => PromiseLike<{ error: { message: string } | null }>;
+};
+
+const directCostApi = supabase as unknown as DirectCostApi;
+
 export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -72,12 +99,12 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
       const missingItems: Array<{ id: string; invoice_id: string; description: string; quantity: number; unit_price: number; product_id: string | null }> = [];
       const products: Array<{ id: string; name: string; is_service: boolean }> = [];
-      const { data: directCosts, error: directCostsError } = await (supabase as any)
+      const { data: directCosts, error: directCostsError } = await directCostApi
         .from('invoice_item_direct_costs')
         .select('invoice_item_id, amount');
       if (directCostsError) throw directCostsError;
       const directCostMap = new Map<string, number>(
-        (directCosts || []).map((cost: { invoice_item_id: string; amount: number }) => [cost.invoice_item_id, Number(cost.amount)])
+        (directCosts || []).map((cost) => [cost.invoice_item_id, Number(cost.amount)])
       );
 
       let offset = 0;
@@ -172,7 +199,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
     mutationFn: async ({ itemId, amount, reference, notes, incurredOn, paymentMethod }: {
       itemId: string; amount: number; reference: string; notes: string; incurredOn: string; paymentMethod: 'cash' | 'bank_transfer';
     }) => {
-      const { error } = await (supabase as any).rpc('record_invoice_item_direct_cost', {
+      const { error } = await directCostApi.rpc('record_invoice_item_direct_cost', {
         p_invoice_item_id: itemId,
         p_amount: amount,
         p_reference: reference,
