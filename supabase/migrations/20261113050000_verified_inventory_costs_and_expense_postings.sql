@@ -1665,6 +1665,14 @@ BEGIN
     FROM public.journal_entries
     WHERE source_id = OLD.id
       AND source_type IN ('stock_purchase', 'inventory_damage')
+  ) OR (
+    OLD.reference_type = 'invoice'
+    AND EXISTS (
+      SELECT 1
+      FROM public.journal_entries
+      WHERE source_type = 'invoice'
+        AND source_id = OLD.reference_id
+    )
   ) THEN
     RAISE EXCEPTION 'An inventory transaction with a posted journal is immutable; record an audited reversal instead';
   END IF;
