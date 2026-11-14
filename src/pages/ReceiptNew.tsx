@@ -12,6 +12,8 @@ import {
 import { useReceipts } from '@/hooks/useReceipts';
 import { type ReceiptWithRelations } from '@/hooks/useReceipts';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useProfile } from '@/hooks/useProfile';
 import { SignaturePad } from '@/components/SignaturePad';
@@ -20,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useReceiptPrint } from '@/hooks/useReceiptPrint';
 import { useAuth } from '@/contexts/AuthContext';
+import { format } from 'date-fns';
 
 const paymentMethods = [
   { value: 'cash', label: 'Cash' },
@@ -43,8 +46,10 @@ export default function ReceiptNew() {
   const { printReceipt } = useReceiptPrint();
   const { customers } = useCustomers();
   const { invoices } = useInvoices();
+  const { formatCurrency } = useCurrency();
 
   const [customerId, setCustomerId] = useState('');
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined, Boolean(customerId));
   const [invoiceId, setInvoiceId] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
@@ -161,6 +166,14 @@ export default function ReceiptNew() {
                     {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {customerId && (
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Current outstanding balance</span>
+                    <span className="font-semibold tabular-nums">
+                      {isCustomerBalanceLoading ? 'Calculating…' : selectedCustomerBalanceError ? 'Unavailable' : formatCurrency(selectedCustomerBalances[0]?.outstanding_balance ?? 0)}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Link to Invoice (Optional)</Label>
