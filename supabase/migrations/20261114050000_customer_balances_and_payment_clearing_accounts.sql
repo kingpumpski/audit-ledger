@@ -959,7 +959,7 @@ BEGIN
   IF v_total <= 0 OR v_paid < 0 OR v_unpaid < 0 THEN
     RAISE EXCEPTION 'Original purchase values are invalid; reversal is blocked';
   END IF;
-  IF v_paid > 0 AND (p_refund_payment_method IS NULL OR p_refund_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')) THEN
+  IF v_paid > 0 AND (p_refund_payment_method IS NULL OR p_refund_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment', 'credit_card', 'debit_card', 'check')) THEN
     RAISE EXCEPTION 'Record the actual supplier refund method for the amount previously paid';
   END IF;
   IF v_paid = 0 AND p_refund_payment_method IS NOT NULL THEN
@@ -1100,7 +1100,7 @@ BEGIN
     RAISE EXCEPTION 'Only an admin or accountant can settle operating expenses';
   END IF;
   IF p_amount IS NULL OR p_amount <= 0 OR p_paid_on IS NULL
-     OR p_payment_method IS NULL OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')
+     OR p_payment_method IS NULL OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment', 'credit_card', 'debit_card', 'check')
      OR NULLIF(BTRIM(p_reference_number), '') IS NULL
      OR p_idempotency_key IS NULL THEN
     RAISE EXCEPTION 'Enter a positive payment amount, date, method, reference and idempotency key';
@@ -1203,7 +1203,7 @@ BEGIN
   END IF;
   IF p_expense_id IS NULL OR p_amount IS NULL OR p_amount <= 0
      OR p_refunded_on IS NULL OR p_payment_method IS NULL
-     OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')
+     OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment', 'credit_card', 'debit_card', 'check')
      OR NULLIF(BTRIM(p_reference_number), '') IS NULL OR p_idempotency_key IS NULL THEN
     RAISE EXCEPTION 'Enter a positive refund, date, cash/bank method, supplier refund reference and idempotency key';
   END IF;
@@ -1313,7 +1313,7 @@ BEGIN
   END IF;
   IF p_transaction_id IS NULL OR p_reversed_on IS NULL
      OR p_payment_method IS NULL
-     OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment')
+     OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment', 'credit_card', 'debit_card', 'check')
      OR NULLIF(BTRIM(p_reason), '') IS NULL
      OR NULLIF(BTRIM(p_reference_number), '') IS NULL
      OR p_idempotency_key IS NULL THEN
@@ -1475,3 +1475,150 @@ BEGIN
 END;
 $petty_expense$;
 
+
+
+-- Extend controlled supplier-payment workflows to all explicitly mapped clearing methods.
+CREATE OR REPLACE FUNCTION public.record_operating_expense(
+  p_description text,
+  p_vendor_name text,
+  p_reference_number text,
+  p_expense_account_id uuid,
+  p_incurred_on date,
+  p_due_on date,
+  p_amount numeric,
+  p_amount_paid numeric,
+  p_payment_method public.payment_method,
+  p_payment_reference text,
+  p_notes text,
+  p_idempotency_key uuid
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $record_operating_expense$
+DECLARE
+  v_existing public.operating_expenses%ROWTYPE;
+  v_account public.chart_of_accounts%ROWTYPE;
+  v_payable_account uuid;
+  v_journal_id uuid;
+  v_expense_id uuid;
+  v_entry_number text;
+  v_currency text;
+  v_expense_number text;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant']) THEN
+    RAISE EXCEPTION 'Only an admin or accountant can record operating expenses';
+  END IF;
+  IF NULLIF(BTRIM(p_description), '') IS NULL OR NULLIF(BTRIM(p_vendor_name), '') IS NULL
+     OR NULLIF(BTRIM(p_reference_number), '') IS NULL OR p_incurred_on IS NULL
+     OR p_amount IS NULL OR p_amount <= 0 OR p_amount_paid IS NULL
+     OR p_amount_paid < 0 OR p_amount_paid > p_amount OR p_idempotency_key IS NULL THEN
+    RAISE EXCEPTION 'Complete the description, supplier, source reference, date and valid amount';
+  END IF;
+  IF p_due_on IS NOT NULL AND p_due_on < p_incurred_on THEN
+    RAISE EXCEPTION 'Due date cannot be earlier than the expense date';
+  END IF;
+  IF p_amount_paid > 0 AND (p_payment_method IS NULL OR p_payment_method NOT IN ('cash', 'bank_transfer', 'mobile_payment', 'credit_card', 'debit_card', 'check') OR NULLIF(BTRIM(p_payment_reference), '') IS NULL) THEN
+    RAISE EXCEPTION 'A payment method and payment reference are required for the amount already paid';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+  SELECT * INTO v_existing FROM public.operating_expenses
+  WHERE idempotency_key = p_idempotency_key FOR UPDATE;
+  IF FOUND THEN
+    IF v_existing.description <> BTRIM(p_description)
+       OR v_existing.vendor_name <> BTRIM(p_vendor_name)
+       OR v_existing.reference_number <> BTRIM(p_reference_number)
+       OR v_existing.expense_account_id <> p_expense_account_id
+       OR v_existing.incurred_on <> p_incurred_on
+       OR v_existing.due_on IS DISTINCT FROM p_due_on
+       OR v_existing.amount <> ROUND(p_amount, 2)
+       OR v_existing.initial_amount_paid <> ROUND(p_amount_paid, 2)
+       OR (p_amount_paid > 0 AND (
+         v_existing.initial_payment_method IS DISTINCT FROM p_payment_method
+         OR v_existing.initial_payment_reference IS DISTINCT FROM BTRIM(p_payment_reference)
+       ))
+       OR (p_amount_paid = 0 AND (
+         v_existing.initial_payment_method IS NOT NULL
+         OR v_existing.initial_payment_reference IS NOT NULL
+       ))
+       OR v_existing.notes IS DISTINCT FROM NULLIF(BTRIM(p_notes), '') THEN
+      RAISE EXCEPTION 'This expense idempotency key was already used with different details';
+    END IF;
+    RETURN v_existing.id;
+  END IF;
+
+  SELECT * INTO v_account FROM public.chart_of_accounts
+  WHERE id = p_expense_account_id AND account_type = 'expense' AND is_active = true
+    AND code NOT IN ('5000', '6500')
+  FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Select an active operating-expense account; Cost of Goods Sold and inventory damage must use their audited workflows'; END IF;
+  SELECT id INTO v_payable_account FROM public.chart_of_accounts
+  WHERE code = '2000' AND account_type = 'liability' AND is_active LIMIT 1;
+  IF v_payable_account IS NULL THEN RAISE EXCEPTION 'Accounts Payable account is not configured'; END IF;
+
+  v_expense_number := 'EXP-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10));
+  INSERT INTO public.operating_expenses (
+    expense_number, description, vendor_name, reference_number, expense_account_id,
+    incurred_on, due_on, amount, amount_paid, initial_amount_paid,
+    initial_payment_method, initial_payment_reference, notes, idempotency_key, recorded_by
+  ) VALUES (
+    v_expense_number, BTRIM(p_description), BTRIM(p_vendor_name), BTRIM(p_reference_number), p_expense_account_id,
+    p_incurred_on, p_due_on, ROUND(p_amount, 2), 0, ROUND(p_amount_paid, 2),
+    CASE WHEN p_amount_paid > 0 THEN p_payment_method ELSE NULL END,
+    CASE WHEN p_amount_paid > 0 THEN BTRIM(p_payment_reference) ELSE NULL END,
+    NULLIF(BTRIM(p_notes), ''), p_idempotency_key, auth.uid()
+  ) RETURNING id INTO v_expense_id;
+
+  v_entry_number := public.get_next_sequence('journal');
+  SELECT COALESCE(currency_code, 'USD') INTO v_currency
+  FROM public.company_settings ORDER BY created_at LIMIT 1;
+  v_currency := COALESCE(v_currency, 'USD');
+
+  INSERT INTO public.journal_entries (
+    entry_number, entry_date, description, source_type, source_id, currency, created_by
+  ) VALUES (
+    v_entry_number, p_incurred_on,
+    'Operating expense - ' || BTRIM(p_vendor_name) || ' - ' || BTRIM(p_description),
+    'operating_expense', v_expense_id, v_currency, auth.uid()
+  ) RETURNING id INTO v_journal_id;
+
+  INSERT INTO public.journal_lines (
+    journal_entry_id, line_number, account_id, description, debit, credit
+  ) VALUES (
+    v_journal_id, 1, p_expense_account_id, BTRIM(p_description), ROUND(p_amount, 2), 0
+  ), (
+    v_journal_id, 2,
+    (SELECT id FROM public.chart_of_accounts WHERE code = '2000' AND account_type = 'liability' AND is_active LIMIT 1),
+    'Accrued supplier payable - ' || BTRIM(p_vendor_name), 0, ROUND(p_amount, 2)
+  );
+
+  IF p_amount_paid > 0 THEN
+    PERFORM public.pay_operating_expense(
+      v_expense_id, p_amount_paid, p_incurred_on, p_payment_method,
+      p_payment_reference, gen_random_uuid()
+    );
+  END IF;
+  RETURN v_expense_id;
+END;
+$record_operating_expense$;
+
+-- Persisted refund evidence accepts only methods with a configured clearing account.
+ALTER TABLE public.operating_expense_refunds
+  DROP CONSTRAINT IF EXISTS operating_expense_refunds_payment_method_check;
+ALTER TABLE public.operating_expense_refunds
+  ADD CONSTRAINT operating_expense_refunds_payment_method_check
+  CHECK (payment_method IN ('cash','bank_transfer','mobile_payment','credit_card','debit_card','check'));
+
+ALTER TABLE public.petty_cash_expense_reversals
+  DROP CONSTRAINT IF EXISTS petty_cash_expense_reversals_payment_method_check;
+ALTER TABLE public.petty_cash_expense_reversals
+  ADD CONSTRAINT petty_cash_expense_reversals_payment_method_check
+  CHECK (payment_method IN ('cash','bank_transfer','mobile_payment','credit_card','debit_card','check'));
+
+ALTER TABLE public.inventory_purchase_reversals
+  DROP CONSTRAINT IF EXISTS inventory_purchase_reversals_refund_payment_method_check;
+ALTER TABLE public.inventory_purchase_reversals
+  ADD CONSTRAINT inventory_purchase_reversals_refund_payment_method_check
+  CHECK (refund_payment_method IS NULL OR refund_payment_method IN ('cash','bank_transfer','mobile_payment','credit_card','debit_card','check'));
