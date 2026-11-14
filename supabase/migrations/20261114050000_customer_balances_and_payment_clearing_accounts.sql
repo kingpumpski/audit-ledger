@@ -34,7 +34,6 @@ $clearing_account_validation$;
 CREATE OR REPLACE FUNCTION public.resolve_payment_account_id(p_payment_method public.payment_method)
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = ''
 AS $resolve_payment_account$
 DECLARE
@@ -69,7 +68,8 @@ BEGIN
 END;
 $resolve_payment_account$;
 
-REVOKE ALL ON FUNCTION public.resolve_payment_account_id(public.payment_method) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.resolve_payment_account_id(public.payment_method) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.resolve_payment_account_id(public.payment_method) TO authenticated;
 
 -- Invoice-linked receipts/payments debit the correct settlement account.
 CREATE OR REPLACE FUNCTION public.apply_invoice_payment_and_post_journal()
