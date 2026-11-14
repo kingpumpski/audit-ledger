@@ -113,7 +113,7 @@ BEGIN
     v_line_tax := ROUND(COALESCE((v_item->>'tax_amount')::numeric, 0), 2);
     v_line_total := ROUND(COALESCE((v_item->>'line_total')::numeric, -1), 2);
     v_tax_breakdown_total := ROUND(COALESCE((
-      SELECT SUM(tax_row.value->>'tax_amount'::text)::numeric
+      SELECT SUM((tax_row.value->>'tax_amount')::numeric)
       FROM jsonb_array_elements(COALESCE(v_item->'tax_breakdown', '[]'::jsonb)) AS tax_row(value)
     ), 0), 2);
 
