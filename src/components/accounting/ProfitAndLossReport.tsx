@@ -375,6 +375,12 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice(s) checked through {asOfDate}</span>
         </div>
 
+        {expenseCaptureComplete && attestationQuery.data && (
+          <p className="text-xs text-muted-foreground">
+            Signed on {new Date(attestationQuery.data.attested_at).toLocaleString()}: {attestationQuery.data.statement}
+          </p>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Net Sales (excl. tax)</p>
@@ -495,7 +501,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           </div>
           <div className="space-y-2">
             <Label htmlFor="attestation-statement">Finance declaration</Label>
-            <Textarea id="attestation-statement" value={attestationStatement} onChange={event => setAttestationStatement(event.target.value)} rows={4} />
+            <Textarea id="attestation-statement" value={attestationStatement} onChange={event => setAttestationStatement(event.target.value)} rows={4} maxLength={2000} />
             <p className="text-xs text-muted-foreground">At least 30 characters. This statement is retained with the immutable attestation record.</p>
           </div>
           <label className="flex items-start gap-3 text-sm">
