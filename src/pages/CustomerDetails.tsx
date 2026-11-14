@@ -509,7 +509,7 @@ export default function CustomerDetails() {
           </TabsContent>
 
           <TabsContent value="credits">
-            <CustomerCreditManagement customerId={customer.id} currencySymbol={currencySymbol} />
+            <CustomerCreditManagement customerId={customer.id} customerName={customer.name} currencySymbol={currencySymbol} />
           </TabsContent>
         </Tabs>
       </div>
