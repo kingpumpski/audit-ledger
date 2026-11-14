@@ -21,7 +21,14 @@ vi.mock('@/hooks/use-toast', () => ({
 const from = vi.mocked(supabase.from);
 
 function makeBuilder(result: { data: unknown; error: unknown }) {
-  const builder: Record<string, ReturnType<typeof vi.fn>> & {
+  const builder: {
+    select: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    eq: ReturnType<typeof vi.fn>;
+    is: ReturnType<typeof vi.fn>;
+    or: ReturnType<typeof vi.fn>;
+    order: ReturnType<typeof vi.fn>;
+    maybeSingle: ReturnType<typeof vi.fn>;
     then: (resolve: (value: typeof result) => unknown) => Promise<unknown>;
   } = {
     select: vi.fn(),
