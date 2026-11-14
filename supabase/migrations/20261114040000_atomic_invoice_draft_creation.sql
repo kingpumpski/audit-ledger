@@ -53,10 +53,14 @@ BEGIN
   END IF;
 
   IF p_issue_date IS NULL OR p_subtotal IS NULL OR p_discount_amount IS NULL
-     OR p_tax_amount IS NULL OR p_total_amount IS NULL
-     OR p_items IS NULL OR jsonb_typeof(p_items) <> 'array'
-     OR jsonb_array_length(p_items) = 0 THEN
+     OR p_tax_amount IS NULL OR p_total_amount IS NULL OR p_items IS NULL THEN
     RAISE EXCEPTION 'Invoice date, totals and at least one invoice line are required';
+  END IF;
+  IF jsonb_typeof(p_items) <> 'array' THEN
+    RAISE EXCEPTION 'Invoice lines must be supplied as an array';
+  END IF;
+  IF jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'At least one invoice line is required';
   END IF;
 
   IF p_subtotal < 0 OR p_discount_amount < 0 OR p_tax_amount < 0 OR p_total_amount < 0 THEN
@@ -81,10 +85,11 @@ BEGIN
   FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
   LOOP
     v_item_count := v_item_count + 1;
-    v_quantity := (v_item->>'quantity')::numeric;
-    v_unit_price := (v_item->>'unit_price')::numeric;
+    v_quantity := NULLIF(v_item->>'quantity', '')::numeric;
+    v_unit_price := NULLIF(v_item->>'unit_price', '')::numeric;
 
     IF NULLIF(BTRIM(v_item->>'description'), '') IS NULL
+       OR v_quantity IS NULL OR v_unit_price IS NULL
        OR v_quantity <= 0 OR v_unit_price < 0 THEN
       RAISE EXCEPTION 'Invoice line % requires a description, positive quantity and non-negative unit price', v_item_count;
     END IF;
@@ -101,15 +106,18 @@ BEGIN
       RAISE EXCEPTION 'Invoice line % has an unsupported discount type', v_item_count;
     END IF;
 
+    IF jsonb_typeof(COALESCE(v_item->'tax_breakdown', '[]'::jsonb)) <> 'array' THEN
+      RAISE EXCEPTION 'Invoice line % tax evidence must be supplied as an array', v_item_count;
+    END IF;
+
     v_line_tax := ROUND(COALESCE((v_item->>'tax_amount')::numeric, 0), 2);
     v_line_total := ROUND(COALESCE((v_item->>'line_total')::numeric, -1), 2);
     v_tax_breakdown_total := ROUND(COALESCE((
-      SELECT SUM((tax_row->>'tax_amount')::numeric)
-      FROM jsonb_array_elements(COALESCE(v_item->'tax_breakdown', '[]'::jsonb)) tax_row
+      SELECT SUM(tax_row.value->>'tax_amount'::text)::numeric
+      FROM jsonb_array_elements(COALESCE(v_item->'tax_breakdown', '[]'::jsonb)) AS tax_row(value)
     ), 0), 2);
 
-    IF jsonb_typeof(COALESCE(v_item->'tax_breakdown', '[]'::jsonb)) <> 'array'
-       OR v_line_tax < 0
+    IF v_line_tax < 0
        OR v_tax_breakdown_total IS DISTINCT FROM v_line_tax THEN
       RAISE EXCEPTION 'Invoice line % tax amount does not reconcile to its tax evidence', v_item_count;
     END IF;
