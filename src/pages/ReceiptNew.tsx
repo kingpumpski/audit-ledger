@@ -28,7 +28,6 @@ const paymentMethods = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'check', label: 'Check' },
   { value: 'mobile_payment', label: 'Mobile Payment' },
-  { value: 'other', label: 'Other' },
 ] as const;
 type PaymentMethod = (typeof paymentMethods)[number]['value'];
 
