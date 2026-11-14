@@ -100,3 +100,25 @@ export function isTaxEffectiveOnDate(tax: TaxRule, date: string): boolean {
   if (tax.effective_to && tax.effective_to < date) return false;
   return true;
 }
+
+/**
+ * Fail closed when a tax explicitly selected on an invoice is no longer
+ * available, effective for the invoice date, or mapped to a liability account.
+ * Silently dropping a selected tax would create a misleading invoice total.
+ */
+export function validateSelectedTaxRules(selectedTaxIds: string[], taxRules: TaxRule[], date: string): void {
+  const availableTaxIds = new Set(taxRules.map(tax => tax.id));
+  if (selectedTaxIds.some(id => !availableTaxIds.has(id))) {
+    throw new Error('One or more selected taxes are no longer active or available. Refresh the tax list and review this invoice before saving.');
+  }
+
+  const ineffectiveTax = taxRules.find(tax => !isTaxEffectiveOnDate(tax, date));
+  if (ineffectiveTax) {
+    throw new Error(`Tax ${ineffectiveTax.code} is not effective on the invoice date. Remove it or choose a valid invoice date.`);
+  }
+
+  const unconfiguredTax = taxRules.find(tax => !tax.liability_account_id);
+  if (unconfiguredTax) {
+    throw new Error(`Tax ${unconfiguredTax.code} has no liability account configured.`);
+  }
+}
