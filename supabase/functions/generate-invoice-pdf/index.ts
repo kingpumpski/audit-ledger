@@ -14,6 +14,29 @@ interface InvoicePdfRequest {
   returnHtml?: boolean;
 }
 
+function safeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    // Company logos may be hosted remotely, but active-content and non-web schemes
+    // must never be embedded in the generated invoice document.
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    return escapeHtml(parsed.toString());
+  } catch {
+    return null;
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  // Avoid spreading a large invoice HTML byte array into one function call.
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { status: 200, headers: corsHeaders });
@@ -68,7 +91,7 @@ serve(async (req) => {
     const settings = escapeDeep(rawSettings);
     const companyName = settings?.company_name || "InvoiceHub";
     const currencySymbol = settings?.currency_symbol || "$";
-    const companyLogo = settings?.company_logo_url || null;
+    const companyLogo = safeImageUrl(rawSettings?.company_logo_url);
 
     // Generate line items HTML
     const itemsHtml = invoice.items
@@ -262,14 +285,20 @@ serve(async (req) => {
     if (returnHtml) {
       return new Response(pdfHtml, {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+        },
       });
     }
 
     // Return as base64 encoded HTML for email attachment
     const encoder = new TextEncoder();
     const htmlBytes = encoder.encode(pdfHtml);
-    const base64Html = btoa(String.fromCharCode(...htmlBytes));
+    const base64Html = bytesToBase64(htmlBytes);
 
     return new Response(
       JSON.stringify({ 
@@ -278,7 +307,7 @@ serve(async (req) => {
         base64: base64Html,
         invoiceNumber: invoice.invoice_number
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } }
     );
 
   } catch (error) {
