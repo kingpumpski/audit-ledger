@@ -399,8 +399,13 @@ BEGIN
     SELECT i.id,i.customer_id,i.issue_date,ROUND(COALESCE(i.total_amount,0),2) AS total_amount
     FROM public.invoices i
     WHERE i.deleted_at IS NULL
-      AND i.status IN ('issued','partially_paid','paid','overdue')
       AND i.issue_date<=p_as_of_date
+      AND EXISTS (
+        SELECT 1 FROM public.journal_entries issued_entry
+        WHERE issued_entry.source_type='invoice'
+          AND issued_entry.source_id=i.id
+          AND issued_entry.entry_date<=p_as_of_date
+      )
       AND (p_customer_id IS NULL OR i.customer_id=p_customer_id)
   ),
   invoice_payments AS (
