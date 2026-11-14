@@ -10,8 +10,8 @@ This document records the current production-schema findings and the safe implem
 
 Read-only inspection of the production Supabase project on 12 November 2026 found:
 
-- All 27 listed public tables had Row Level Security enabled.
-- None of the inspected public tables had a `business_id`, `organization_id` or `tenant_id` ownership column.
+- The earlier read-only inspection found RLS enabled on all 27 then-existing public tables. The subsequent accounting-ledger migration added `journal_entries` and `journal_lines` with RLS policies.
+- None of the inspected business-owned tables had a `business_id`, `organization_id` or `tenant_id` ownership column; the newer journal tables are also not tenant-scoped.
 - The core business tables (customers, products, invoices, payments, receipts, petty cash, inventory transactions and chart of accounts) use role-based policies, not business-membership predicates. An employee with an appropriate role can therefore see records across the current project workspace.
 - `company_settings` is a single global settings row, not settings per business.
 - `user_roles` assigns a role to a user globally; it is not scoped to a business.
@@ -19,7 +19,8 @@ Read-only inspection of the production Supabase project on 12 November 2026 foun
 - `payments.invoice_id` is required, so the current payment model is invoice-centred.
 - The current receipt screen requires a customer and a digital signature. That is unsuitable as the only way to record a normal walk-in counter sale.
 - Products have a `cost_price`, but actual purchase-cost allocation is not reliably linked to sales. The accounting screen must not infer profit from a fixed percentage.
-- The public schema does not currently provide a complete sales/POS transaction model, supplier/purchase model, or journal-entry/journal-line ledger.
+- The accounting-ledger migration now provides `journal_entries` and `journal_lines`, with invoice and payment posting functions/triggers. These ledger tables still have no business ownership column, so they are not tenant-scoped.
+- The public schema still does not provide a complete sales/POS transaction model or supplier/purchase model.
 
 RLS being enabled is necessary but does not by itself provide tenant isolation. The policies must verify the user's membership in the business that owns each row.
 
