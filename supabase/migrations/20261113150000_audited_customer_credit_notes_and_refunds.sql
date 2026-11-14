@@ -807,6 +807,13 @@ BEGIN
      OR NULLIF(BTRIM(p_reference_number),'') IS NULL THEN
     RAISE EXCEPTION 'A positive refund, date, payment method, reference and idempotency key are required';
   END IF;
+  IF p_payment_method NOT IN (
+    'cash'::public.payment_method,
+    'bank_transfer'::public.payment_method,
+    'mobile_payment'::public.payment_method
+  ) THEN
+    RAISE EXCEPTION 'Customer-credit refunds must use cash, bank transfer or mobile payment';
+  END IF;
   v_fingerprint:=md5(p_credit_note_id::text||'|'||p_amount::text||'|'||p_refunded_on::text||'|'||p_payment_method::text||'|'||BTRIM(p_reference_number));
   PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
   SELECT id,request_fingerprint INTO v_existing_id,v_existing_fingerprint
