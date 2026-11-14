@@ -95,6 +95,7 @@ export function CreateCreditNoteDialog({ invoice, currencySymbol }: CreateCredit
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] }),
         queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] }),
         queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] }),
         queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] }),
       ]);
