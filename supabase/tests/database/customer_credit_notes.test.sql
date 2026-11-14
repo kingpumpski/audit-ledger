@@ -89,7 +89,7 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_invoice_credit_note(
+  $credit_settlement_test$ SELECT public.record_invoice_credit_note(
     (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001'),
     jsonb_build_array(jsonb_build_object(
       'invoice_item_id',(SELECT id FROM public.invoice_items WHERE description='Credit note manual line'),
@@ -97,7 +97,7 @@ SELECT extensions.lives_ok(
     )),
     CURRENT_DATE,'Customer returned remaining half','RETURN-REF-CN-001-FINAL',
     'c1000000-0000-4000-8000-000000000111'
-  ) $,
+  ) $credit_settlement_test$,
   'Final credit against an invoice fully settles its remaining receivable'
 );
 
