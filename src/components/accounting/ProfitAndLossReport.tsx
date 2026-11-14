@@ -346,7 +346,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       <CardHeader>
         <CardTitle>Profit &amp; Loss — Through {asOfDate}</CardTitle>
         <CardDescription>
-          Accrual-basis sales and verified product costs. Final net profit remains withheld until complete operating-expense capture is available.
+          Accrual-basis sales and verified product costs. Final net profit is displayed only after finance completeness sign-off and ledger reconciliation.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
