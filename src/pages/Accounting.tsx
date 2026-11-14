@@ -36,6 +36,7 @@ import { ChartOfAccounts } from '@/components/accounting/ChartOfAccounts';
 import { GeneralLedgerReport } from '@/components/accounting/GeneralLedgerReport';
 import { ProfitAndLossReport } from '@/components/accounting/ProfitAndLossReport';
 import { OperatingExpenseRegister } from '@/components/accounting/OperatingExpenseRegister';
+import { PaymentClearingSettlement } from '@/components/accounting/PaymentClearingSettlement';
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
 
@@ -440,6 +441,7 @@ export default function Accounting() {
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
           <TabsTrigger value="petty">Petty Cash</TabsTrigger>
           <TabsTrigger value="expenses">Operating Expenses</TabsTrigger>
+          <TabsTrigger value="clearing">Payment Clearing</TabsTrigger>
           <TabsTrigger value="income-exp">Income & Expenditure</TabsTrigger>
         </TabsList>
 
