@@ -97,6 +97,11 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
 
   return (
     <div className="space-y-6">
+      {balancesQuery.error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          Clearing balances could not be loaded: {balancesQuery.error.message}. Do not post a settlement until the balances are available.
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-3">
         {['1020', '1030', '1040'].map(code => {
           const account = balances.find(item => item.account_code === code);
@@ -165,7 +170,7 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
                 <Textarea id="clearing-notes" rows={2} value={form.notes} onChange={event => setForm(current => ({ ...current, notes: event.target.value }))} />
               </div>
               <div className="flex flex-wrap items-center gap-2 md:col-span-2">
-                <Button type="submit" disabled={settlement.isPending || balancesQuery.isLoading || Number(form.grossAmount) > selectedBalance}>
+                <Button type="submit" disabled={settlement.isPending || balancesQuery.isLoading || Boolean(balancesQuery.error) || Number(form.grossAmount) > selectedBalance}>
                   {settlement.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Post settlement
                 </Button>
