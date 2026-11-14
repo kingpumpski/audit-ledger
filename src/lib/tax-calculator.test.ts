@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, type TaxRule } from './tax-calculator';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from './tax-calculator';
 
 const vat: TaxRule = { id: 'vat', name: 'VAT', code: 'VAT', rate: 10, is_compound: false };
 const levy: TaxRule = { id: 'levy', name: 'Levy', code: 'LEVY', rate: 2, is_compound: false };
@@ -65,6 +65,27 @@ describe('validateSelectedTaxRules', () => {
   it('accepts all selected taxes when active, effective and mapped', () => {
     const configured: TaxRule = { ...vat, liability_account_id: 'liability-1' };
     expect(() => validateSelectedTaxRules(['vat'], [configured], '2026-11-14')).not.toThrow();
+  });
+});
+
+
+describe('validateTaxCategoryApplicability', () => {
+  it('preserves general taxes and category-matching taxes', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(validateTaxCategoryApplicability([vat, categoryTax], 'medical', 'Consultation'))
+      .toEqual([vat, categoryTax]);
+  });
+
+  it('rejects a selected tax that does not apply to the item category', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(() => validateTaxCategoryApplicability([categoryTax], 'Retail', 'Office chair'))
+      .toThrow('does not apply to the category');
+  });
+
+  it('rejects category-specific taxes on unclassified manual items', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(() => validateTaxCategoryApplicability([categoryTax], null, 'Manual service'))
+      .toThrow('does not apply to the category');
   });
 });
 
