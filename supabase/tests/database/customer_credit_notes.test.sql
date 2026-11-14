@@ -252,7 +252,7 @@ SELECT extensions.is(
 SELECT extensions.lives_ok(
   $refund_method_test$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
-    1,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-CARD-001',
+    10,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-CARD-001',
     'c1000000-0000-4000-8000-000000000405'
   ) $refund_method_test$,
   'Customer credit can be refunded to the card settlement clearing account'
@@ -271,7 +271,7 @@ SELECT extensions.is(
 SELECT extensions.throws_ok(
   $$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
-    10.00,CURRENT_DATE,'cash','CUSTOMER-REFUND-OVER-001',
+    0.01,CURRENT_DATE,'cash','CUSTOMER-REFUND-OVER-001',
     'c1000000-0000-4000-8000-000000000402'
   ) $$,
   'P0001',
