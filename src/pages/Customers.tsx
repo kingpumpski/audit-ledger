@@ -174,10 +174,11 @@ export default function Customers() {
               />
             </div>
             <div className="ml-auto text-right text-sm">
-              <p className="text-muted-foreground">Total customers owing</p>
+              <p className="text-muted-foreground">Total outstanding receivables</p>
               <p className="font-semibold tabular-nums">
                 {isBalanceLoading ? 'Calculating…' : formatCurrency(totalOutstanding)}
               </p>
+              <p className="text-xs text-muted-foreground">{balances.filter(balance => balance.outstanding_balance > 0).length} customers owing</p>
             </div>
           </div>
 
