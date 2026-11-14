@@ -44,7 +44,19 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
     refetchOnWindowFocus: true,
   });
 
+  const settlementsQuery = useQuery({
+    queryKey: ['payment-clearing-settlements'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_payment_clearing_settlements');
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+  });
+
   const balances = balancesQuery.data || [];
+  const settlements = settlementsQuery.data || [];
   const selectedBalance = balances.find(account => account.account_code === form.accountCode)?.clearing_balance ?? 0;
 
   const settlement = useMutation({
@@ -74,6 +86,7 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
+      void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
       void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
       toast({ title: 'Clearing settlement posted', description: 'The net bank receipt, processing fees and clearing-account release were journalled together.' });
@@ -161,6 +174,46 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
                 </Button>
               </div>
             </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Settlement history</CardTitle>
+          <CardDescription>Recent immutable settlement records with processor and bank references.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {settlementsQuery.isLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : settlementsQuery.error ? (
+            <p className="text-sm text-destructive">{settlementsQuery.error.message}</p>
+          ) : settlements.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No clearing settlements have been recorded.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-[760px]">
+                <thead>
+                  <tr>
+                    <th>Date</th><th>Clearing account</th><th>Provider reference</th><th>Bank reference</th>
+                    <th className="text-right">Gross</th><th className="text-right">Fees</th><th className="text-right">Net received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settlements.map(item => (
+                    <tr key={item.settlement_id}>
+                      <td>{format(new Date(item.settled_on), 'dd MMM yyyy')}</td>
+                      <td><div className="font-medium">{item.account_name}</div><div className="text-xs text-muted-foreground">{item.account_code}</div></td>
+                      <td>{item.provider_reference}</td>
+                      <td>{item.bank_reference}</td>
+                      <td className="text-right tabular-nums">{money(item.gross_amount, currencySymbol)}</td>
+                      <td className="text-right tabular-nums">{money(item.fee_amount, currencySymbol)}</td>
+                      <td className="text-right font-medium tabular-nums">{money(item.net_amount, currencySymbol)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
