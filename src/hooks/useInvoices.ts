@@ -88,7 +88,6 @@ export function useInvoices() {
       let subtotal = 0;
       let taxAmount = 0;
       let discountAmount = 0;
-      const taxTotals = new Map<string, { tax_id: string; tax_rate: number; taxable_amount: number; tax_amount: number; liability_account_id: string }>();
 
       const processedItems = invoiceData.items.map((item, index) => {
         const category = item.product_id ? productCategories.get(item.product_id) : null;
@@ -106,23 +105,6 @@ export function useInvoices() {
         subtotal += calculation.subtotal;
         discountAmount += calculation.discount_amount;
         taxAmount += calculation.tax_amount;
-        calculation.taxes.forEach(tax => {
-          const rule = taxRules.find(candidate => candidate.id === tax.tax_id);
-          if (!rule?.liability_account_id) {
-            throw new Error(`Tax ${tax.code} has no liability account configured`);
-          }
-          const current = taxTotals.get(tax.tax_id) || {
-            tax_id: tax.tax_id,
-            tax_rate: tax.rate,
-            taxable_amount: 0,
-            tax_amount: 0,
-            liability_account_id: rule.liability_account_id,
-          };
-          current.taxable_amount += tax.taxable_amount;
-          current.tax_amount += tax.tax_amount;
-          taxTotals.set(tax.tax_id, current);
-        });
-
         return {
           ...item,
           line_total: calculation.line_total,
