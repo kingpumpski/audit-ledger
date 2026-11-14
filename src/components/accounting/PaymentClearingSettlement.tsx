@@ -23,6 +23,9 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
   const { toast } = useToast();
   const { roles } = useAuth();
   const canSettle = roles.includes('admin') || roles.includes('accountant');
+  // Reuse the same key until the server confirms success. If the response is
+  // lost after the database commits, retrying the same form is idempotent.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [form, setForm] = useState({
     accountCode: '1020',
     grossAmount: '',
@@ -79,7 +82,7 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
         p_settled_on: form.settledOn,
         p_provider_reference: form.providerReference.trim(),
         p_bank_reference: form.bankReference.trim(),
-        p_idempotency_key: crypto.randomUUID(),
+        p_idempotency_key: idempotencyKey,
         p_notes: form.notes.trim() || null,
       });
       if (error) throw error;
@@ -90,6 +93,7 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
       void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
       toast({ title: 'Clearing settlement posted', description: 'The net bank receipt, processing fees and clearing-account release were journalled together.' });
+      setIdempotencyKey(crypto.randomUUID());
       setForm({ accountCode: '1020', grossAmount: '', feeAmount: '0', settledOn: today(), providerReference: '', bankReference: '', notes: '' });
     },
     onError: error => toast({ title: 'Settlement was not posted', description: error.message, variant: 'destructive' }),
