@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/popover';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
 import { useProducts, type Product } from '@/hooks/useProducts';
 import { useTaxes } from '@/hooks/useTaxes';
 import { useSettings } from '@/hooks/useSettings';
@@ -60,6 +61,7 @@ export default function InvoiceNew() {
   const { toast } = useToast();
   const { createInvoice, issueInvoiceAsync, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
   const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
@@ -167,6 +169,7 @@ export default function InvoiceNew() {
   const total = pricesIncludeTax ? subtotal - totalDiscount : subtotal - totalDiscount + totalTax;
 
   const selectedCustomer = customers.find(c => c.id === customerId);
+  const selectedCustomerBalance = selectedCustomerBalances[0]?.outstanding_balance ?? 0;
 
   const handleCreateCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -436,6 +439,14 @@ export default function InvoiceNew() {
                       <SelectItem value="__add_customer__">+ Add new customer…</SelectItem>
                     </SelectContent>
                   </Select>
+                  {customerId && (
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Customer outstanding balance</span>
+                      <span className="font-semibold tabular-nums">
+                        {isCustomerBalanceLoading ? 'Calculating…' : `${currencySymbol}${selectedCustomerBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  )}
                   <Button type="button" variant="link" className="h-auto p-0" onClick={() => setIsCustomerDialogOpen(true)}>
                     <Plus className="mr-1 h-3.5 w-3.5" />Add customer if not listed
                   </Button>
