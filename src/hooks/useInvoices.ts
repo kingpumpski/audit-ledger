@@ -99,14 +99,7 @@ export function useInvoices() {
       const processedItems = invoiceData.items.map((item, index) => {
         const category = item.product_id ? productCategories.get(item.product_id) : null;
         const selectedTaxesForItem = taxRules.filter(tax => (item.tax_ids || []).includes(tax.id));
-        const categoryMismatch = selectedTaxesForItem.find(tax =>
-          tax.applies_to_category &&
-          tax.applies_to_category.toLowerCase() !== (category || '').toLowerCase()
-        );
-        if (categoryMismatch) {
-          throw new Error(`Tax ${categoryMismatch.code} does not apply to the category of invoice item "${item.description}". Review the selected taxes.`);
-        }
-        const applicableTaxes = selectedTaxesForItem;
+        const applicableTaxes = validateTaxCategoryApplicability(selectedTaxesForItem, category, item.description);
         const calculation = calculateLineAmounts({
           quantity: item.quantity,
           unit_price: item.unit_price,
