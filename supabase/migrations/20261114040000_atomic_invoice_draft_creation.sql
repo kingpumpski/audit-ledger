@@ -40,6 +40,12 @@ DECLARE
   v_expected_tax numeric := 0;
   v_expected_total numeric;
   v_tax_order integer;
+  v_amount_after_discount numeric;
+  v_accumulated_tax_factor numeric;
+  v_total_tax_factor numeric;
+  v_taxable_factor numeric;
+  v_tax_factor numeric;
+  v_taxable_base numeric;
   v_item_count integer := 0;
 BEGIN
   IF v_user_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
@@ -134,6 +140,38 @@ BEGIN
     v_expected_discount := v_expected_discount + v_line_discount;
     v_expected_tax := v_expected_tax + v_line_tax;
 
+    -- Recompute the same ordered compound-tax factors as the invoice
+    -- calculator, rather than trusting client-supplied tax bases or amounts.
+    v_amount_after_discount := ROUND(v_line_subtotal - v_line_discount, 2);
+    v_accumulated_tax_factor := 0;
+    v_total_tax_factor := 0;
+    FOR v_tax IN
+      SELECT value
+      FROM jsonb_array_elements(COALESCE(v_item->'tax_breakdown', '[]'::jsonb))
+      ORDER BY (value->>'tax_order')::integer
+    LOOP
+      SELECT * INTO v_tax_rule
+      FROM public.taxes
+      WHERE id = (v_tax->>'tax_id')::uuid;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Invoice line % references an unknown tax', v_item_count;
+      END IF;
+      v_taxable_factor := CASE
+        WHEN COALESCE(v_tax_rule.is_compound, false) THEN 1 + v_accumulated_tax_factor
+        ELSE 1
+      END;
+      v_tax_factor := v_taxable_factor * v_tax_rule.rate / 100;
+      v_accumulated_tax_factor := v_accumulated_tax_factor + v_tax_factor;
+      v_total_tax_factor := v_total_tax_factor + v_tax_factor;
+    END LOOP;
+
+    v_taxable_base := CASE
+      WHEN COALESCE(p_prices_include_tax, false) AND v_total_tax_factor > 0
+        THEN v_amount_after_discount / (1 + v_total_tax_factor)
+      ELSE v_amount_after_discount
+    END;
+    v_accumulated_tax_factor := 0;
+
     INSERT INTO public.invoice_items (
       invoice_id, product_id, description, quantity, unit_price,
       discount_type, discount_value, tax_rate, tax_amount, line_total, sort_order
@@ -195,12 +233,22 @@ BEGIN
         RAISE EXCEPTION 'Invoice line % tax evidence does not match the current tax definition or order', v_item_count;
       END IF;
 
+      v_taxable_factor := CASE
+        WHEN COALESCE(v_tax_rule.is_compound, false) THEN 1 + v_accumulated_tax_factor
+        ELSE 1
+      END;
+      v_tax_factor := v_taxable_factor * v_tax_rule.rate / 100;
+
       IF (v_tax->>'taxable_amount')::numeric < 0
          OR (v_tax->>'tax_amount')::numeric < 0
-         OR ROUND((v_tax->>'taxable_amount')::numeric * v_tax_rule.rate / 100, 2)
-            IS DISTINCT FROM ROUND((v_tax->>'tax_amount')::numeric, 2) THEN
+         OR ROUND((v_tax->>'taxable_amount')::numeric, 2)
+            IS DISTINCT FROM ROUND(v_taxable_base * v_taxable_factor, 2)
+         OR ROUND((v_tax->>'tax_amount')::numeric, 2)
+            IS DISTINCT FROM ROUND(v_taxable_base * v_tax_factor, 2) THEN
         RAISE EXCEPTION 'Invoice line % contains an invalid tax calculation', v_item_count;
       END IF;
+
+      v_accumulated_tax_factor := v_accumulated_tax_factor + v_tax_factor;
 
       INSERT INTO public.invoice_item_taxes (
         invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
