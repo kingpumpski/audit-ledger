@@ -111,7 +111,7 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $
+  $$
     SELECT public.create_invoice_draft(
       (SELECT id FROM public.customers WHERE code='ATOMIC-INVOICE-CUSTOMER'),
       CURRENT_DATE, NULL, 'Must roll back', NULL, false,
