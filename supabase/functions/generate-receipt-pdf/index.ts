@@ -342,7 +342,7 @@ serve(async (req) => {
         invoice:invoices(invoice_number, subtotal, discount_amount, tax_amount, total_amount, amount_paid, balance_due, items:invoice_items(description, quantity, unit_price, discount_type, discount_value, tax_rate, tax_amount, line_total), invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes(name, code)))
       `)
       .eq("id", body.receiptId)
-      .is("deleted_at", null)
+      .or("deleted_at.is.null,status.eq.void")
       .single();
 
     if (receiptError || !receipt) {
