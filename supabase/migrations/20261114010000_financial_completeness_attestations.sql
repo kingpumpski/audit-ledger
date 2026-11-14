@@ -106,7 +106,8 @@ BEGIN
   FROM public.invoices i
   JOIN public.invoice_items ii ON ii.invoice_id = i.id
   LEFT JOIN public.products p ON p.id = ii.product_id
-  LEFT JOIN public.invoice_item_direct_costs dc ON dc.invoice_item_id = ii.id
+  LEFT JOIN public.invoice_item_direct_costs dc
+    ON dc.invoice_item_id = ii.id AND dc.incurred_on <= p_through_date
   WHERE i.deleted_at IS NULL
     AND i.status IN ('issued', 'partially_paid', 'paid', 'overdue')
     AND i.issue_date <= p_through_date;
@@ -215,7 +216,8 @@ BEGIN
     FROM public.invoices i
     JOIN public.invoice_items ii ON ii.invoice_id = i.id
     LEFT JOIN public.products p ON p.id = ii.product_id
-    LEFT JOIN public.invoice_item_direct_costs dc ON dc.invoice_item_id = ii.id
+    LEFT JOIN public.invoice_item_direct_costs dc
+    ON dc.invoice_item_id = ii.id AND dc.incurred_on <= p_through_date
     WHERE i.deleted_at IS NULL
       AND i.status IN ('issued', 'partially_paid', 'paid', 'overdue')
       AND i.issue_date <= p_attested_through
