@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(54);
+SELECT extensions.plan(55);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -234,7 +234,7 @@ SELECT extensions.is(
 SELECT extensions.lives_ok(
   $$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
-    20,CURRENT_DATE,'bank_transfer','CUSTOMER-REFUND-001',
+    10,CURRENT_DATE,'bank_transfer','CUSTOMER-REFUND-001',
     'c1000000-0000-4000-8000-000000000401'
   ) $$,
   'Remaining customer credit can be refunded through an evidenced settlement'
@@ -249,21 +249,29 @@ SELECT extensions.is(
   'Customer credit refund posts a balanced cash/bank journal'
 );
 
-SELECT extensions.throws_ok(
+SELECT extensions.lives_ok(
   $refund_method_test$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
-    1,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-UNSUPPORTED',
+    1,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-CARD-001',
     'c1000000-0000-4000-8000-000000000405'
   ) $refund_method_test$,
-  'P0001',
-  'Customer-credit refunds must use cash, bank transfer or mobile payment',
-  'Customer-credit refunds cannot misclassify card or unsupported methods as bank transfers'
+  'Customer credit can be refunded to the card settlement clearing account'
+);
+SELECT extensions.is(
+  (SELECT coa.code
+   FROM public.journal_entries je
+   JOIN public.journal_lines jl ON jl.journal_entry_id=je.id AND jl.credit>0
+   JOIN public.chart_of_accounts coa ON coa.id=jl.account_id
+   WHERE je.source_type='customer_credit_refund'
+     AND je.source_id=(SELECT id FROM public.customer_credit_refunds WHERE reference_number='CUSTOMER-REFUND-CARD-001')),
+  '1020'::text,
+  'Card refunds credit Card Settlement Clearing rather than Bank Operating'
 );
 
 SELECT extensions.throws_ok(
   $$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
-    0.01,CURRENT_DATE,'cash','CUSTOMER-REFUND-OVER-001',
+    10.00,CURRENT_DATE,'cash','CUSTOMER-REFUND-OVER-001',
     'c1000000-0000-4000-8000-000000000402'
   ) $$,
   'P0001',
