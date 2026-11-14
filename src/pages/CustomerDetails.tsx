@@ -42,7 +42,7 @@ export default function CustomerDetails() {
   const { settings } = useSettings();
   const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);
   const customer = customers.find(c => c.id === id);
-  const { balances: customerBalances, isLoading: isCustomerBalanceLoading } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), id || undefined);
+  const { balances: customerBalances, isLoading: isCustomerBalanceLoading, error: customerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), id || undefined);
   const currentOutstandingBalance = customerBalances[0]?.outstanding_balance ?? 0;
 
   const [formData, setFormData] = useState({
@@ -210,7 +210,7 @@ export default function CustomerDetails() {
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Current Balance</p>
                 <p className="text-2xl font-bold tabular-nums">
-                  {isCustomerBalanceLoading ? 'Calculating…' : `${currencySymbol}${currentOutstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  {isCustomerBalanceLoading ? 'Calculating…' : customerBalanceError ? 'Unavailable' : `${currencySymbol}${currentOutstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </p>
               </div>
             </div>
