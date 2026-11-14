@@ -193,6 +193,7 @@ export function CustomerCreditManagement({ customerId, customerName = '', curren
       queryClient.invalidateQueries({ queryKey: ['customer-credit-outstanding-invoices', customerId] }),
       queryClient.invalidateQueries({ queryKey: ['customer-invoices', customerId] }),
       queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] }),
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] }),
     ]);
   };
