@@ -453,7 +453,7 @@ export function CustomerCreditManagement({ customerId, customerName = '', curren
           <DialogHeader>
             <DialogTitle>Refund customer credit</DialogTitle>
             <DialogDescription>
-              Record an actual cash or bank refund against the customer-credit liability. A reference is required for audit evidence.
+              Record an actual cash, bank-transfer or mobile-payment refund against the customer-credit liability. A reference is required for audit evidence.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
