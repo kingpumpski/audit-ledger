@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(48);
+SELECT extensions.plan(49);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -206,6 +206,17 @@ SELECT extensions.is(
      AND je.source_id=(SELECT id FROM public.customer_credit_refunds WHERE reference_number='CUSTOMER-REFUND-001')),
   0.00::numeric,
   'Customer credit refund posts a balanced cash/bank journal'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.refund_customer_credit(
+    (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
+    1,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-UNSUPPORTED',
+    'c1000000-0000-4000-8000-000000000405'
+  ) $,
+  'P0001',
+  'Customer-credit refunds must use cash, bank transfer or mobile payment',
+  'Customer-credit refunds cannot misclassify card or unsupported methods as bank transfers'
 );
 
 SELECT extensions.throws_ok(
