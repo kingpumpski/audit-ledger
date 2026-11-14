@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useInvoice, useInvoices } from '@/hooks/useInvoices';
 import { useSettings } from '@/hooks/useSettings';
+import { useAuth } from '@/contexts/AuthContext';
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog';
 import { EditInvoiceDialog } from '@/components/invoices/EditInvoiceDialog';
+import { CreateCreditNoteDialog } from '@/components/invoices/CreateCreditNoteDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,6 +50,8 @@ export default function InvoiceDetails() {
   const { data: invoice, isLoading, error } = useInvoice(id || '');
   const { issueInvoice, isIssuing } = useInvoices();
   const { settings } = useSettings();
+  const { roles } = useAuth();
+  const canIssueCreditNotes = roles.some((role) => ['admin', 'accountant'].includes(role));
   const [isPrinting, setIsPrinting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -58,22 +62,65 @@ export default function InvoiceDetails() {
 
   const handlePrintInvoice = async () => {
     if (!invoice) return;
+
+    // Open the window synchronously inside the click handler. Opening it only
+    // after the PDF request completes is commonly blocked by browser popup rules.
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast({
+        title: 'Pop-up blocked',
+        description: 'Allow pop-ups for this site, then try printing the invoice again.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsPrinting(true);
+    printWindow.document.write('<!doctype html><title>Preparing invoice…</title><p style="font:16px sans-serif;padding:24px">Preparing invoice for printing…</p>');
+    printWindow.document.close();
+
     try {
-      const response = await supabase.functions.invoke('generate-invoice-pdf', {
+      const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
         body: { invoiceId: invoice.id, returnHtml: true },
       });
-      if (response.data) {
-        const htmlContent = typeof response.data === 'string' ? response.data : response.data.html || String(response.data);
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        }
+      if (error) throw error;
+
+      const htmlContent = typeof data === 'string'
+        ? data
+        : data && typeof data.html === 'string'
+          ? data.html
+          : null;
+      if (!htmlContent || !htmlContent.toLowerCase().includes('<html')) {
+        throw new Error('The invoice PDF service returned an invalid document.');
       }
+
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+
+      // Wait for embedded images and fonts so the printed copy is complete.
+      await Promise.all(Array.from(printWindow.document.images).map((image) =>
+        image.complete
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => {
+              image.addEventListener('load', () => resolve(), { once: true });
+              image.addEventListener('error', () => resolve(), { once: true });
+            })
+      ));
+      if (printWindow.document.fonts?.ready) {
+        await printWindow.document.fonts.ready;
+      }
+      printWindow.focus();
+      printWindow.print();
+      toast({ title: 'Invoice ready to print', description: 'Use your browser print dialog to print or save as PDF.' });
     } catch (error) {
-      console.error('Failed to generate PDF:', error);
+      printWindow.close();
+      console.error('Failed to generate invoice for printing:', error);
+      toast({
+        title: 'Invoice could not be printed',
+        description: getErrorMessage(error, 'The invoice document could not be generated. Please try again.'),
+        variant: 'destructive',
+      });
     } finally {
       setIsPrinting(false);
     }
@@ -157,8 +204,11 @@ export default function InvoiceDetails() {
   }
 
   const canEdit = invoice.status !== 'paid' && invoice.status !== 'canceled';
-  const canDelete = invoice.status === 'draft' || invoice.status === 'canceled';
-  const canCancel = invoice.status !== 'paid' && invoice.status !== 'canceled';
+  // Only drafts with no posted financial history may be deleted.
+  const canDelete = invoice.status === 'draft';
+  // Issued invoices have posted revenue, receivables and potentially stock movements.
+  // Corrections are issued as separate credit notes; direct cancellation stays draft-only.
+  const canCancel = invoice.status === 'draft';
 
   return (
     <AppLayout
@@ -178,7 +228,7 @@ export default function InvoiceDetails() {
               <Edit className="mr-2 h-4 w-4" /> Edit
             </Button>
           )}
-          {canCancel && invoice.status !== 'draft' && (
+          {canCancel && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" disabled={isCanceling}>
@@ -196,6 +246,15 @@ export default function InvoiceDetails() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+          )}
+          {!canCancel && invoice.status !== 'canceled' && (
+            <Button
+              variant="outline"
+              disabled
+              title="Issued invoices require an audited credit note or reversal before cancellation."
+            >
+              <XCircle className="mr-2 h-4 w-4" /> Cancel Invoice
+            </Button>
           )}
           {canDelete && (
             <AlertDialog>
@@ -222,7 +281,10 @@ export default function InvoiceDetails() {
               Issue Invoice
             </Button>
           )}
-          {(invoice.status === 'issued' || invoice.status === 'partially_paid' || invoice.status === 'overdue') && (
+          {canIssueCreditNotes && (['issued', 'partially_paid', 'paid', 'overdue'] as const).includes(invoice.status as 'issued' | 'partially_paid' | 'paid' | 'overdue') && (
+            <CreateCreditNoteDialog invoice={invoice} currencySymbol={currencySymbol} />
+          )}
+          {(invoice.status === 'issued' || invoice.status === 'partially_paid' || invoice.status === 'overdue') && (invoice.balance_due || 0) > 0 && (
             <RecordPaymentDialog
               invoiceId={invoice.id}
               customerId={invoice.customer_id}

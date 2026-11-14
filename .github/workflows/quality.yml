@@ -46,6 +46,9 @@ jobs:
       - name: Replay every migration from a clean database
         run: supabase db reset
 
+      - name: Run database integration tests
+        run: supabase test db
+
       - name: Stop isolated local Supabase stack
         if: always()
         run: supabase stop --no-backup
@@ -57,6 +60,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check receipt Edge Function
+        run: deno check supabase/functions/generate-receipt-pdf/index.ts
+
+      - name: Type-check invoice Edge Function
+        run: deno check supabase/functions/generate-invoice-pdf/index.ts
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

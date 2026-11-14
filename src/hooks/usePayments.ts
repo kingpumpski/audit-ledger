@@ -16,9 +16,10 @@ interface CreatePaymentData {
   invoice_id: string;
   customer_id: string;
   amount: number;
-  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment';
   reference_number?: string;
   notes?: string;
+  idempotency_key: string;
 }
 
 export function usePayments() {
@@ -41,6 +42,8 @@ export function usePayments() {
       if (error) throw error;
       return data as PaymentWithRelations[];
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const createPaymentMutation = useMutation({
@@ -53,6 +56,7 @@ export function usePayments() {
         p_payment_method: paymentData.payment_method,
         p_reference_number: paymentData.reference_number || null,
         p_notes: paymentData.notes || null,
+        p_idempotency_key: paymentData.idempotency_key,
       });
 
       if (paymentError) throw paymentError;
@@ -77,9 +81,13 @@ export function usePayments() {
 
       return payment;
     },
-    onSuccess: () => {
+    onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', payment.invoice_id] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['accounting'] });
       toast({ title: 'Payment recorded successfully' });
     },
     onError: (error) => {

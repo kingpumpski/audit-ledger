@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useProducts } from '@/hooks/useProducts';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,18 +25,53 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { type Product } from '@/hooks/useProducts';
 
+type PurchaseForReversal = {
+  id: string;
+  reference_number: string | null;
+  amount_paid: number | null;
+  total_cost: number | null;
+  supplier_name: string | null;
+  product?: { name: string; sku: string } | null;
+};
+
 export default function Inventory() {
-  const { products, updateProduct, isUpdating } = useProducts();
+  const { products } = useProducts();
+  const { roles } = useAuth();
+  const canRecordInventoryDamage = roles.includes('admin') || roles.includes('accountant');
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+  const [isCountOpen, setIsCountOpen] = useState(false);
+  const [countIdempotencyKey, setCountIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [countForm, setCountForm] = useState({
+    countedQuantity: 0,
+    countedOn: format(new Date(), 'yyyy-MM-dd'),
+    reason: '',
+    referenceNumber: '',
+  });
+  const [adjustIdempotencyKey, setAdjustIdempotencyKey] = useState(() => crypto.randomUUID());
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isPurchaseReversalOpen, setIsPurchaseReversalOpen] = useState(false);
+  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseForReversal | null>(null);
+  const [purchaseReversalKey, setPurchaseReversalKey] = useState(() => crypto.randomUUID());
+  const [purchaseReversalForm, setPurchaseReversalForm] = useState({
+    reversedOn: format(new Date(), 'yyyy-MM-dd'),
+    refundPaymentMethod: 'bank_transfer' as 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check',
+    reason: '',
+    referenceNumber: '',
+  });
   const [adjustForm, setAdjustForm] = useState({
-    type: 'adjustment' as string,
+    type: 'purchase' as 'purchase' | 'damage',
     quantity: 0,
     notes: '',
+    unitCost: 0,
+    openingUnitCost: 0,
+    supplierName: '',
+    referenceNumber: '',
+    amountPaid: 0,
+    paymentMethod: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -72,8 +108,74 @@ export default function Inventory() {
   ).length;
 
   const totalStockValue = physicalProducts.reduce((sum, p) =>
-    sum + (p.stock_quantity || 0) * (p.cost_price || p.current_price), 0
+    sum + (p.cost_price_verified ? (p.stock_quantity || 0) * Number(p.cost_price || 0) : 0), 0
   );
+  const uncostedStockCount = physicalProducts.filter(p =>
+    (p.stock_quantity || 0) > 0 && !p.cost_price_verified
+  ).length;
+
+  const recordStockCount = useMutation({
+    mutationFn: async () => {
+      if (!selectedProduct) throw new Error('Select a product to reconcile.');
+      if (!canRecordInventoryDamage) throw new Error('Only an admin or accountant can approve stock-count corrections.');
+      if (!countForm.reason.trim() || !countForm.referenceNumber.trim()) {
+        throw new Error('A count explanation and signed count-sheet/reference are required.');
+      }
+      const { error } = await supabase.rpc('record_stock_count_adjustment', {
+        p_product_id: selectedProduct.id,
+        p_counted_quantity: countForm.countedQuantity,
+        p_counted_on: countForm.countedOn,
+        p_reason: countForm.reason.trim(),
+        p_reference_number: countForm.referenceNumber.trim(),
+        p_idempotency_key: countIdempotencyKey,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: 'Stock count reconciled', description: 'The verified variance was recorded in inventory history and the general ledger.' });
+      setIsCountOpen(false);
+      setSelectedProduct(null);
+      setCountForm({ countedQuantity: 0, countedOn: format(new Date(), 'yyyy-MM-dd'), reason: '', referenceNumber: '' });
+      setCountIdempotencyKey(crypto.randomUUID());
+    },
+    onError: error => toast({ title: 'Stock count was not posted', description: error.message, variant: 'destructive' }),
+  });
+
+  const reverseStockPurchase = useMutation({
+    mutationFn: async () => {
+      if (!selectedPurchase) throw new Error('Select an original stock purchase.');
+      if (!canRecordInventoryDamage) throw new Error('Only an admin or accountant can reverse stock purchases.');
+      if (!purchaseReversalForm.reason.trim() || !purchaseReversalForm.referenceNumber.trim()) {
+        throw new Error('A reversal reason and supplier credit/refund reference are required.');
+      }
+      const paidAmount = Number(selectedPurchase.amount_paid || 0);
+      const { error } = await supabase.rpc('reverse_stock_purchase', {
+        p_purchase_transaction_id: selectedPurchase.id,
+        p_reversed_on: purchaseReversalForm.reversedOn,
+        p_refund_payment_method: paidAmount > 0 ? purchaseReversalForm.refundPaymentMethod : null,
+        p_reason: purchaseReversalForm.reason.trim(),
+        p_reference_number: purchaseReversalForm.referenceNumber.trim(),
+        p_idempotency_key: purchaseReversalKey,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
+      void queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: 'Stock purchase reversed', description: 'The supplier return, stock valuation and cash/payable reversal were recorded in the audit trail.' });
+      setIsPurchaseReversalOpen(false);
+      setSelectedPurchase(null);
+      setPurchaseReversalForm({ reversedOn: format(new Date(), 'yyyy-MM-dd'), refundPaymentMethod: 'bank_transfer', reason: '', referenceNumber: '' });
+      setPurchaseReversalKey(crypto.randomUUID());
+    },
+    onError: error => toast({ title: 'Purchase reversal was not posted', description: error.message, variant: 'destructive' }),
+  });
 
   const recordAdjustment = useMutation({
     mutationFn: async () => {
@@ -81,49 +183,42 @@ export default function Inventory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const prevQty = selectedProduct.stock_quantity || 0;
-      let newQty: number;
-
-      if (adjustForm.type === 'purchase' || adjustForm.type === 'return') {
-        newQty = prevQty + adjustForm.quantity;
-      } else if (adjustForm.type === 'sale' || adjustForm.type === 'damage') {
-        newQty = prevQty - adjustForm.quantity;
-      } else {
-        newQty = adjustForm.quantity; // direct adjustment sets absolute value
+      if (adjustForm.type === 'damage') {
+        const { error } = await supabase.rpc('record_inventory_damage', {
+          p_product_id: selectedProduct.id,
+          p_quantity: adjustForm.quantity,
+          p_reference_number: adjustForm.referenceNumber,
+          p_idempotency_key: adjustIdempotencyKey,
+          p_notes: adjustForm.notes || null,
+        });
+        if (error) throw error;
+        return;
       }
 
-      // Record transaction
-      const { error: txError } = await supabase
-        .from('inventory_transactions')
-        .insert({
-          product_id: selectedProduct.id,
-          type: adjustForm.type,
-          quantity: adjustForm.quantity,
-          previous_quantity: prevQty,
-          new_quantity: newQty,
-          unit_cost: selectedProduct.cost_price || selectedProduct.current_price,
-          total_cost: adjustForm.quantity * (selectedProduct.cost_price || selectedProduct.current_price),
-          notes: adjustForm.notes,
-          performed_by: user.id,
-        });
-
-      if (txError) throw txError;
-
-      // Update product stock
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ stock_quantity: Math.max(0, newQty) })
-        .eq('id', selectedProduct.id);
-
-      if (updateError) throw updateError;
+      const { error } = await supabase.rpc('record_stock_purchase', {
+        p_product_id: selectedProduct.id,
+        p_quantity: adjustForm.quantity,
+        p_unit_cost: adjustForm.unitCost,
+        p_opening_unit_cost: (selectedProduct.stock_quantity || 0) > 0 && !selectedProduct.cost_price_verified ? adjustForm.openingUnitCost : null,
+        p_supplier_name: adjustForm.supplierName || null,
+        p_reference_number: adjustForm.referenceNumber || null,
+        p_amount_paid: adjustForm.amountPaid,
+        p_payment_method: adjustForm.paymentMethod,
+        p_notes: adjustForm.notes || null,
+        p_idempotency_key: adjustIdempotencyKey,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-transactions'] });
-      toast({ title: 'Stock updated successfully' });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      toast({ title: adjustForm.type === 'damage' ? 'Stock damage recorded and posted to the ledger' : 'Stock purchase recorded with verified actual cost' });
       setIsAdjustOpen(false);
       setSelectedProduct(null);
-      setAdjustForm({ type: 'adjustment', quantity: 0, notes: '' });
+      setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' });
+      setAdjustIdempotencyKey(crypto.randomUUID());
     },
     onError: (error) => {
       toast({ title: 'Failed to update stock', description: error.message, variant: 'destructive' });
@@ -167,8 +262,9 @@ export default function Inventory() {
                 <TrendingUp className="h-5 w-5 text-success" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Stock Value</p>
+                <p className="text-sm text-muted-foreground">Verified Stock Value</p>
                 <p className="text-2xl font-bold">{currencySymbol}{totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                {uncostedStockCount > 0 && <p className="mt-1 text-xs text-warning">{uncostedStockCount} product(s) need an actual purchase cost</p>}
               </div>
             </div>
           </CardContent>
@@ -224,7 +320,9 @@ export default function Inventory() {
                         </td>
                         <td className={cn('font-medium', isLow && 'text-warning')}>{product.stock_quantity ?? 0}</td>
                         <td className="text-muted-foreground">{product.min_stock_level ?? '—'}</td>
-                        <td>{currencySymbol}{((product.stock_quantity || 0) * (product.cost_price || product.current_price)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                        <td>{product.cost_price_verified
+                          ? `${currencySymbol}${((product.stock_quantity || 0) * Number(product.cost_price || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : <span className="text-warning text-xs">Cost not verified</span>}</td>
                         <td>
                           {isLow ? (
                             <Badge variant="destructive" className="bg-warning/10 text-warning border-warning/20">Low Stock</Badge>
@@ -233,10 +331,22 @@ export default function Inventory() {
                           )}
                         </td>
                         <td>
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setIsAdjustOpen(true); }}>
-                            <ArrowUpDown className="h-3 w-3 mr-1" />
-                            Adjust
-                          </Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedProduct(product); setAdjustForm({ type: 'purchase', quantity: 0, notes: '', unitCost: product.cost_price_verified ? Number(product.cost_price || 0) : 0, openingUnitCost: 0, supplierName: '', referenceNumber: '', amountPaid: 0, paymentMethod: 'cash' }); setAdjustIdempotencyKey(crypto.randomUUID()); setIsAdjustOpen(true); }}>
+                              <ArrowUpDown className="h-3 w-3 mr-1" />
+                              Adjust
+                            </Button>
+                            {canRecordInventoryDamage && (
+                              <Button size="sm" variant="secondary" onClick={() => {
+                                setSelectedProduct(product);
+                                setCountForm({ countedQuantity: product.stock_quantity || 0, countedOn: format(new Date(), 'yyyy-MM-dd'), reason: '', referenceNumber: '' });
+                                setCountIdempotencyKey(crypto.randomUUID());
+                                setIsCountOpen(true);
+                              }}>
+                                Count
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -275,6 +385,21 @@ export default function Inventory() {
                   <p className="text-xs text-muted-foreground capitalize">{tx.type}: {tx.quantity} units</p>
                   <p className="text-xs text-muted-foreground">{format(new Date(tx.created_at), 'MMM d, h:mm a')}</p>
                 </div>
+                {canRecordInventoryDamage && tx.type === 'purchase' && tx.reference_type === 'stock_purchase' && (
+                  <Button size="sm" variant="outline" onClick={() => {
+                    setSelectedPurchase(tx);
+                    setPurchaseReversalForm({
+                      reversedOn: format(new Date(), 'yyyy-MM-dd'),
+                      refundPaymentMethod: 'bank_transfer',
+                      reason: '',
+                      referenceNumber: '',
+                    });
+                    setPurchaseReversalKey(crypto.randomUUID());
+                    setIsPurchaseReversalOpen(true);
+                  }}>
+                    Reverse
+                  </Button>
+                )}
               </div>
             ))}
             {transactions.length === 0 && (
@@ -284,31 +409,150 @@ export default function Inventory() {
         </Card>
       </div>
 
+      <Dialog open={isPurchaseReversalOpen} onOpenChange={setIsPurchaseReversalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse Stock Purchase</DialogTitle>
+            <DialogDescription>
+              {selectedPurchase?.product?.name || 'Selected product'} — original reference {selectedPurchase?.reference_number || 'not supplied'}.
+              This action is allowed only when no later inventory movement has occurred.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1">
+              <p>Original purchase value: <strong>{currencySymbol}{Number(selectedPurchase?.total_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></p>
+              <p>Previously paid: <strong>{currencySymbol}{Number(selectedPurchase?.amount_paid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></p>
+              <p className="text-muted-foreground">The paid amount must already have been refunded by the supplier. Any unpaid balance will be reversed against Accounts Payable.</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Reversal date *</Label>
+              <Input type="date" max={format(new Date(), 'yyyy-MM-dd')} value={purchaseReversalForm.reversedOn}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, reversedOn: e.target.value })} />
+            </div>
+            {Number(selectedPurchase?.amount_paid || 0) > 0 && (
+              <div className="space-y-2">
+                <Label>Actual supplier refund received through *</Label>
+                <Select value={purchaseReversalForm.refundPaymentMethod}
+                  onValueChange={(value: 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check') => setPurchaseReversalForm({ ...purchaseReversalForm, refundPaymentMethod: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                    <SelectItem value="mobile_payment">Mobile payment</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="debit_card">Debit Card</SelectItem>
+                    <SelectItem value="check">Cheque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Supplier credit note / refund reference *</Label>
+              <Input value={purchaseReversalForm.referenceNumber}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, referenceNumber: e.target.value })}
+                placeholder="Supplier credit note or refund receipt number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason for reversal *</Label>
+              <Textarea rows={3} value={purchaseReversalForm.reason}
+                onChange={e => setPurchaseReversalForm({ ...purchaseReversalForm, reason: e.target.value })}
+                placeholder="Explain the supplier return and approval..." />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsPurchaseReversalOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => reverseStockPurchase.mutate()} disabled={
+                reverseStockPurchase.isPending || !purchaseReversalForm.reversedOn ||
+                !purchaseReversalForm.reason.trim() || !purchaseReversalForm.referenceNumber.trim()
+              }>
+                {reverseStockPurchase.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Confirm Purchase Reversal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCountOpen} onOpenChange={setIsCountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reconcile Physical Stock Count</DialogTitle>
+            <DialogDescription>
+              {selectedProduct?.name}: system quantity is {selectedProduct?.stock_quantity ?? 0}. Enter the independently counted quantity; the difference will be valued at the verified weighted-average cost.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Physical quantity counted *</Label>
+              <Input type="number" min="0" step="1" value={countForm.countedQuantity}
+                onChange={e => setCountForm({ ...countForm, countedQuantity: Math.max(0, parseInt(e.target.value, 10) || 0) })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Count date *</Label>
+              <Input type="date" max={format(new Date(), 'yyyy-MM-dd')} value={countForm.countedOn}
+                onChange={e => setCountForm({ ...countForm, countedOn: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Signed count-sheet / approval reference *</Label>
+              <Input value={countForm.referenceNumber} onChange={e => setCountForm({ ...countForm, referenceNumber: e.target.value })}
+                placeholder="e.g. COUNT-2026-001" />
+            </div>
+            <div className="space-y-2">
+              <Label>Reason / explanation *</Label>
+              <Textarea value={countForm.reason} onChange={e => setCountForm({ ...countForm, reason: e.target.value })}
+                placeholder="Explain the variance and the count approval..." rows={3} />
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              Increases debit Inventory and credit Inventory Count Variance Gain. Shortages debit Inventory Shrinkage and credit Inventory. The system refuses unverified costs, backdated counts and duplicate submissions.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsCountOpen(false)}>Cancel</Button>
+              <Button onClick={() => recordStockCount.mutate()} disabled={
+                recordStockCount.isPending || !selectedProduct?.cost_price_verified ||
+                !countForm.countedOn || !countForm.reason.trim() || !countForm.referenceNumber.trim() ||
+                countForm.countedQuantity === (selectedProduct?.stock_quantity || 0)
+              }>
+                {recordStockCount.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Approve & Post Count
+              </Button>
+            </div>
+            {!selectedProduct?.cost_price_verified && (
+              <p className="text-xs text-destructive">This product's purchase cost is not verified. Resolve its actual cost evidence before reconciling stock.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Adjust Stock Dialog */}
       <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Adjust Stock - {selectedProduct?.name}</DialogTitle>
+            <DialogTitle>{adjustForm.type === 'damage' ? 'Record Stock Damage' : 'Record Stock Purchase'} - {selectedProduct?.name}</DialogTitle>
             <DialogDescription>
               Current stock: {selectedProduct?.stock_quantity ?? 0} units
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain py-4 pr-2">
             <div className="space-y-2">
-              <Label>Transaction Type</Label>
-              <Select value={adjustForm.type} onValueChange={v => setAdjustForm({ ...adjustForm, type: v })}>
+              <Label>Inventory action</Label>
+              <Select value={adjustForm.type} onValueChange={value => setAdjustForm({ ...adjustForm, type: value as 'purchase' | 'damage', quantity: 0, referenceNumber: '', notes: '' })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="purchase">Purchase (Add Stock)</SelectItem>
-                  <SelectItem value="sale">Sale (Remove Stock)</SelectItem>
-                  <SelectItem value="return">Return (Add Stock)</SelectItem>
-                  <SelectItem value="damage">Damage/Loss (Remove Stock)</SelectItem>
-                  <SelectItem value="adjustment">Manual Adjustment (Set Exact)</SelectItem>
+                  <SelectItem value="purchase">Record stock purchase</SelectItem>
+                  {canRecordInventoryDamage && <SelectItem value="damage">Record stock damage / shrinkage</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
+            {adjustForm.type === 'damage' ? (
+              <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                Damage is valued at the product's verified weighted-average purchase cost and posted as Inventory Shrinkage against Inventory. A damage report or supporting reference is required. Products without verified purchase cost cannot be written off yet.
+              </div>
+            ) : (
+              <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                Only evidenced stock purchases and documented damage can currently change inventory from this screen. Sales must be posted through invoices so revenue and cost of goods sold stay linked. Customer returns remain blocked until their audited credit-note and stock-return workflow is implemented. Count differences must be approved and supported by a count-sheet reference.
+              </div>
+            )}
             <div className="space-y-2">
-              <Label>{adjustForm.type === 'adjustment' ? 'New Quantity' : 'Quantity'}</Label>
+              <Label>{adjustForm.type === 'damage' ? 'Units Damaged' : 'Purchase Quantity'}</Label>
               <Input
                 type="number"
                 min="0"
@@ -316,20 +560,87 @@ export default function Inventory() {
                 onChange={e => setAdjustForm({ ...adjustForm, quantity: parseInt(e.target.value) || 0 })}
               />
             </div>
+            {adjustForm.type === 'purchase' && (
+              <>
+                <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm text-muted-foreground">
+                  Enter the supplier's actual unit purchase cost. This purchase will update the product's weighted-average cost and post Inventory against Cash/Bank and Accounts Payable.
+                  {(selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && (
+                    <div className="mt-3 space-y-2">
+                      <p className="font-medium text-warning">Existing stock needs an opening valuation before this purchase can be posted.</p>
+                      <Label>Actual unit cost of existing stock ({currencySymbol}) *</Label>
+                      <Input type="number" min="0" step="0.0001" value={adjustForm.openingUnitCost || ''} onChange={e => setAdjustForm({ ...adjustForm, openingUnitCost: Number(e.target.value) || 0 })} />
+                      <p className="text-xs text-muted-foreground">This value is recorded once as opening Inventory against Owner's Equity. The new purchase is then blended into the weighted-average cost.</p>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Actual Unit Cost ({currencySymbol}) *</Label>
+                    <Input type="number" min="0" step="0.0001" value={adjustForm.unitCost || ''} onChange={e => setAdjustForm({ ...adjustForm, unitCost: Number(e.target.value) || 0 })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Amount Paid ({currencySymbol})</Label>
+                    <Input type="number" min="0" step="0.01" value={adjustForm.amountPaid || ''} onChange={e => setAdjustForm({ ...adjustForm, amountPaid: Number(e.target.value) || 0 })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Supplier</Label>
+                    <Input value={adjustForm.supplierName} onChange={e => setAdjustForm({ ...adjustForm, supplierName: e.target.value })} placeholder="Supplier name (optional)" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Supplier Reference *</Label>
+                    <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Required invoice / receipt reference" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Method</Label>
+                  <Select value={adjustForm.paymentMethod} onValueChange={v => setAdjustForm({ ...adjustForm, paymentMethod: v as typeof adjustForm.paymentMethod })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                      <SelectItem value="debit_card">Debit Card</SelectItem>
+                      <SelectItem value="check">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            {adjustForm.type === 'damage' && (
+              <div className="space-y-2">
+                <Label>Damage Report / Reference *</Label>
+                <Input value={adjustForm.referenceNumber} onChange={e => setAdjustForm({ ...adjustForm, referenceNumber: e.target.value })} placeholder="Incident or damage report reference" />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
                 value={adjustForm.notes}
                 onChange={e => setAdjustForm({ ...adjustForm, notes: e.target.value })}
-                placeholder="Reason for adjustment..."
+                placeholder={adjustForm.type === 'damage' ? 'Describe the damage, spoilage or loss...' : 'Purchase details and supporting notes...'}
                 rows={2}
               />
             </div>
             <div className="sticky bottom-0 z-10 flex shrink-0 justify-end gap-3 border-t bg-background pt-4">
               <Button variant="outline" onClick={() => setIsAdjustOpen(false)}>Cancel</Button>
-              <Button onClick={() => recordAdjustment.mutate()} disabled={recordAdjustment.isPending || adjustForm.quantity <= 0}>
+              <Button onClick={() => recordAdjustment.mutate()} disabled={
+                recordAdjustment.isPending || adjustForm.quantity <= 0 ||
+                (adjustForm.type === 'purchase' && (
+                  adjustForm.unitCost <= 0 ||
+                  !adjustForm.referenceNumber.trim() ||
+                  adjustForm.amountPaid > adjustForm.quantity * adjustForm.unitCost ||
+                  ((selectedProduct?.stock_quantity || 0) > 0 && !selectedProduct?.cost_price_verified && adjustForm.openingUnitCost <= 0)
+                )) ||
+                (adjustForm.type === 'damage' && (
+                  !adjustForm.referenceNumber.trim() || !selectedProduct?.cost_price_verified ||
+                  (selectedProduct?.stock_quantity || 0) < adjustForm.quantity
+                ))
+              }>
                 {recordAdjustment.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Adjustment
+                {adjustForm.type === 'damage' ? 'Record Damage' : 'Record Purchase'}
               </Button>
             </div>
           </div>

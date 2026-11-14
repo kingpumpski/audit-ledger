@@ -1,6 +1,8 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
+import { PageActionBar } from './PageActionBar';
+import { getSidebarItems } from '@/config/sidebarConfig';
 import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -24,23 +26,23 @@ interface AppLayoutProps {
   actions?: ReactNode;
 }
 
-const featureLinks = [
-  { label: 'Dashboard', description: 'Overview and business metrics', href: '/dashboard', terms: 'home overview' },
-  { label: 'Sales & Invoices', description: 'Record sales and manage customer invoices', href: '/invoices', terms: 'billing sales money owed' },
-  { label: 'Money Received', description: 'Record and review customer payments', href: '/receipts', terms: 'payments collections cash mobile money' },
-  { label: 'Customers', description: 'Keep customer names and contact details', href: '/customers', terms: 'clients contacts people who owe' },
-  { label: 'Products & Services', description: 'Manage what your business sells', href: '/products', terms: 'catalog goods items services' },
-  { label: 'Stock', description: 'See what you have and what needs restocking', href: '/inventory', terms: 'inventory warehouse quantity' },
-  { label: 'Accounting Tools', description: 'Detailed accounting tools for finance staff', href: '/accounting', terms: 'ledger chart accounts journals' },
-  { label: 'Taxes', description: 'Tax configuration and records', href: '/taxes', terms: 'vat tax' },
-  { label: 'Discounts', description: 'Manage discounts', href: '/discounts', terms: 'offers promotions' },
-  { label: 'Business Reports', description: 'Understand sales, spending and business performance', href: '/reports', terms: 'analytics statements profit loss' },
-  { label: 'Activity History', description: 'See who changed important business records', href: '/audit-logs', terms: 'audit logs activity history' },
-];
+const featureDetails: Record<string, { description: string; terms: string }> = {
+  '/dashboard': { description: 'Overview and business metrics', terms: 'home overview' },
+  '/invoices': { description: 'Record sales and manage customer invoices', terms: 'billing sales money owed' },
+  '/receipts': { description: 'Record and review customer payments', terms: 'payments collections cash mobile money' },
+  '/customers': { description: 'Keep customer names and contact details', terms: 'clients contacts people who owe' },
+  '/products': { description: 'Manage what your business sells', terms: 'catalog goods items services' },
+  '/accounting': { description: 'Detailed accounting tools for finance staff', terms: 'ledger chart accounts journals' },
+  '/inventory': { description: 'See what you have and what needs restocking', terms: 'inventory warehouse quantity' },
+  '/taxes': { description: 'Tax configuration and records', terms: 'vat tax' },
+  '/discounts': { description: 'Manage discounts', terms: 'offers promotions' },
+  '/reports': { description: 'Understand sales, spending and business performance', terms: 'analytics statements profit loss' },
+  '/audit-logs': { description: 'See who changed important business records', terms: 'audit logs activity history' },
+};
 
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { profile, roles, signOut } = useAuth();
+  const { profile, roles, signOut, userPersona } = useAuth();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -57,10 +59,17 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
   const matchingFeatures = useMemo(() => {
     const query = featureQuery.trim().toLowerCase();
     if (!query) return [];
-    return featureLinks.filter((item) =>
-      `${item.label} ${item.description} ${item.terms}`.toLowerCase().includes(query)
-    );
-  }, [featureQuery]);
+    return getSidebarItems(userPersona)
+      .filter((item) => !item.roles || roles.some((role) => item.roles?.includes(role)))
+      .map((item) => ({
+        label: item.name,
+        href: item.path,
+        ...featureDetails[item.path],
+      }))
+      .filter((item) =>
+        `${item.label} ${item.description} ${item.terms}`.toLowerCase().includes(query)
+      );
+  }, [featureQuery, roles, userPersona]);
 
   const openFeature = (href: string) => {
     navigate(href);
@@ -69,7 +78,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-background">
+    <div className="relative min-h-screen w-full overflow-x-clip bg-background">
       <AppSidebar />
       {mobileOpen && (
         <button
@@ -85,7 +94,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
         'ml-0',
         collapsed ? 'md:ml-16' : 'md:ml-64'
       )}>
-        <header className="sticky top-0 z-30 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 backdrop-blur-sm sm:px-6">
+        <header className="sticky top-0 z-50 flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/85 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               type="button"
@@ -99,14 +108,15 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
             </Button>
             {title && (
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-display font-bold text-foreground sm:text-xl">{title}</h1>
-                {subtitle && <p className="hidden text-sm text-muted-foreground sm:block">{subtitle}</p>}
+                <h1 className="truncate text-lg font-display font-bold text-foreground sm:text-xl">
+                  {title}{subtitle ? ` / ${subtitle}` : ''}
+                </h1>
               </div>
             )}
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <div className="relative order-last w-full md:order-none md:w-48 lg:w-64">
+          <div className="ml-auto flex w-full min-w-0 items-center justify-end gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-40 sm:flex-none md:w-48 lg:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 aria-label="Search application features"
@@ -196,11 +206,12 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {actions && <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{actions}</div>}
+
           </div>
         </header>
 
         <main className="min-w-0 w-full p-3 sm:p-6">
+          {actions && <PageActionBar>{actions}</PageActionBar>}
           {children}
         </main>
       </div>

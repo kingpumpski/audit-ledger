@@ -12,6 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSettings } from '@/hooks/useSettings';
+import { CustomerCreditManagement } from '@/components/customers/CustomerCreditManagement';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -33,8 +37,14 @@ export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { customers, updateCustomer, isUpdating } = useCustomers();
+  const { roles } = useAuth();
+  const canViewCustomerCredits = roles.some((role) => ['admin', 'accountant', 'auditor'].includes(role));
+  const { settings } = useSettings();
+  const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);
   const customer = customers.find(c => c.id === id);
-  
+  const { balances: customerBalances, isLoading: isCustomerBalanceLoading, error: customerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), id || undefined, Boolean(id));
+  const currentOutstandingBalance = customerBalances[0]?.outstanding_balance ?? 0;
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -199,8 +209,8 @@ export default function CustomerDetails() {
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Current Balance</p>
-                <p className="text-2xl font-bold">
-                  ${(customer.current_balance || 0).toLocaleString()}
+                <p className="text-2xl font-bold tabular-nums">
+                  {isCustomerBalanceLoading ? 'Calculating…' : customerBalanceError ? 'Unavailable' : `${currencySymbol}${currentOutstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </p>
               </div>
             </div>
@@ -213,6 +223,7 @@ export default function CustomerDetails() {
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="receipts">Receipts</TabsTrigger>
+            {canViewCustomerCredits && <TabsTrigger value="credits">Credits</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="details">
@@ -502,6 +513,10 @@ export default function CustomerDetails() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {canViewCustomerCredits && <TabsContent value="credits">
+            <CustomerCreditManagement customerId={customer.id} customerName={customer.name} currencySymbol={currencySymbol} />
+          </TabsContent>}
         </Tabs>
       </div>
     </AppLayout>

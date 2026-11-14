@@ -17,9 +17,11 @@ interface CreateReceiptData {
   invoice_id?: string;
   payment_id?: string;
   amount: number;
-  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment';
   notes?: string;
+  reference_number?: string;
   signature_data?: string;
+  idempotency_key: string;
 }
 
 // Simple hash function for verification
@@ -45,13 +47,15 @@ export function useReceipts() {
           customer:customers(*),
           invoice:invoices(*)
         `)
-        // Keep voided receipts visible for audit history while excluding other soft-deleted rows.
-        .or('deleted_at.is.null,status.eq.void')
+        // Voided receipts remain visible for audit history unless soft-deleted.
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as ReceiptWithRelations[];
     },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const createReceiptMutation = useMutation({
@@ -59,82 +63,66 @@ export function useReceipts() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // An invoice-linked receipt represents money received, so create the payment
-      // through the same atomic payment-and-ledger workflow when no payment exists yet.
-      let paymentId = receiptData.payment_id || null;
-      if (receiptData.invoice_id && !paymentId) {
-        const { data: createdPaymentId, error: paymentError } = await supabase.rpc('record_invoice_payment', {
-          p_invoice_id: receiptData.invoice_id,
-          p_customer_id: receiptData.customer_id,
-          p_amount: receiptData.amount,
-          p_payment_method: receiptData.payment_method,
-          p_reference_number: null,
-          p_notes: receiptData.notes || null,
-        });
-        if (paymentError) throw paymentError;
-        if (!createdPaymentId) throw new Error('Payment was not created');
-        paymentId = createdPaymentId;
-      }
-
-      // Get user profile for issuer name
+      // Prepare the integrity values before the RPC. The database creates any
+      // invoice payment and the receipt together, so a failed receipt cannot
+      // leave behind an unreceipted payment.
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
         .eq('id', user.id)
         .single();
 
-      // Get next receipt number
-      const { data: receiptNumber, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'receipt' });
-
-      if (seqError) throw seqError;
-
-      // Generate checksum for immutability verification
+      const issuedAt = new Date().toISOString();
       const checksumData = JSON.stringify({
-        receiptNumber,
         amount: receiptData.amount,
         customerId: receiptData.customer_id,
         paymentMethod: receiptData.payment_method,
         issuedBy: user.id,
-        timestamp: new Date().toISOString(),
+        timestamp: issuedAt,
       });
       const checksum = await generateChecksum(checksumData);
 
-      // Generate signature hash if signature provided
       let signatureHash: string | null = null;
       if (receiptData.signature_data) {
         signatureHash = await generateChecksum(receiptData.signature_data + user.id);
       }
 
-      // Create receipt
-      const { data: receipt, error: receiptError } = await supabase
+      const { data: receiptId, error: createError } = await supabase.rpc('create_receipt_with_payment', {
+        p_customer_id: receiptData.customer_id,
+        p_invoice_id: receiptData.invoice_id || null,
+        p_payment_id: receiptData.payment_id || null,
+        p_amount: receiptData.amount,
+        p_payment_method: receiptData.payment_method,
+        p_idempotency_key: receiptData.idempotency_key,
+        p_notes: receiptData.notes || null,
+        p_signature_data: receiptData.signature_data || null,
+        p_reference_number: receiptData.reference_number || null,
+        p_signature_hash: signatureHash,
+        p_checksum: checksum,
+        p_issuer_name: profile?.full_name || user.email || 'Unknown',
+      });
+
+      if (createError) throw createError;
+      if (!receiptId) throw new Error('Receipt was not created');
+
+      const { data: receipt, error: fetchError } = await supabase
         .from('receipts')
-        .insert({
-          receipt_number: receiptNumber,
-          customer_id: receiptData.customer_id,
-          invoice_id: receiptData.invoice_id || null,
-          payment_id: paymentId,
-          amount: receiptData.amount,
-          payment_method: receiptData.payment_method,
-          notes: receiptData.notes,
-          signature_data: receiptData.signature_data,
-          signature_hash: signatureHash,
-          checksum,
-          issued_by: user.id,
-          issuer_name: profile?.full_name || user.email || 'Unknown',
-          status: 'issued',
-          is_locked: true,
-        })
-        .select()
+        .select('*')
+        .eq('id', receiptId)
         .single();
 
-      if (receiptError) throw receiptError;
-
+      if (fetchError) throw fetchError;
       return receipt;
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      if (receipt.invoice_id) {
+        queryClient.invalidateQueries({ queryKey: ['invoice', receipt.invoice_id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       toast({ title: 'Receipt issued successfully' });
     },
     onError: (error) => {
@@ -143,30 +131,30 @@ export function useReceipts() {
   });
 
   const updateReceiptMutation = useMutation({
-    mutationFn: async ({ id, data, notifyCustomer }: { 
+    mutationFn: async ({ id, data }: { 
       id: string; 
-      data: { notes?: string; payment_method?: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other' };
-      notifyCustomer?: boolean;
+      data: { notes?: string };
     }) => {
-      const { error } = await supabase
+      const { data: updatedReceipt, error } = await supabase
         .from('receipts')
         .update({
           notes: data.notes,
-          payment_method: data.payment_method,
         })
         .eq('id', id)
-        .eq('status', 'issued'); // Only allow editing issued receipts
+        .eq('status', 'issued') // Only allow editing issued receipts
+        .is('deleted_at', null)
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
-
-      // If notifyCustomer is true, send notification (implementation depends on SMS/email setup)
-      if (notifyCustomer) {
-        console.log('Customer notification requested for receipt update:', id);
-        // TODO: Invoke notification edge function when SMS/email is fully configured
+      if (!updatedReceipt) {
+        throw new Error('This receipt could not be updated. It may have been voided, deleted or is no longer available for editing.');
       }
+
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      queryClient.invalidateQueries({ queryKey: ['receipt'] });
       toast({ title: 'Receipt updated successfully' });
     },
     onError: (error) => {
@@ -186,6 +174,8 @@ export function useReceipts() {
       queryClient.invalidateQueries({ queryKey: ['receipts'] });
       queryClient.invalidateQueries({ queryKey: ['receipt'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       toast({ title: 'Receipt voided', description: 'Any standalone receipt payment has been reversed from its linked invoice.' });
     },
     onError: (error) => {
@@ -218,6 +208,8 @@ export function useReceipt(id: string) {
           invoice:invoices(*)
         `)
         .eq('id', id)
+        // Keep voided receipts accessible only while they remain in the audit record.
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;

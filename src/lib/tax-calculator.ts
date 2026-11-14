@@ -17,6 +17,8 @@ export interface LineTaxBreakdown {
   rate: number;
   taxable_amount: number;
   tax_amount: number;
+  is_compound: boolean;
+  tax_order: number;
 }
 
 export interface LineCalculation {
@@ -50,7 +52,7 @@ export function calculateLineAmounts(input: {
   const amountAfterDiscount = Math.max(0, subtotal - discountAmount);
 
   const orderedTaxes = [...input.taxes]
-    .filter(tax => Number.isFinite(Number(tax.rate)) && Number(tax.rate) > 0)
+    .filter(tax => Number.isFinite(Number(tax.rate)) && Number(tax.rate) >= 0)
     .sort((a, b) => Number(Boolean(a.is_compound)) - Number(Boolean(b.is_compound)) || a.code.localeCompare(b.code));
 
   // Non-compound taxes use the base amount. Compound taxes are calculated
@@ -67,13 +69,15 @@ export function calculateLineAmounts(input: {
     ? (totalTaxFactor > 0 ? amountAfterDiscount / (1 + totalTaxFactor) : amountAfterDiscount)
     : amountAfterDiscount;
 
-  const taxes = taxFactors.map(({ tax, taxableFactor, taxFactor }) => ({
+  const taxes = taxFactors.map(({ tax, taxableFactor, taxFactor }, taxOrder) => ({
     tax_id: tax.id,
     name: tax.name,
     code: tax.code,
     rate: Number(tax.rate),
     taxable_amount: roundMoney(taxableBase * taxableFactor),
     tax_amount: roundMoney(taxableBase * taxFactor),
+    is_compound: Boolean(tax.is_compound),
+    tax_order: taxOrder,
   }));
   const taxAmount = roundMoney(taxes.reduce((sum, tax) => sum + tax.tax_amount, 0));
   const lineTotal = input.pricesIncludeTax
@@ -95,4 +99,49 @@ export function isTaxEffectiveOnDate(tax: TaxRule, date: string): boolean {
   if (tax.effective_from && tax.effective_from > date) return false;
   if (tax.effective_to && tax.effective_to < date) return false;
   return true;
+}
+
+/**
+ * Fail closed when a tax explicitly selected on an invoice is no longer
+ * available, effective for the invoice date, or mapped to a liability account.
+ * Silently dropping a selected tax would create a misleading invoice total.
+ */
+export function validateSelectedTaxRules(selectedTaxIds: string[], taxRules: TaxRule[], date: string): void {
+  const availableTaxIds = new Set(taxRules.map(tax => tax.id));
+  if (selectedTaxIds.some(id => !availableTaxIds.has(id))) {
+    throw new Error('One or more selected taxes are no longer active or available. Refresh the tax list and review this invoice before saving.');
+  }
+
+  const invalidRateTax = taxRules.find(tax =>
+    !Number.isFinite(Number(tax.rate)) || Number(tax.rate) < 0 || Number(tax.rate) > 100
+  );
+  if (invalidRateTax) {
+    throw new Error(`Tax ${invalidRateTax.code} has an invalid rate. Tax rates must be between 0 and 100 percent.`);
+  }
+
+  const ineffectiveTax = taxRules.find(tax => !isTaxEffectiveOnDate(tax, date));
+  if (ineffectiveTax) {
+    throw new Error(`Tax ${ineffectiveTax.code} is not effective on the invoice date. Remove it or choose a valid invoice date.`);
+  }
+
+  const unconfiguredTax = taxRules.find(tax => !tax.liability_account_id);
+  if (unconfiguredTax) {
+    throw new Error(`Tax ${unconfiguredTax.code} has no liability account configured.`);
+  }
+}
+
+/** Validate selected category-specific taxes instead of silently dropping them. */
+export function validateTaxCategoryApplicability(
+  selectedTaxes: TaxRule[],
+  category: string | null | undefined,
+  itemDescription: string,
+): TaxRule[] {
+  const mismatch = selectedTaxes.find(tax =>
+    tax.applies_to_category &&
+    tax.applies_to_category.toLowerCase() !== (category || '').toLowerCase()
+  );
+  if (mismatch) {
+    throw new Error(`Tax ${mismatch.code} does not apply to the category of invoice item "${itemDescription}". Review the selected taxes.`);
+  }
+  return selectedTaxes;
 }

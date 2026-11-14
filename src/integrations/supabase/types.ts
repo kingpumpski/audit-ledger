@@ -337,6 +337,10 @@ export type Database = {
           created_at: string
           id: string
           new_quantity: number | null
+          supplier_name: string | null
+          reference_number: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
+          amount_paid: number
           notes: string | null
           performed_by: string | null
           previous_quantity: number | null
@@ -352,6 +356,10 @@ export type Database = {
           created_at?: string
           id?: string
           new_quantity?: number | null
+          supplier_name?: string | null
+          reference_number?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
+          amount_paid?: number
           notes?: string | null
           performed_by?: string | null
           previous_quantity?: number | null
@@ -403,6 +411,12 @@ export type Database = {
           tax_amount: number | null
           tax_rate: number | null
           unit_price: number
+          unit_cost: number | null
+          cost_source: string | null
+          cost_verified_by: string | null
+          cost_verified_at: string | null
+          cost_reference: string | null
+          cost_notes: string | null
         }
         Insert: {
           created_at?: string
@@ -418,6 +432,12 @@ export type Database = {
           tax_amount?: number | null
           tax_rate?: number | null
           unit_price: number
+          unit_cost?: number | null
+          cost_source?: string | null
+          cost_verified_by?: string | null
+          cost_verified_at?: string | null
+          cost_reference?: string | null
+          cost_notes?: string | null
         }
         Update: {
           created_at?: string
@@ -433,6 +453,12 @@ export type Database = {
           tax_amount?: number | null
           tax_rate?: number | null
           unit_price?: number
+          unit_cost?: number | null
+          cost_source?: string | null
+          cost_verified_by?: string | null
+          cost_verified_at?: string | null
+          cost_reference?: string | null
+          cost_notes?: string | null
         }
         Relationships: [
           {
@@ -447,6 +473,83 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_item_taxes: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string
+          invoice_item_id: string
+          is_compound: boolean
+          liability_account_id: string
+          tax_amount: number
+          tax_code: string
+          tax_id: string
+          tax_name: string
+          tax_order: number
+          tax_rate: number
+          taxable_amount: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id: string
+          invoice_item_id: string
+          is_compound?: boolean
+          liability_account_id: string
+          tax_amount: number
+          tax_code: string
+          tax_id: string
+          tax_name: string
+          tax_order: number
+          tax_rate: number
+          taxable_amount: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          invoice_item_id?: string
+          is_compound?: boolean
+          liability_account_id?: string
+          tax_amount?: number
+          tax_code?: string
+          tax_id?: string
+          tax_name?: string
+          tax_order?: number
+          tax_rate?: number
+          taxable_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_item_taxes_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_invoice_item_id_fkey"
+            columns: ["invoice_item_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_tax_id_fkey"
+            columns: ["tax_id"]
+            isOneToOne: false
+            referencedRelation: "taxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_item_taxes_liability_account_id_fkey"
+            columns: ["liability_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -911,6 +1014,7 @@ export type Database = {
           customer_id: string
           deleted_at: string | null
           id: string
+          idempotency_key: string | null
           invoice_id: string
           notes: string | null
           payment_date: string
@@ -925,6 +1029,7 @@ export type Database = {
           customer_id: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id: string
           notes?: string | null
           payment_date?: string
@@ -939,6 +1044,7 @@ export type Database = {
           customer_id?: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string
           notes?: string | null
           payment_date?: string
@@ -992,6 +1098,7 @@ export type Database = {
           id: string
           recorded_by: string | null
           reference_number: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
           type: string
           updated_at: string
         }
@@ -1004,6 +1111,7 @@ export type Database = {
           id?: string
           recorded_by?: string | null
           reference_number?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
           type: string
           updated_at?: string
         }
@@ -1066,7 +1174,8 @@ export type Database = {
         Row: {
           category: string | null
           cost_price: number | null
-          created_at: string
+          cost_price_verified: boolean
+          created_at
           created_by: string | null
           current_price: number
           deleted_at: string | null
@@ -1085,6 +1194,7 @@ export type Database = {
         Insert: {
           category?: string | null
           cost_price?: number | null
+          cost_price_verified?: boolean
           created_at?: string
           created_by?: string | null
           current_price: number
@@ -1172,6 +1282,7 @@ export type Database = {
           customer_id: string
           deleted_at: string | null
           id: string
+          idempotency_key: string | null
           invoice_id: string | null
           is_locked: boolean | null
           issue_date: string
@@ -1192,6 +1303,7 @@ export type Database = {
           customer_id: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_locked?: boolean | null
           issue_date?: string
@@ -1212,6 +1324,7 @@ export type Database = {
           customer_id?: string
           deleted_at?: string | null
           id?: string
+          idempotency_key?: string | null
           invoice_id?: string | null
           is_locked?: boolean | null
           issue_date?: string
@@ -1427,7 +1540,79 @@ export type Database = {
         Returns: number
       }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
+      create_invoice_draft: {
+        Args: {
+          p_customer_id: string
+          p_issue_date: string
+          p_due_date: string | null
+          p_notes: string | null
+          p_terms: string | null
+          p_prices_include_tax: boolean
+          p_subtotal: number
+          p_discount_amount: number
+          p_tax_amount: number
+          p_total_amount: number
+          p_items: Json
+        }
+        Returns: string
+      }
       issue_invoice: { Args: { p_invoice_id: string }; Returns: string }
+      record_stock_purchase: {
+        Args: {
+          p_product_id: string
+          p_quantity: number
+          p_unit_cost: number
+          p_supplier_name?: string | null
+          p_reference_number?: string | null
+          p_amount_paid?: number
+          p_payment_method?: Database["public"]["Enums"]["payment_method"]
+          p_notes?: string | null
+          p_opening_unit_cost?: number | null
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
+      record_inventory_damage: {
+        Args: {
+          p_product_id: string
+          p_quantity: number
+          p_reference_number: string
+          p_idempotency_key: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      record_stock_count_adjustment: {
+        Args: {
+          p_product_id: string
+          p_counted_quantity: number
+          p_counted_on: string
+          p_reason: string
+          p_reference_number: string
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
+      reverse_stock_purchase: {
+        Args: {
+          p_purchase_transaction_id: string
+          p_reversed_on: string
+          p_refund_payment_method: Database["public"]["Enums"]["payment_method"] | null
+          p_reason: string
+          p_reference_number: string
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
+      set_historical_invoice_item_cost: {
+        Args: {
+          p_invoice_item_id: string
+          p_unit_cost: number
+          p_reference: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       record_invoice_payment: {
         Args: {
           p_invoice_id: string
@@ -1436,6 +1621,71 @@ export type Database = {
           p_payment_method: Database["public"]["Enums"]["payment_method"]
           p_reference_number?: string | null
           p_notes?: string | null
+          p_idempotency_key: string
+        }
+        Returns: string
+      }
+      get_customer_account_balances: {
+        Args: { p_as_of_date?: string; p_customer_id?: string | null }
+        Returns: {
+          customer_id: string
+          customer_code: string
+          customer_name: string
+          invoiced_amount: number
+          payments_received: number
+          credit_notes_applied: number
+          customer_credits_applied: number
+          outstanding_balance: number
+          as_of_date: string
+        }[]
+      }
+      get_payment_clearing_settlements: {
+        Args: never
+        Returns: {
+          settlement_id: string
+          account_code: string
+          account_name: string
+          gross_amount: number
+          fee_amount: number
+          net_amount: number
+          settled_on: string
+          provider_reference: string
+          bank_reference: string
+          notes: string | null
+          created_at: string
+        }[]
+      }
+      get_payment_clearing_balances: {
+        Args: never
+        Returns: { account_code: string; account_name: string; clearing_balance: number }[]
+      }
+      settle_payment_clearing_account: {
+        Args: {
+          p_clearing_account_code: string
+          p_gross_amount: number
+          p_fee_amount: number
+          p_settled_on: string
+          p_provider_reference: string
+          p_bank_reference: string
+          p_idempotency_key: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
+      create_receipt_with_payment: {
+        Args: {
+          p_customer_id: string
+          p_invoice_id: string | null
+          p_payment_id: string | null
+          p_amount: number
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_idempotency_key: string
+          p_notes?: string | null
+          p_signature_data?: string | null
+          p_signature_hash?: string | null
+          p_checksum?: string | null
+          p_issuer_name?: string | null
+          p_reference_number?: string | null
         }
         Returns: string
       }

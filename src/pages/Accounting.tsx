@@ -1,6 +1,7 @@
 import { csvCell } from '@/lib/reset-monitoring';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useReceipts } from '@/hooks/useReceipts';
+import { usePayments } from '@/hooks/usePayments';
 import { useSettings } from '@/hooks/useSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,37 +34,184 @@ import { format, subDays, subMonths, subWeeks, startOfDay, startOfWeek, startOfM
 import { cn } from '@/lib/utils';
 import { ChartOfAccounts } from '@/components/accounting/ChartOfAccounts';
 import { GeneralLedgerReport } from '@/components/accounting/GeneralLedgerReport';
+import { ProfitAndLossReport } from '@/components/accounting/ProfitAndLossReport';
+import { OperatingExpenseRegister } from '@/components/accounting/OperatingExpenseRegister';
+import { PaymentClearingSettlement } from '@/components/accounting/PaymentClearingSettlement';
 
 const COLORS = ['hsl(161, 93%, 30%)', 'hsl(199, 89%, 48%)', 'hsl(38, 92%, 50%)', 'hsl(0, 72%, 50%)', 'hsl(142, 76%, 36%)', 'hsl(280, 85%, 65%)'];
+
+type OperatingExpenseSummary = { amount: number | string; incurred_on: string; reversal: { id: string; amount: number | string; created_at: string } | null };
+const operatingExpenseSummaryApi = supabase as unknown as {
+  from: (table: 'operating_expenses') => {
+    select: (columns: 'amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)') => {
+      order: (column: 'incurred_on', options?: { ascending?: boolean }) => {
+        range: (from: number, to: number) => PromiseLike<{
+          data: OperatingExpenseSummary[] | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+};
+
+
+
+
+type PettyCashReversalRow = {
+  id: string;
+  petty_cash_transaction_id: string;
+  amount: number | string;
+  reversed_on: string;
+  reason: string;
+  reference_number: string;
+};
+const pettyCashReversalApi = supabase as unknown as {
+  from: (table: 'petty_cash_expense_reversals') => {
+    select: (columns: string) => {
+      order: (column: string, options?: { ascending?: boolean }) => PromiseLike<{
+        data: PettyCashReversalRow[] | null;
+        error: { message: string } | null;
+      }>;
+    };
+  };
+  rpc: (name: 'reverse_petty_cash_expense', args: Record<string, unknown>) => PromiseLike<{
+    data: string | null;
+    error: { message: string } | null;
+  }>;
+};
 
 type TimeFrame = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'yearly';
 
 export default function Accounting() {
   const { invoices } = useInvoices();
   const { receipts } = useReceipts();
+  const { payments } = usePayments();
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { roles } = useAuth();
+  const canReversePettyCash = roles.includes('admin') || roles.includes('accountant');
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('accounting-cash-flow-live-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['payments'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'receipts' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_entries' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
+        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_items' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_transactions' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_expense_reversals' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
+        void queryClient.invalidateQueries({ queryKey: ['operating-expenses-summary'] });
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('monthly');
   const [isPettyCashOpen, setIsPettyCashOpen] = useState(false);
+  const [pettyCashToReverse, setPettyCashToReverse] = useState<{ id: string; description: string; amount: number | string } | null>(null);
+  const [pettyCashReversalForm, setPettyCashReversalForm] = useState({
+    reversedOn: format(new Date(), 'yyyy-MM-dd'),
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check',
+    reason: '',
+    reference: '',
+  });
   const [pettyCashForm, setPettyCashForm] = useState({
     description: '', amount: 0, type: 'expense' as string, category: '', reference_number: '',
+    payment_method: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
 
   // Fetch petty cash
-  const { data: pettyCash = [] } = useQuery({
+  const fetchPettyCashPage = async (from: number, to: number) => {
+    const { data, error } = await supabase
+      .from('petty_cash_transactions')
+      .select('*')
+      .order('date', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    return data || [];
+  };
+
+  const { data: pettyCash = [], isError: pettyCashError, isLoading: pettyCashLoading } = useQuery({
     queryKey: ['petty-cash'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('petty_cash_transactions')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return data;
+      const rows: Awaited<ReturnType<typeof fetchPettyCashPage>> = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (true) {
+        const data = await fetchPettyCashPage(offset, offset + pageSize - 1);
+        rows.push(...data);
+        if (data.length < pageSize) break;
+        offset += pageSize;
+      }
+      return rows;
     },
+  });
+
+
+  const pettyCashReversalsQuery = useQuery({
+    queryKey: ['petty-cash-reversals'],
+    queryFn: async (): Promise<PettyCashReversalRow[]> => {
+      const { data, error } = await pettyCashReversalApi
+        .from('petty_cash_expense_reversals')
+        .select('id, petty_cash_transaction_id, amount, reversed_on, reason, reference_number')
+        .order('reversed_on', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  });
+  const pettyCashReversals = pettyCashReversalsQuery.data || [];
+  const pettyCashReversalById = useMemo(
+    () => new Map(pettyCashReversals.map(reversal => [reversal.petty_cash_transaction_id, reversal])),
+    [pettyCashReversals],
+  );
+
+  const { data: operatingExpenseRecords = [], isError: operatingExpensesError, isLoading: operatingExpensesLoading } = useQuery({
+    queryKey: ['operating-expenses-summary'],
+    queryFn: async () => {
+      const rows: OperatingExpenseSummary[] = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await operatingExpenseSummaryApi
+          .from('operating_expenses')
+          .select('amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)')
+          .order('incurred_on', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+        offset += pageSize;
+      }
+      return rows;
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 
   const createPettyCash = useMutation({
@@ -76,6 +225,7 @@ export default function Accounting() {
           type: pettyCashForm.type,
           category: pettyCashForm.category || null,
           reference_number: pettyCashForm.reference_number || null,
+          payment_method: pettyCashForm.payment_method,
           recorded_by: user?.id,
         });
       if (error) throw error;
@@ -84,11 +234,40 @@ export default function Accounting() {
       queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
       toast({ title: 'Petty cash transaction recorded' });
       setIsPettyCashOpen(false);
-      setPettyCashForm({ description: '', amount: 0, type: 'expense', category: '', reference_number: '' });
+      setPettyCashForm({ description: '', amount: 0, type: 'expense', category: '', reference_number: '', payment_method: 'cash' });
     },
     onError: (error) => {
       toast({ title: 'Failed to record transaction', description: error.message, variant: 'destructive' });
     },
+  });
+
+
+  const reversePettyCashExpense = useMutation({
+    mutationFn: async () => {
+      if (!pettyCashToReverse) throw new Error('Select a petty-cash expense to reverse.');
+      if (!pettyCashReversalForm.reason.trim() || !pettyCashReversalForm.reference.trim()) {
+        throw new Error('A reversal reason and refund/correction reference are required.');
+      }
+      const { error } = await pettyCashReversalApi.rpc('reverse_petty_cash_expense', {
+        p_transaction_id: pettyCashToReverse.id,
+        p_reversed_on: pettyCashReversalForm.reversedOn,
+        p_payment_method: pettyCashReversalForm.paymentMethod,
+        p_reason: pettyCashReversalForm.reason.trim(),
+        p_reference_number: pettyCashReversalForm.reference.trim(),
+        p_idempotency_key: crypto.randomUUID(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      toast({ title: 'Petty-cash expense reversed', description: 'A separate cash/bank refund journal was posted. The original expense remains in the audit history.' });
+      setPettyCashToReverse(null);
+      setPettyCashReversalForm({ reversedOn: format(new Date(), 'yyyy-MM-dd'), paymentMethod: 'cash', reason: '', reference: '' });
+    },
+    onError: error => toast({ title: 'Could not reverse petty-cash expense', description: error.message, variant: 'destructive' }),
   });
 
   // Financial calculations
@@ -97,16 +276,24 @@ export default function Accounting() {
     const totalInvoiced = invoices.reduce((s, i) => s + (i.total_amount || 0), 0);
     const totalTax = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.tax_amount || 0), 0);
     const totalDiscounts = invoices.reduce((s, i) => s + (i.discount_amount || 0), 0);
-    const totalReceived = receipts.filter(r => r.status === 'issued').reduce((s, r) => s + r.amount, 0);
+    // Payments are the accounting source of truth for invoice-linked receipts.
+    // Add only standalone receipts to avoid counting a payment and its receipt twice.
+    const invoicePaymentsReceived = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const standaloneReceiptsReceived = receipts
+      .filter(receipt => receipt.status === 'issued' && !receipt.payment_id)
+      .reduce((sum, receipt) => sum + Number(receipt.amount || 0), 0);
+    const totalReceived = invoicePaymentsReceived + standaloneReceiptsReceived;
     const outstanding = invoices.filter(i => ['issued', 'overdue', 'partially_paid'].includes(i.status))
       .reduce((s, i) => s + (i.balance_due || 0), 0);
-    const operatingExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount), 0);
+    const pettyCashExpenses = pettyCash.filter(p => p.type === 'expense').reduce((s, p) => s + Number(p.amount) - Number(pettyCashReversalById.get(p.id)?.amount || 0), 0);
+    const supplierAndBusinessExpenses = operatingExpenseRecords.reduce((sum, expense) => sum + Number(expense.amount || 0) - Number(expense.reversal?.amount || 0), 0);
+    const operatingExpenses = pettyCashExpenses + supplierAndBusinessExpenses;
     const pettyCashIncome = pettyCash.filter(p => p.type === 'income').reduce((s, p) => s + Number(p.amount), 0);
 
-    // Do not estimate cost of goods or present a profit figure. Purchase costs
-    // are not reliably linked to sales across the current data model.
+    // Profit is calculated in the dedicated report only when verified product costs
+    // and recorded expense coverage meet its safeguards.
     return { totalRevenue, totalInvoiced, totalTax, totalDiscounts, totalReceived, outstanding, operatingExpenses, pettyCashIncome };
-  }, [invoices, receipts, pettyCash]);
+  }, [invoices, receipts, payments, pettyCash, pettyCashReversalById, operatingExpenseRecords]);
 
   // Revenue trend data
   const trendData = useMemo(() => {
@@ -144,21 +331,35 @@ export default function Accounting() {
       const revenue = invoices
         .filter(i => i.status === 'paid' && new Date(i.created_at) >= p.start && new Date(i.created_at) < p.end)
         .reduce((s, i) => s + (i.total_amount || 0), 0);
-      const expenses = pettyCash
+      const pettyExpenses = pettyCash
         .filter(pc => pc.type === 'expense' && new Date(pc.date) >= p.start && new Date(pc.date) < p.end)
         .reduce((s, pc) => s + Number(pc.amount), 0);
+      const pettyExpenseReversals = pettyCashReversals
+        .filter(reversal => new Date(reversal.reversed_on) >= p.start && new Date(reversal.reversed_on) < p.end)
+        .reduce((sum, reversal) => sum + Number(reversal.amount), 0);
+      const supplierExpensesIncurred = operatingExpenseRecords
+        .filter(expense => new Date(expense.incurred_on) >= p.start && new Date(expense.incurred_on) < p.end)
+        .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+      const supplierExpenseReversals = operatingExpenseRecords
+        .filter(expense => expense.reversal && new Date(expense.reversal.created_at) >= p.start && new Date(expense.reversal.created_at) < p.end)
+        .reduce((sum, expense) => sum + Number(expense.reversal?.amount || 0), 0);
+      const expenses = pettyExpenses - pettyExpenseReversals + supplierExpensesIncurred - supplierExpenseReversals;
       return { name: p.label, revenue, expenses };
     });
-  }, [invoices, pettyCash, timeFrame]);
+  }, [invoices, pettyCash, pettyCashReversals, operatingExpenseRecords, timeFrame]);
 
   const paymentMethodData = useMemo(() => {
     const methods: Record<string, number> = {};
-    receipts.filter(r => r.status === 'issued').forEach(r => {
-      const m = r.payment_method.replace(/_/g, ' ');
-      methods[m] = (methods[m] || 0) + r.amount;
+    payments.forEach(payment => {
+      const method = payment.payment_method.replace(/_/g, ' ');
+      methods[method] = (methods[method] || 0) + Number(payment.amount || 0);
+    });
+    receipts.filter(receipt => receipt.status === 'issued' && !receipt.payment_id).forEach(receipt => {
+      const method = receipt.payment_method.replace(/_/g, ' ');
+      methods[method] = (methods[method] || 0) + Number(receipt.amount || 0);
     });
     return Object.entries(methods).map(([name, value]) => ({ name, value }));
-  }, [receipts]);
+  }, [payments, receipts]);
 
   const exportReport = (type: string) => {
     let csv = '';
@@ -229,22 +430,34 @@ export default function Accounting() {
         </CardContent></Card>
       </div>
 
+      {(pettyCashError || operatingExpensesError) && <Card className="mb-4 border-destructive/40"><CardContent className="p-4 text-sm text-destructive">Some expense records could not be loaded. Expense totals and financial summaries may be incomplete; refresh or check finance-role access before relying on these figures.</CardContent></Card>}
+      {(pettyCashLoading || operatingExpensesLoading) && <p className="mb-3 text-sm text-muted-foreground">Loading complete expense records…</p>}
+
       <Tabs defaultValue="pl" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="coa">Chart of Accounts</TabsTrigger>
           <TabsTrigger value="ledger">General Ledger</TabsTrigger>
           <TabsTrigger value="pl">Recorded Income & Expenses</TabsTrigger>
+          <TabsTrigger value="profit">Profit &amp; Loss</TabsTrigger>
           <TabsTrigger value="balance">Business Balances</TabsTrigger>
           <TabsTrigger value="tax">Tax Returns</TabsTrigger>
           <TabsTrigger value="petty">Petty Cash</TabsTrigger>
+          <TabsTrigger value="expenses">Operating Expenses</TabsTrigger>
+          <TabsTrigger value="clearing">Payment Clearing</TabsTrigger>
           <TabsTrigger value="income-exp">Income & Expenditure</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="expenses">
+          <OperatingExpenseRegister currencySymbol={currencySymbol} />
+        </TabsContent>
         <TabsContent value="coa">
           <ChartOfAccounts />
         </TabsContent>
         <TabsContent value="ledger"><GeneralLedgerReport currencySymbol={currencySymbol} /></TabsContent>
         {/* Recorded income & expenses */}
+        <TabsContent value="profit">
+          <ProfitAndLossReport currencySymbol={currencySymbol} />
+        </TabsContent>
         <TabsContent value="pl">
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
@@ -293,7 +506,7 @@ export default function Accounting() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  <div className="flex justify-between py-2 border-b"><span>Money received on receipts</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
+                  <div className="flex justify-between py-2 border-b"><span>Money received (payments + standalone receipts)</span><span>{currencySymbol}{financials.totalReceived.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Unpaid invoice balances</span><span>{currencySymbol}{financials.outstanding.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Other income entries</span><span>{currencySymbol}{financials.pettyCashIncome.toLocaleString()}</span></div>
                   <div className="flex justify-between py-2 border-b"><span>Recorded petty cash expenses</span><span>{currencySymbol}{financials.operatingExpenses.toLocaleString()}</span></div>
@@ -379,7 +592,7 @@ export default function Accounting() {
                 </div>
               </div>
               <table className="data-table">
-                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th></tr></thead>
+                <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th>Correction</th></tr></thead>
                 <tbody>
                   {pettyCash.slice(0, 20).map(tx => (
                     <tr key={tx.id}>
@@ -389,6 +602,17 @@ export default function Accounting() {
                       <td><Badge className={tx.type === 'income' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}>{tx.type}</Badge></td>
                       <td className={cn('font-medium', tx.type === 'income' ? 'text-success' : 'text-destructive')}>
                         {tx.type === 'income' ? '+' : '-'}{currencySymbol}{Number(tx.amount).toLocaleString()}
+                      </td>
+                      <td>
+                        {tx.type === 'expense' ? (
+                          pettyCashReversalById.has(tx.id) ? (
+                            <Badge variant="outline">Reversed · {pettyCashReversalById.get(tx.id)?.reference_number}</Badge>
+                          ) : canReversePettyCash ? (
+                            <Button size="sm" variant="outline" onClick={() => setPettyCashToReverse({ id: tx.id, description: tx.description, amount: tx.amount })}>
+                              Reverse
+                            </Button>
+                          ) : '—'
+                        ) : '—'}
                       </td>
                     </tr>
                   ))}
@@ -443,6 +667,53 @@ export default function Accounting() {
         </TabsContent>
       </Tabs>
 
+
+      <Dialog open={!!pettyCashToReverse} onOpenChange={open => { if (!open) setPettyCashToReverse(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse Petty-Cash Expense</DialogTitle>
+            <DialogDescription>
+              {pettyCashToReverse ? `Record the actual refund/correction for “${pettyCashToReverse.description}” (${currencySymbol}${Number(pettyCashToReverse.amount).toFixed(2)}). The original transaction will remain unchanged.` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Refund / correction date *</Label>
+              <Input type="date" value={pettyCashReversalForm.reversedOn} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reversedOn: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Refund received into *</Label>
+              <Select value={pettyCashReversalForm.paymentMethod} onValueChange={v => setPettyCashReversalForm({ ...pettyCashReversalForm, paymentMethod: v as typeof pettyCashReversalForm.paymentMethod })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="debit_card">Debit Card</SelectItem>
+                  <SelectItem value="check">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea value={pettyCashReversalForm.reason} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reason: e.target.value })} placeholder="Explain why the expense is being reversed and confirm the refund/correction." />
+            </div>
+            <div className="space-y-2">
+              <Label>Refund / approval reference *</Label>
+              <Input value={pettyCashReversalForm.reference} onChange={e => setPettyCashReversalForm({ ...pettyCashReversalForm, reference: e.target.value })} placeholder="Receipt, bank reference or approval number" />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setPettyCashToReverse(null)}>Cancel</Button>
+              <Button onClick={() => reversePettyCashExpense.mutate()} disabled={reversePettyCashExpense.isPending || !pettyCashReversalForm.reason.trim() || !pettyCashReversalForm.reference.trim()}>
+                {reversePettyCashExpense.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Post Reversal
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Petty Cash Dialog */}
       <Dialog open={isPettyCashOpen} onOpenChange={setIsPettyCashOpen}>
         <DialogContent>
@@ -490,6 +761,20 @@ export default function Accounting() {
                 <Label>Reference #</Label>
                 <Input value={pettyCashForm.reference_number} onChange={e => setPettyCashForm({ ...pettyCashForm, reference_number: e.target.value })} placeholder="Optional" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Paid From</Label>
+              <Select value={pettyCashForm.payment_method} onValueChange={v => setPettyCashForm({ ...pettyCashForm, payment_method: v as typeof pettyCashForm.payment_method })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="debit_card">Debit Card</SelectItem>
+                  <SelectItem value="check">Cheque</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setIsPettyCashOpen(false)}>Cancel</Button>

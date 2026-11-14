@@ -16,14 +16,46 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
+import { format } from 'date-fns';
 import { useCurrency } from '@/contexts/CurrencyContext';
-import { Plus, Search, Loader2, Mail, Phone, Eye, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, Loader2, Mail, Phone, Eye, Trash2, Edit, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Customers() {
   const { customers, isLoading, createCustomer, updateCustomerAsync, deleteCustomer, isCreating } = useCustomers();
   const { formatCurrency } = useCurrency();
   const [searchQuery, setSearchQuery] = useState('');
+  const [asOfDate, setAsOfDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const { balances, isLoading: isBalanceLoading, error: balancesError } = useCustomerAccountBalances(asOfDate);
+  const balancesByCustomer = new Map(balances.map(balance => [balance.customer_id, balance.outstanding_balance]));
+  const totalOutstanding = balances.reduce((total, balance) => total + balance.outstanding_balance, 0);
+  const handleExportBalances = () => {
+    if (balancesError || isBalanceLoading) return;
+    const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const rows = [
+      ['Customer Code', 'Customer Name', 'Invoiced', 'Payments Received', 'Credit Notes Applied', 'Customer Credits Applied', 'Outstanding Balance', 'As At'],
+      ...balances.map(balance => [
+        balance.customer_code,
+        balance.customer_name,
+        balance.invoiced_amount.toFixed(2),
+        balance.payments_received.toFixed(2),
+        balance.credit_notes_applied.toFixed(2),
+        balance.customer_credits_applied.toFixed(2),
+        balance.outstanding_balance.toFixed(2),
+        balance.as_of_date,
+      ]),
+    ];
+    const csv = rows.map(row => row.map(cell).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `customer-balances-as-at-${asOfDate}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<(typeof customers)[number] | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -156,6 +188,27 @@ export default function Customers() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="customer-balance-as-of" className="text-xs text-muted-foreground">Balances as at</Label>
+              <Input
+                id="customer-balance-as-of"
+                type="date"
+                className="w-[170px]"
+                value={asOfDate}
+                max={format(new Date(), 'yyyy-MM-dd')}
+                onChange={(event) => setAsOfDate(event.target.value)}
+              />
+            </div>
+            <div className="ml-auto text-right text-sm">
+              <p className="text-muted-foreground">Total outstanding receivables</p>
+              <p className="font-semibold tabular-nums">
+                {isBalanceLoading ? 'Calculating…' : balancesError ? 'Unavailable' : formatCurrency(totalOutstanding)}
+              </p>
+              <p className="text-xs text-muted-foreground">{isBalanceLoading ? 'Calculating customer balances…' : balancesError ? 'Balance report could not be loaded' : `${balances.filter(balance => balance.outstanding_balance > 0).length} customers owing`}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={handleExportBalances} disabled={isBalanceLoading || Boolean(balancesError)}>
+              <Download className="mr-2 h-4 w-4" /> Export
+            </Button>
           </div>
 
           {isLoading ? (
@@ -183,7 +236,7 @@ export default function Customers() {
                 <tr>
                   <th>Customer</th>
                   <th>Contact</th>
-                  <th>Balance</th>
+                  <th>Balance (as at date)</th>
                   <th>Status</th>
                   <th className="w-24">Actions</th>
                 </tr>
@@ -223,7 +276,7 @@ export default function Customers() {
                         )}
                       </div>
                     </td>
-                    <td className="font-medium">{formatCurrency(customer.current_balance || 0)}</td>
+                    <td className="font-medium tabular-nums">{isBalanceLoading ? <span className="text-muted-foreground">Loading…</span> : balancesError ? <span className="text-destructive">Unavailable</span> : formatCurrency(balancesByCustomer.get(customer.id) ?? 0)}</td>
                     <td>
                       <Badge variant={customer.is_active ? 'default' : 'secondary'}>
                         {customer.is_active ? 'Active' : 'Inactive'}

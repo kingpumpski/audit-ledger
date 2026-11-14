@@ -4,7 +4,9 @@ import { escapeDeep, escapeHtml, requireRoles } from "../_shared/security.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, accept, x-supabase-api-version",
+  "Access-Control-Max-Age": "86400",
 };
 
 interface InvoicePdfRequest {
@@ -12,9 +14,39 @@ interface InvoicePdfRequest {
   returnHtml?: boolean;
 }
 
+function safeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    // Company logos may be hosted remotely, but active-content and non-web schemes
+    // must never be embedded in the generated invoice document.
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) return null;
+    return escapeHtml(parsed.toString());
+  } catch {
+    return null;
+  }
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  // Avoid spreading a large invoice HTML byte array into one function call.
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
@@ -26,7 +58,27 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { invoiceId, returnHtml = false }: InvoicePdfRequest = await req.json();
+    let requestBody: InvoicePdfRequest;
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "A valid JSON request body is required." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const invoiceId = requestBody?.invoiceId;
+    const returnHtml = requestBody?.returnHtml ?? false;
+    if (
+      typeof invoiceId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invoiceId) ||
+      typeof returnHtml !== "boolean"
+    ) {
+      return new Response(JSON.stringify({ error: "A valid invoice ID and optional boolean returnHtml value are required." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Fetch invoice with all related data
     const { data: rawInvoice, error: invoiceError } = await supabase
@@ -35,9 +87,11 @@ serve(async (req) => {
         *,
         customer:customers(*),
         items:invoice_items(*),
-        discount:discounts(*)
+        discount:discounts(*),
+        invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes(name, code))
       `)
       .eq("id", invoiceId)
+      .is("deleted_at", null)
       .single();
 
     if (invoiceError || !rawInvoice) {
@@ -58,7 +112,7 @@ serve(async (req) => {
     const settings = escapeDeep(rawSettings);
     const companyName = settings?.company_name || "InvoiceHub";
     const currencySymbol = settings?.currency_symbol || "$";
-    const companyLogo = settings?.company_logo_url || null;
+    const companyLogo = safeImageUrl(rawSettings?.company_logo_url);
 
     // Generate line items HTML
     const itemsHtml = invoice.items
@@ -74,6 +128,20 @@ serve(async (req) => {
         </tr>
       `)
       .join("");
+
+    const taxBreakdownHtml = (invoice.invoice_taxes ?? []).map((tax: {
+      tax_rate: number;
+      taxable_amount: number;
+      tax_amount: number;
+      tax?: { name?: string | null; code?: string | null } | null;
+    }) => `
+      <tr>
+        <td>${tax.tax?.name || tax.tax?.code || "Tax"}</td>
+        <td style="text-align: right;">${Number(tax.tax_rate || 0).toFixed(2)}%</td>
+        <td style="text-align: right;">${currencySymbol}${Number(tax.taxable_amount || 0).toFixed(2)}</td>
+        <td style="text-align: right;">${currencySymbol}${Number(tax.tax_amount || 0).toFixed(2)}</td>
+      </tr>
+    `).join("");
 
     const statusColors: Record<string, { bg: string; text: string }> = {
       draft: { bg: "#f1f5f9", text: "#475569" },
@@ -91,6 +159,8 @@ serve(async (req) => {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <title>Invoice ${invoice.invoice_number}</title>
   <style>
     @page { margin: 0; size: A4; }
@@ -119,6 +189,12 @@ serve(async (req) => {
     .items-table th:first-child { border-radius: 8px 0 0 0; }
     .items-table th:last-child { border-radius: 0 8px 0 0; }
     .items-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+    .tax-breakdown { margin: 24px 0 30px; }
+    .tax-breakdown h3 { font-size: 14px; margin-bottom: 10px; color: #475569; }
+    .tax-breakdown table { width: 100%; border-collapse: collapse; }
+    .tax-breakdown th, .tax-breakdown td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 12px; text-align: left; }
+    .tax-breakdown th { background: #f8fafc; color: #64748b; text-transform: uppercase; font-size: 10px; }
+    .tax-breakdown th:not(:first-child), .tax-breakdown td:not(:first-child) { text-align: right; }
     .totals-section { display: flex; justify-content: flex-end; }
     .totals-box { width: 300px; }
     .total-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
@@ -191,6 +267,16 @@ serve(async (req) => {
     </tbody>
   </table>
 
+  ${invoice.invoice_taxes?.length ? `
+  <section class="tax-breakdown">
+    <h3>Tax breakdown</h3>
+    <table>
+      <thead><tr><th>Tax</th><th>Rate</th><th>Taxable amount</th><th>Tax amount</th></tr></thead>
+      <tbody>${taxBreakdownHtml}</tbody>
+    </table>
+  </section>
+  ` : ""}
+
   <div class="totals-section">
     <div class="totals-box">
       <div class="total-row">
@@ -252,14 +338,20 @@ serve(async (req) => {
     if (returnHtml) {
       return new Response(pdfHtml, {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" },
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
+        },
       });
     }
 
     // Return as base64 encoded HTML for email attachment
     const encoder = new TextEncoder();
     const htmlBytes = encoder.encode(pdfHtml);
-    const base64Html = btoa(String.fromCharCode(...htmlBytes));
+    const base64Html = bytesToBase64(htmlBytes);
 
     return new Response(
       JSON.stringify({ 
@@ -268,7 +360,7 @@ serve(async (req) => {
         base64: base64Html,
         invoiceNumber: invoice.invoice_number
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } }
     );
 
   } catch (error) {

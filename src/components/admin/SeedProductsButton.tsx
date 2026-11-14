@@ -25,10 +25,10 @@ export function SeedProductsButton() {
             description: product.description,
             category: product.category,
             current_price: product.price,
-            cost_price: product.costPrice,
+            cost_price: null,
             unit: product.unit,
             is_service: product.isService,
-            stock_quantity: product.isService ? null : Math.floor(Math.random() * 100) + 10,
+            stock_quantity: product.isService ? null : 0,
             min_stock_level: product.isService ? null : 5,
             is_active: true,
             // SKU is NOT passed - system will auto-generate

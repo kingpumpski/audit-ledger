@@ -41,7 +41,6 @@ const PAYMENT_METHODS = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
   { value: 'check', label: 'Check' },
   { value: 'mobile_payment', label: 'Mobile Payment' },
-  { value: 'other', label: 'Other' },
 ] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value'];
 
@@ -70,6 +69,22 @@ export function RecordPaymentDialog({
   const { createPayment, isCreating } = usePayments();
   const { createReceipt, isCreating: isCreatingReceipt } = useReceipts();
   const [isOpen, setIsOpen] = useState(false);
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState(() => {
+    const storageKey = `audit-ledger:payment:${invoiceId}:idempotency-key`;
+    const existingKey = window.sessionStorage.getItem(storageKey);
+    if (existingKey) return existingKey;
+    const nextKey = crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, nextKey);
+    return nextKey;
+  });
+  const [receiptIdempotencyKey, setReceiptIdempotencyKey] = useState(() => {
+    const storageKey = `audit-ledger:payment-receipt:${invoiceId}:idempotency-key`;
+    const existingKey = window.sessionStorage.getItem(storageKey);
+    if (existingKey) return existingKey;
+    const nextKey = crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, nextKey);
+    return nextKey;
+  });
   const [formData, setFormData] = useState<PaymentFormData>({
     amount: balanceDue.toString(),
     payment_method: 'cash',
@@ -82,50 +97,51 @@ export function RecordPaymentDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const amount = parseFloat(formData.amount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({
-        title: 'Invalid amount',
-        description: 'Please enter a valid payment amount',
-        variant: 'destructive',
-      });
+
+    const amount = Number(formData.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({ title: 'Invalid amount', description: 'Please enter a valid payment amount.', variant: 'destructive' });
       return;
     }
-
     if (amount > balanceDue) {
       toast({
         title: 'Amount exceeds balance',
-        description: `Payment amount cannot exceed the balance due (${currencySymbol}${balanceDue.toFixed(2)})`,
+        description: `Payment amount cannot exceed the balance due (${currencySymbol}${balanceDue.toFixed(2)}).`,
         variant: 'destructive',
       });
       return;
     }
 
     try {
-      // Record the payment
-      const payment = await createPayment({
-        invoice_id: invoiceId,
-        customer_id: customerId,
-        amount,
-        payment_method: formData.payment_method,
-        reference_number: formData.reference_number || undefined,
-        notes: formData.notes || undefined,
-      });
-
-      // Auto-generate receipt if enabled
       if (formData.generate_receipt) {
+        // One RPC creates the payment, updates the invoice balance, posts the
+        // double-entry journal and issues the receipt in a single transaction.
         await createReceipt({
           customer_id: customerId,
           invoice_id: invoiceId,
-          payment_id: payment.id,
           amount,
           payment_method: formData.payment_method,
-          notes: `Payment for invoice ${invoiceNumber}`,
+          reference_number: formData.reference_number || undefined,
+          notes: formData.notes || `Payment for invoice ${invoiceNumber}`,
+          idempotency_key: receiptIdempotencyKey,
         });
         toast({
           title: 'Payment recorded & receipt generated',
-          description: `Payment of ${currencySymbol}${amount.toFixed(2)} has been recorded with receipt`,
+          description: `Payment of ${currencySymbol}${amount.toFixed(2)} was posted to the ledger with its receipt.`,
+        });
+      } else {
+        await createPayment({
+          invoice_id: invoiceId,
+          customer_id: customerId,
+          amount,
+          payment_method: formData.payment_method,
+          reference_number: formData.reference_number || undefined,
+          notes: formData.notes || undefined,
+          idempotency_key: paymentIdempotencyKey,
+        });
+        toast({
+          title: 'Payment recorded successfully',
+          description: `Payment of ${currencySymbol}${amount.toFixed(2)} was posted to the ledger.`,
         });
       }
 
@@ -137,9 +153,15 @@ export function RecordPaymentDialog({
         notes: '',
         generate_receipt: true,
       });
+      const nextPaymentKey = crypto.randomUUID();
+      const nextReceiptKey = crypto.randomUUID();
+      setPaymentIdempotencyKey(nextPaymentKey);
+      setReceiptIdempotencyKey(nextReceiptKey);
+      window.sessionStorage.setItem(`audit-ledger:payment:${invoiceId}:idempotency-key`, nextPaymentKey);
+      window.sessionStorage.setItem(`audit-ledger:payment-receipt:${invoiceId}:idempotency-key`, nextReceiptKey);
       onPaymentRecorded?.();
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Payment recording failed:', error);
     }
   };
 

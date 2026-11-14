@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Tables } from '@/integrations/supabase/types';
-import { calculateLineAmounts, isTaxEffectiveOnDate, type TaxRule } from '@/lib/tax-calculator';
+import { Tables, type Json } from '@/integrations/supabase/types';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from '@/lib/tax-calculator';
 
 type Invoice = Tables<'invoices'>;
 type InvoiceItem = Tables<'invoice_items'>;
@@ -58,12 +58,6 @@ export function useInvoices() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get next invoice number
-      const { data: invoiceNumber, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'invoice' });
-
-      if (seqError) throw seqError;
-
       // Load current tax definitions from the database; never trust tax rates sent by the browser.
       const selectedTaxIds = [...new Set(invoiceData.items.flatMap(item => item.tax_ids || []))];
       let taxRules: TaxRule[] = [];
@@ -75,6 +69,8 @@ export function useInvoices() {
           .eq('is_active', true);
         if (taxError) throw taxError;
         taxRules = (taxRows || []) as TaxRule[];
+
+        validateSelectedTaxRules(selectedTaxIds, taxRules, invoiceData.issue_date || new Date().toISOString().slice(0, 10));
       }
 
       const productIds = [...new Set(invoiceData.items.map(item => item.product_id).filter((id): id is string => Boolean(id)))];
@@ -92,15 +88,11 @@ export function useInvoices() {
       let subtotal = 0;
       let taxAmount = 0;
       let discountAmount = 0;
-      const taxTotals = new Map<string, { tax_id: string; tax_rate: number; taxable_amount: number; tax_amount: number; liability_account_id: string }>();
 
       const processedItems = invoiceData.items.map((item, index) => {
         const category = item.product_id ? productCategories.get(item.product_id) : null;
-        const applicableTaxes = taxRules.filter(tax =>
-          (item.tax_ids || []).includes(tax.id) &&
-          isTaxEffectiveOnDate(tax, invoiceDate) &&
-          (!tax.applies_to_category || tax.applies_to_category.toLowerCase() === (category || '').toLowerCase())
-        );
+        const selectedTaxesForItem = taxRules.filter(tax => (item.tax_ids || []).includes(tax.id));
+        const applicableTaxes = validateTaxCategoryApplicability(selectedTaxesForItem, category, item.description);
         const calculation = calculateLineAmounts({
           quantity: item.quantity,
           unit_price: item.unit_price,
@@ -113,29 +105,13 @@ export function useInvoices() {
         subtotal += calculation.subtotal;
         discountAmount += calculation.discount_amount;
         taxAmount += calculation.tax_amount;
-        calculation.taxes.forEach(tax => {
-          const rule = taxRules.find(candidate => candidate.id === tax.tax_id);
-          if (!rule?.liability_account_id) {
-            throw new Error(`Tax ${tax.code} has no liability account configured`);
-          }
-          const current = taxTotals.get(tax.tax_id) || {
-            tax_id: tax.tax_id,
-            tax_rate: tax.rate,
-            taxable_amount: 0,
-            tax_amount: 0,
-            liability_account_id: rule.liability_account_id,
-          };
-          current.taxable_amount += tax.taxable_amount;
-          current.tax_amount += tax.tax_amount;
-          taxTotals.set(tax.tax_id, current);
-        });
-
         return {
           ...item,
           line_total: calculation.line_total,
           tax_amount: calculation.tax_amount,
           tax_rate: calculation.nominal_tax_rate,
           sort_order: index,
+          tax_breakdown: calculation.taxes,
         };
       });
 
@@ -146,66 +122,47 @@ export function useInvoices() {
         ? Math.round((subtotal - discountAmount + Number.EPSILON) * 100) / 100
         : Math.round((subtotal - discountAmount + taxAmount + Number.EPSILON) * 100) / 100;
 
-      // Create invoice
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert({
-          invoice_number: invoiceNumber,
-          customer_id: invoiceData.customer_id,
-          due_date: invoiceData.due_date,
-          issue_date: invoiceDate,
-          notes: invoiceData.notes,
-          terms: invoiceData.terms,
-          subtotal,
-          discount_amount: discountAmount,
-          tax_amount: taxAmount,
-          total_amount: totalAmount,
-          balance_due: totalAmount,
-          created_by: user.id,
-          status: 'draft',
-        })
-        .select()
-        .single();
+      // Persist the draft, all line items and both levels of tax evidence in
+      // one database transaction. The RPC revalidates the authoritative tax
+      // definitions and reconciles every line/header total before committing.
+      const { data: invoiceId, error: createError } = await supabase.rpc('create_invoice_draft', {
+        p_customer_id: invoiceData.customer_id,
+        p_issue_date: invoiceDate,
+        p_due_date: invoiceData.due_date || null,
+        p_notes: invoiceData.notes || null,
+        p_terms: invoiceData.terms || null,
+        p_prices_include_tax: Boolean(invoiceData.prices_include_tax),
+        p_subtotal: subtotal,
+        p_discount_amount: discountAmount,
+        p_tax_amount: taxAmount,
+        p_total_amount: totalAmount,
+        p_items: processedItems.map(item => ({
+          product_id: item.product_id || null,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          discount_type: item.discount_type || null,
+          discount_value: item.discount_value || 0,
+          tax_rate: item.tax_rate || 0,
+          tax_amount: item.tax_amount,
+          line_total: item.line_total,
+          sort_order: item.sort_order,
+          tax_breakdown: item.tax_breakdown.map(tax => ({
+            tax_id: tax.tax_id,
+            name: tax.name,
+            code: tax.code,
+            rate: tax.rate,
+            taxable_amount: tax.taxable_amount,
+            tax_amount: tax.tax_amount,
+            is_compound: tax.is_compound,
+            tax_order: tax.tax_order,
+          })),
+        })) as unknown as Json,
+      });
 
-      if (invoiceError) throw invoiceError;
-
-      // Create invoice items
-      const itemsToInsert = processedItems.map(item => ({
-        invoice_id: invoice.id,
-        product_id: item.product_id || null,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        discount_type: item.discount_type || null,
-        discount_value: item.discount_value || 0,
-        tax_rate: item.tax_rate || 0,
-        tax_amount: item.tax_amount,
-        line_total: item.line_total,
-        sort_order: item.sort_order,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(itemsToInsert);
-
-      if (itemsError) throw itemsError;
-
-      const invoiceTaxRows = [...taxTotals.values()].map(tax => ({
-        invoice_id: invoice.id,
-        tax_id: tax.tax_id,
-        tax_rate: tax.tax_rate,
-        taxable_amount: Math.round((tax.taxable_amount + Number.EPSILON) * 100) / 100,
-        tax_amount: Math.round((tax.tax_amount + Number.EPSILON) * 100) / 100,
-        liability_account_id: tax.liability_account_id,
-      }));
-      if (invoiceTaxRows.length > 0) {
-        const { error: invoiceTaxesError } = await supabase
-          .from('invoice_taxes')
-          .insert(invoiceTaxRows);
-        if (invoiceTaxesError) throw invoiceTaxesError;
-      }
-
-      return invoice;
+      if (createError) throw createError;
+      if (!invoiceId) throw new Error('Invoice draft was not created. Please retry.');
+      return { id: invoiceId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -251,8 +208,11 @@ export function useInvoices() {
 
       return { requiresDomainVerification: false };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, invoiceId) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
 
       if (result?.requiresDomainVerification) {
         toast({
@@ -276,6 +236,7 @@ export function useInvoices() {
     error: invoicesQuery.error,
     createInvoice: createInvoiceMutation.mutateAsync,
     issueInvoice: issueInvoiceMutation.mutate,
+    issueInvoiceAsync: issueInvoiceMutation.mutateAsync,
     isCreating: createInvoiceMutation.isPending,
     isIssuing: issueInvoiceMutation.isPending,
   };

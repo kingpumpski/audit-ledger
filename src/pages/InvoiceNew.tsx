@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/popover';
 import { useInvoices } from '@/hooks/useInvoices';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
 import { useProducts, type Product } from '@/hooks/useProducts';
 import { useTaxes } from '@/hooks/useTaxes';
 import { useSettings } from '@/hooks/useSettings';
@@ -58,17 +59,18 @@ interface LineItem {
 export default function InvoiceNew() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { createInvoice, issueInvoice, isCreating, isIssuing } = useInvoices();
+  const { createInvoice, issueInvoiceAsync, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
   const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined, Boolean(customerId));
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogTargetId, setProductDialogTargetId] = useState<string | null>(null);
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', unit: 'piece', current_price: 0 });
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '' });
   const [issueDate, setIssueDate] = useState<Date>(new Date());
   const [pricesIncludeTax, setPricesIncludeTax] = useState(false);
@@ -80,7 +82,7 @@ export default function InvoiceNew() {
   ]);
   const [showPreview, setShowPreview] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [activeProductPickerId, setActiveProductPickerId] = useState<string | null>(null);
 
   const currencySymbol = settings?.currency_symbol || '$';
 
@@ -167,6 +169,7 @@ export default function InvoiceNew() {
   const total = pricesIncludeTax ? subtotal - totalDiscount : subtotal - totalDiscount + totalTax;
 
   const selectedCustomer = customers.find(c => c.id === customerId);
+  const selectedCustomerBalance = selectedCustomerBalances[0]?.outstanding_balance ?? 0;
 
   const handleCreateCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -226,12 +229,22 @@ export default function InvoiceNew() {
         })),
       });
 
-      if (!asDraft && invoice?.id) {
-        // Issue the invoice immediately
-        issueInvoice(invoice.id);
+      if (!invoice?.id) {
+        throw new Error('The invoice was saved but its reference could not be confirmed. Please check the invoice list before trying again.');
       }
 
-      navigate('/invoices');
+      // When issuing immediately, wait for the database transaction to finish.
+      // Even if issuing fails, take the user to the saved invoice so it can be reviewed.
+      if (!asDraft) {
+        try {
+          await issueInvoiceAsync(invoice.id);
+        } catch {
+          navigate(`/invoices/${invoice.id}`);
+          return;
+        }
+      }
+
+      navigate(`/invoices/${invoice.id}`);
     } catch (error) {
       console.error('Failed to create invoice:', error);
     }
@@ -266,16 +279,17 @@ export default function InvoiceNew() {
         })),
       });
 
-      if (invoice?.id) {
-        // Issue and send email
-        issueInvoice(invoice.id);
-        toast({
-          title: 'Invoice Created & Sent',
-          description: 'The invoice has been created and will be emailed to the customer.',
-        });
+      if (!invoice?.id) {
+        throw new Error('The invoice was saved but its reference could not be confirmed. Please check the invoice list before trying again.');
       }
 
-      navigate('/invoices');
+      // Wait for issue/posting to finish before opening the review page.
+      // The issue mutation handles email delivery and reports any domain restrictions.
+      try {
+        await issueInvoiceAsync(invoice.id);
+      } finally {
+        navigate(`/invoices/${invoice.id}`);
+      }
     } catch (error) {
       console.error('Failed to create and send invoice:', error);
     }
@@ -316,15 +330,15 @@ export default function InvoiceNew() {
                   category: newProduct.category.trim() || null,
                   unit: newProduct.unit.trim() || 'piece',
                   current_price: Number(newProduct.current_price),
-                  cost_price: Number(newProduct.cost_price),
-                  stock_quantity: Number(newProduct.stock_quantity),
+                  cost_price: null,
+                  stock_quantity: 0,
                   min_stock_level: 0,
                   description: null,
                   is_service: false,
                   is_active: true,
                 });
                 selectProduct(productDialogTargetId, created.id, created);
-                setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0, cost_price: 0, stock_quantity: 0 });
+                setNewProduct({ name: '', sku: '', category: '', unit: 'piece', current_price: 0 });
                 setProductSearchQuery('');
                 setProductDialogTargetId(null);
                 setIsProductDialogOpen(false);
@@ -355,14 +369,9 @@ export default function InvoiceNew() {
                 <Label htmlFor="invoice-new-product-price">Selling Price ({currencySymbol}) *</Label>
                 <Input id="invoice-new-product-price" type="number" min="0" step="0.01" value={newProduct.current_price} onChange={e => setNewProduct(v => ({ ...v, current_price: Number(e.target.value) }))} required />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="invoice-new-product-cost">Cost Price ({currencySymbol})</Label>
-                <Input id="invoice-new-product-cost" type="number" min="0" step="0.01" value={newProduct.cost_price} onChange={e => setNewProduct(v => ({ ...v, cost_price: Number(e.target.value) }))} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="invoice-new-product-stock">Opening Stock</Label>
-                <Input id="invoice-new-product-stock" type="number" min="0" step="0.01" value={newProduct.stock_quantity} onChange={e => setNewProduct(v => ({ ...v, stock_quantity: Number(e.target.value) }))} />
-              </div>
+              <p className="text-sm text-muted-foreground sm:col-span-2">
+                New products start with zero stock and no verified purchase cost. Record the actual stock purchase in Inventory before issuing an invoice; this keeps inventory valuation and profit reporting accurate.
+              </p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsProductDialogOpen(false)}>Cancel</Button>
@@ -430,6 +439,14 @@ export default function InvoiceNew() {
                       <SelectItem value="__add_customer__">+ Add new customer…</SelectItem>
                     </SelectContent>
                   </Select>
+                  {customerId && (
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Current outstanding balance</span>
+                      <span className="font-semibold tabular-nums">
+                        {isCustomerBalanceLoading ? 'Calculating…' : selectedCustomerBalanceError ? 'Unavailable' : `${currencySymbol}${selectedCustomerBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                  )}
                   <Button type="button" variant="link" className="h-auto p-0" onClick={() => setIsCustomerDialogOpen(true)}>
                     <Plus className="mr-1 h-3.5 w-3.5" />Add customer if not listed
                   </Button>
@@ -439,17 +456,17 @@ export default function InvoiceNew() {
                   <Label>Due Date *</Label>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-start">
+                      <Button type="button" variant="outline" className="w-full justify-start font-normal">
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {format(dueDate, 'PPP')}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                    <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
                         selected={dueDate}
                         onSelect={(date) => date && setDueDate(date)}
-                         />
+                      />
                     </PopoverContent>
                   </Popover>
                 </div>
@@ -512,44 +529,86 @@ export default function InvoiceNew() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-2 md:col-span-2">
                       <Label>Product (Optional)</Label>
-                      <Select 
-                        value={item.product_id || 'none'} 
-                        onValueChange={(v) => {
-                          if (v === '__add_product__') {
-                            setProductDialogTargetId(item.id);
-                            setIsProductDialogOpen(true);
-                          } else if (v !== 'none') {
-                            selectProduct(item.id, v);
-                          }
+                      <Popover
+                        open={activeProductPickerId === item.id}
+                        onOpenChange={(open) => {
+                          setActiveProductPickerId(open ? item.id : null);
+                          if (!open) setProductSearchQuery('');
                         }}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select product or enter manually" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="p-2">
-                            <div className="relative">
-                              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                              <Input
-                                placeholder="Search products..."
-                                value={productSearchQuery}
-                                onChange={(e) => setProductSearchQuery(e.target.value)}
-                                className="pl-8"
-                              />
-                            </div>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={activeProductPickerId === item.id}
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="truncate">
+                              {products.find(product => product.id === item.product_id)?.name || 'Select product or enter manually'}
+                            </span>
+                            <Search className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+                          <div className="relative mb-2">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              autoFocus
+                              placeholder="Search by product name or SKU..."
+                              value={productSearchQuery}
+                              onChange={(event) => setProductSearchQuery(event.target.value)}
+                              className="pl-8"
+                            />
                           </div>
-                          <SelectItem value="none">-- Enter manually --</SelectItem>
-                          {filteredProducts.map(product => (
-                            <SelectItem key={product.id} value={product.id}>
-                              <div className="flex justify-between items-center gap-4">
-                                <span>{product.name}</span>
-                                <span className="text-muted-foreground">{currencySymbol}{product.current_price}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="__add_product__">+ Add new product…</SelectItem>
-                        </SelectContent>
-                      </Select>
+                          <div className="max-h-64 space-y-1 overflow-y-auto">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="w-full justify-start font-normal"
+                              onClick={() => {
+                                updateItem(item.id, { product_id: undefined, tax_ids: generalTaxIds, taxes_manually_selected: false });
+                                setActiveProductPickerId(null);
+                                setProductSearchQuery('');
+                              }}
+                            >
+                              -- Enter manually --
+                            </Button>
+                            {filteredProducts.map(product => (
+                              <Button
+                                key={product.id}
+                                type="button"
+                                variant="ghost"
+                                className="h-auto w-full justify-between gap-3 py-2 text-left font-normal"
+                                onClick={() => {
+                                  selectProduct(item.id, product.id);
+                                  setActiveProductPickerId(null);
+                                  setProductSearchQuery('');
+                                }}
+                              >
+                                <span className="min-w-0 truncate">{product.name} <span className="text-muted-foreground">({product.sku})</span></span>
+                                <span className="shrink-0 text-muted-foreground">{currencySymbol}{product.current_price}</span>
+                              </Button>
+                            ))}
+                            {filteredProducts.length === 0 && (
+                              <p className="px-3 py-4 text-center text-sm text-muted-foreground">No matching products found.</p>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                setProductDialogTargetId(item.id);
+                                setIsProductDialogOpen(true);
+                                setActiveProductPickerId(null);
+                                setProductSearchQuery('');
+                              }}
+                            >
+                              + Add new product…
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="space-y-2 md:col-span-2">

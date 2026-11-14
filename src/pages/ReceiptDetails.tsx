@@ -57,6 +57,7 @@ export default function ReceiptDetails() {
           invoice:invoices(*)
         `)
         .eq('id', id!)
+        .or('deleted_at.is.null,status.eq.void')
         .single();
 
       if (error) throw error;
@@ -333,8 +334,8 @@ export default function ReceiptDetails() {
         receipt={receipt}
         open={isEditing}
         onOpenChange={setIsEditing}
-        onSave={async (id, data, notifyCustomer) => {
-          await updateReceipt({ id, data, notifyCustomer });
+        onSave={async (id, data) => {
+          await updateReceipt({ id, data });
         }}
         isUpdating={isUpdating}
       />

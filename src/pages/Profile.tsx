@@ -8,13 +8,18 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { SignaturePad } from '@/components/SignaturePad';
 import { MfaSettingsCard } from '@/components/auth/MfaSettingsCard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import type { UserPersona } from '@/config/sidebarConfig';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, User, Pen, Save } from 'lucide-react';
 
 export default function Profile() {
   const { profile, isLoading, updateProfile, updateSignature, isUpdating, isUpdatingSignature } = useProfile();
-  const { roles } = useAuth();
+  const { roles, userPersona, setUserPersona } = useAuth();
+  const { toast } = useToast();
+  const [isSavingPersona, setIsSavingPersona] = useState(false);
   
   const [formData, setFormData] = useState({
     full_name: '',
@@ -155,6 +160,56 @@ export default function Profile() {
                 )}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Navigation experience</CardTitle>
+            <CardDescription>
+              Choose the wording that best matches your accounting experience. This preference is saved to your account and follows you when you sign in on another device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="user-persona">Sidebar navigation</Label>
+              <Select
+                value={userPersona}
+                onValueChange={async (value) => {
+                  setIsSavingPersona(true);
+                  try {
+                    await setUserPersona(value as UserPersona);
+                    toast({
+                      title: 'Navigation preference saved',
+                      description: value === 'expert'
+                        ? 'Your sidebar now uses standard accounting terminology.'
+                        : 'Your sidebar now uses simpler business-friendly labels.',
+                    });
+                  } catch (error) {
+                    toast({
+                      title: 'Could not save preference',
+                      description: error instanceof Error ? error.message : 'Please try again.',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                    setIsSavingPersona(false);
+                  }
+                }}
+                disabled={isSavingPersona}
+              >
+                <SelectTrigger id="user-persona" aria-label="Choose sidebar navigation style">
+                  <SelectValue placeholder="Choose navigation style" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="simplified">Simplified — everyday business language</SelectItem>
+                  <SelectItem value="expert">Expert — standard accounting terminology</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              This changes navigation labels only. Your permissions, records and page addresses remain unchanged.
+              {isSavingPersona ? ' Saving preference…' : ''}
+            </p>
           </CardContent>
         </Card>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Form,
@@ -20,21 +19,11 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Loader2, Save, Mail, MessageSquare } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 import { ReceiptWithRelations } from '@/hooks/useReceipts';
 
 const editReceiptSchema = z.object({
   notes: z.string().optional(),
-  payment_method: z.enum(['cash', 'credit_card', 'debit_card', 'bank_transfer', 'check', 'mobile_payment', 'other']),
 });
 
 type EditReceiptFormData = z.infer<typeof editReceiptSchema>;
@@ -43,7 +32,7 @@ interface EditReceiptDialogProps {
   receipt: ReceiptWithRelations | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (id: string, data: EditReceiptFormData, notifyCustomer: boolean) => Promise<void>;
+  onSave: (id: string, data: EditReceiptFormData) => Promise<void>;
   isUpdating: boolean;
 }
 
@@ -54,13 +43,11 @@ export function EditReceiptDialog({
   onSave,
   isUpdating,
 }: EditReceiptDialogProps) {
-  const [notifyCustomer, setNotifyCustomer] = useState(false);
 
   const form = useForm<EditReceiptFormData>({
     resolver: zodResolver(editReceiptSchema),
     defaultValues: {
       notes: '',
-      payment_method: 'cash',
     },
   });
 
@@ -68,26 +55,15 @@ export function EditReceiptDialog({
     if (receipt) {
       form.reset({
         notes: receipt.notes || '',
-        payment_method: receipt.payment_method,
       });
     }
   }, [receipt, form]);
 
   const handleSubmit = async (data: EditReceiptFormData) => {
     if (!receipt) return;
-    await onSave(receipt.id, data, notifyCustomer);
+    await onSave(receipt.id, data);
     onOpenChange(false);
   };
-
-  const paymentMethods = [
-    { value: 'cash', label: 'Cash' },
-    { value: 'credit_card', label: 'Credit Card' },
-    { value: 'debit_card', label: 'Debit Card' },
-    { value: 'bank_transfer', label: 'Bank Transfer' },
-    { value: 'check', label: 'Check' },
-    { value: 'mobile_payment', label: 'Mobile Payment' },
-    { value: 'other', label: 'Other' },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -101,31 +77,6 @@ export function EditReceiptDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="payment_method"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Payment Method</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select payment method" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {paymentMethods.map((method) => (
-                        <SelectItem key={method.value} value={method.value}>
-                          {method.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="notes"
@@ -144,21 +95,9 @@ export function EditReceiptDialog({
               )}
             />
 
-            <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
-              <div className="space-y-0.5">
-                <Label htmlFor="notify-customer" className="text-base">
-                  Notify Customer
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Send email/SMS notification about the update
-                </p>
-              </div>
-              <Switch
-                id="notify-customer"
-                checked={notifyCustomer}
-                onCheckedChange={setNotifyCustomer}
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Amount and payment method are locked after issue because they affect the accounting ledger. If either is incorrect, void the receipt and issue a corrected one.
+            </p>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button

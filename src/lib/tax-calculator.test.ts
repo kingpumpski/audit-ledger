@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLineAmounts, isTaxEffectiveOnDate, type TaxRule } from './tax-calculator';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from './tax-calculator';
 
 const vat: TaxRule = { id: 'vat', name: 'VAT', code: 'VAT', rate: 10, is_compound: false };
 const levy: TaxRule = { id: 'levy', name: 'Levy', code: 'LEVY', rate: 2, is_compound: false };
@@ -36,12 +36,72 @@ describe('calculateLineAmounts', () => {
     expect(result.line_total).toBe(99);
   });
 
+  it('preserves a selected zero-rated tax in the tax evidence breakdown', () => {
+    const zeroRated: TaxRule = { ...vat, id: 'zero', code: 'ZERO', rate: 0 };
+    const result = calculateLineAmounts({
+      quantity: 1, unit_price: 100, taxes: [zeroRated], pricesIncludeTax: false,
+    });
+    expect(result.tax_amount).toBe(0);
+    expect(result.taxes).toHaveLength(1);
+    expect(result.taxes[0]).toMatchObject({ tax_id: 'zero', rate: 0, tax_amount: 0 });
+  });
+
   it('returns a no-tax total without changing the price', () => {
     const result = calculateLineAmounts({
       quantity: 3, unit_price: 12.5, taxes: [], pricesIncludeTax: false,
     });
     expect(result.line_total).toBe(37.5);
     expect(result.tax_amount).toBe(0);
+  });
+});
+
+describe('validateSelectedTaxRules', () => {
+  it('rejects selected taxes that are no longer active or available', () => {
+    expect(() => validateSelectedTaxRules(['vat', 'inactive'], [vat], '2026-11-14'))
+      .toThrow('no longer active or available');
+  });
+
+  it('rejects selected taxes outside their effective date', () => {
+    const expired: TaxRule = { ...vat, effective_to: '2026-10-31', liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [expired], '2026-11-14'))
+      .toThrow('not effective on the invoice date');
+  });
+
+  it('rejects selected taxes without a liability account', () => {
+    expect(() => validateSelectedTaxRules(['vat'], [vat], '2026-11-14'))
+      .toThrow('has no liability account configured');
+  });
+
+  it('rejects negative or out-of-range tax rates instead of omitting them', () => {
+    const invalid: TaxRule = { ...vat, rate: -1, liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [invalid], '2026-11-14'))
+      .toThrow('invalid rate');
+  });
+
+  it('accepts all selected taxes when active, effective and mapped', () => {
+    const configured: TaxRule = { ...vat, liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [configured], '2026-11-14')).not.toThrow();
+  });
+});
+
+
+describe('validateTaxCategoryApplicability', () => {
+  it('preserves general taxes and category-matching taxes', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(validateTaxCategoryApplicability([vat, categoryTax], 'medical', 'Consultation'))
+      .toEqual([vat, categoryTax]);
+  });
+
+  it('rejects a selected tax that does not apply to the item category', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(() => validateTaxCategoryApplicability([categoryTax], 'Retail', 'Office chair'))
+      .toThrow('does not apply to the category');
+  });
+
+  it('rejects category-specific taxes on unclassified manual items', () => {
+    const categoryTax: TaxRule = { ...vat, applies_to_category: 'Medical' };
+    expect(() => validateTaxCategoryApplicability([categoryTax], null, 'Manual service'))
+      .toThrow('does not apply to the category');
   });
 });
 

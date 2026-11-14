@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Download } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Download, RefreshCw } from 'lucide-react';
 
 type LedgerEntry = {
   id: string;
@@ -32,6 +33,7 @@ type TrialBalanceRow = {
 };
 
 export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string }) {
+  const queryClient = useQueryClient();
   const journalQuery = useQuery({
     queryKey: ['journal-ledger-entries'],
     queryFn: async (): Promise<LedgerEntry[]> => {
@@ -51,7 +53,28 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
       }
       return allEntries;
     },
+    // Realtime events are the primary refresh path; polling is a safety net
+    // for browsers/networks where a Realtime connection is unavailable.
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('journal-ledger-live-updates')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'journal_entries' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const trialBalance = useMemo<TrialBalanceRow[]>(() => {
     const balances = new Map<string, TrialBalanceRow>();
@@ -86,6 +109,8 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
 
   const totalDebits = trialBalance.reduce((sum, row) => sum + row.debit, 0);
   const totalCredits = trialBalance.reduce((sum, row) => sum + row.credit, 0);
+  const balanceDifference = Math.abs(totalDebits - totalCredits);
+  const isBalanced = balanceDifference < 0.005;
 
   const downloadTrialBalance = () => {
     const headers = ['Account Code', 'Account', 'Type', 'Debit Balance', 'Credit Balance', 'Net Balance'];
@@ -109,11 +134,16 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>Posted Trial Balance</CardTitle>
-          <CardDescription>Balances from issued invoice and received-payment journal entries.</CardDescription>
+          <CardDescription>Live posted balances across invoices, payments, receipts, inventory and recorded expenses.</CardDescription>
         </div>
-        <Button variant="outline" size="sm" onClick={downloadTrialBalance} disabled={trialBalance.length === 0}>
-          <Download className="mr-2 h-4 w-4" />Export CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => void journalQuery.refetch()} disabled={journalQuery.isFetching}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${journalQuery.isFetching ? 'animate-spin' : ''}`} />Refresh
+          </Button>
+          <Button variant="outline" size="sm" onClick={downloadTrialBalance} disabled={trialBalance.length === 0}>
+            <Download className="mr-2 h-4 w-4" />Export CSV
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -128,6 +158,19 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
           <div className="rounded-lg bg-muted/40 p-3">
             <p className="text-sm text-muted-foreground">Credit balances</p>
             <p className="text-xl font-semibold">{formatAmount(totalCredits)}</p>
+          </div>
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-sm text-muted-foreground">Reconciliation status</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Badge variant={isBalanced ? 'secondary' : 'destructive'}>
+                {isBalanced ? 'Balanced' : 'Out of balance'}
+              </Badge>
+              {!isBalanced && (
+                <span className="text-sm font-semibold text-destructive tabular-nums">
+                  Difference: {formatAmount(balanceDifference)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {journalQuery.isLoading ? (
@@ -160,7 +203,7 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
           </div>
         )}
         <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
-          This is a partial ledger view for invoice and payment postings. Petty cash expenses, stock purchases, cost of goods sold, opening balances and bank reconciliations are not yet journalised here, so this is not a complete set of financial statements.
+          This ledger includes posted invoice and payment activity, unapplied receipts, petty-cash and supplier expenses, stock purchases, verified cost of goods sold and inventory damage. It is not yet a complete set of financial statements: opening balances, bank reconciliations and an independently reconciled completeness attestation are still required. A balanced trial balance confirms debit/credit equality, not that every real-world transaction has been recorded.
         </p>
       </CardContent>
     </Card>
