@@ -122,3 +122,19 @@ export function validateSelectedTaxRules(selectedTaxIds: string[], taxRules: Tax
     throw new Error(`Tax ${unconfiguredTax.code} has no liability account configured.`);
   }
 }
+
+/** Validate selected category-specific taxes instead of silently dropping them. */
+export function validateTaxCategoryApplicability(
+  selectedTaxes: TaxRule[],
+  category: string | null | undefined,
+  itemDescription: string,
+): TaxRule[] {
+  const mismatch = selectedTaxes.find(tax =>
+    tax.applies_to_category &&
+    tax.applies_to_category.toLowerCase() !== (category || '').toLowerCase()
+  );
+  if (mismatch) {
+    throw new Error(`Tax ${mismatch.code} does not apply to the category of invoice item "${itemDescription}". Review the selected taxes.`);
+  }
+  return selectedTaxes;
+}
