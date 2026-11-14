@@ -54,7 +54,7 @@ WHERE coa.code='2100' AND coa.account_type='liability' AND coa.is_active
 LIMIT 1;
 
 SELECT extensions.lives_ok(
-  $
+  $atomic_zero_tax$
     SELECT public.create_invoice_draft(
       (SELECT id FROM public.customers WHERE code='ATOMIC-INVOICE-CUSTOMER'),
       CURRENT_DATE, NULL, 'Atomic zero-rated tax', NULL, false,
@@ -81,7 +81,7 @@ SELECT extensions.lives_ok(
         ))
       ))
     )
-  $,
+  $atomic_zero_tax$,
   'An explicitly selected zero-rated tax is saved as invoice tax evidence'
 );
 
