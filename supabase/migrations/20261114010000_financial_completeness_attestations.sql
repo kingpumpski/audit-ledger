@@ -9,11 +9,12 @@ CREATE TABLE public.financial_completeness_attestations (
   evidence_digest text NOT NULL CHECK (length(evidence_digest) = 32),
   idempotency_key uuid NOT NULL UNIQUE,
   attested_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
-  attested_at timestamptz NOT NULL DEFAULT now()
+  attestation_sequence bigint GENERATED ALWAYS AS IDENTITY UNIQUE NOT NULL,
+  attested_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
 CREATE INDEX financial_completeness_attestations_latest_idx
-  ON public.financial_completeness_attestations(attested_at DESC, id DESC);
+  ON public.financial_completeness_attestations(attestation_sequence DESC);
 
 ALTER TABLE public.financial_completeness_attestations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY financial_completeness_attestations_finance_read
@@ -145,7 +146,7 @@ BEGIN
     a.attested_at,
     a.evidence_digest = public.financial_completeness_evidence_digest(a.attested_through)
   FROM public.financial_completeness_attestations a
-  ORDER BY a.attested_at DESC, a.id DESC
+  ORDER BY a.attestation_sequence DESC
   LIMIT 1;
 END;
 $get_financial_attestation$;
