@@ -58,7 +58,8 @@ BEGIN
   SELECT id INTO v_account_id
   FROM public.chart_of_accounts
   WHERE code=v_code AND account_type='asset' AND is_active=true
-  LIMIT 1;
+  LIMIT 1
+  FOR UPDATE;
 
   IF v_account_id IS NULL THEN
     RAISE EXCEPTION 'The ledger account % required for payment method % is not configured or active',v_code,p_payment_method;
