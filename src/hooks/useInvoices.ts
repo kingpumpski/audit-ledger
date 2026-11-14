@@ -58,12 +58,6 @@ export function useInvoices() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get next invoice number
-      const { data: invoiceNumber, error: seqError } = await supabase
-        .rpc('get_next_sequence', { seq_name: 'invoice' });
-
-      if (seqError) throw seqError;
-
       // Load current tax definitions from the database; never trust tax rates sent by the browser.
       const selectedTaxIds = [...new Set(invoiceData.items.flatMap(item => item.tax_ids || []))];
       let taxRules: TaxRule[] = [];
@@ -146,96 +140,38 @@ export function useInvoices() {
         ? Math.round((subtotal - discountAmount + Number.EPSILON) * 100) / 100
         : Math.round((subtotal - discountAmount + taxAmount + Number.EPSILON) * 100) / 100;
 
-      // Create invoice
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert({
-          invoice_number: invoiceNumber,
-          customer_id: invoiceData.customer_id,
-          due_date: invoiceData.due_date,
-          issue_date: invoiceDate,
-          notes: invoiceData.notes,
-          terms: invoiceData.terms,
-          subtotal,
-          discount_amount: discountAmount,
-          tax_amount: taxAmount,
-          total_amount: totalAmount,
-          balance_due: totalAmount,
-          created_by: user.id,
-          status: 'draft',
-        })
-        .select()
-        .single();
-
-      if (invoiceError) throw invoiceError;
-
-      // Create invoice items
-      const itemsToInsert = processedItems.map(item => ({
-        invoice_id: invoice.id,
-        product_id: item.product_id || null,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        discount_type: item.discount_type || null,
-        discount_value: item.discount_value || 0,
-        tax_rate: item.tax_rate || 0,
-        tax_amount: item.tax_amount,
-        line_total: item.line_total,
-        sort_order: item.sort_order,
-      }));
-
-      const { data: createdItems, error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(itemsToInsert)
-        .select('id, sort_order');
-
-      if (itemsError) throw itemsError;
-
-      const invoiceItemTaxRows = (createdItems || []).flatMap(createdItem => {
-        const processedItem = processedItems.find(item => item.sort_order === createdItem.sort_order);
-        return (processedItem?.tax_breakdown || []).map(tax => {
-          const rule = taxRules.find(candidate => candidate.id === tax.tax_id);
-          if (!rule?.liability_account_id) {
-            throw new Error(`Tax ${tax.code} has no liability account configured`);
-          }
-          return {
-            invoice_id: invoice.id,
-            invoice_item_id: createdItem.id,
-            tax_id: tax.tax_id,
-            tax_name: tax.name,
-            tax_code: tax.code,
-            tax_rate: tax.rate,
-            is_compound: tax.is_compound,
-            tax_order: tax.tax_order,
-            taxable_amount: tax.taxable_amount,
-            tax_amount: tax.tax_amount,
-            liability_account_id: rule.liability_account_id,
-          };
-        });
+      // Persist the draft, all line items and both levels of tax evidence in
+      // one database transaction. The RPC revalidates the authoritative tax
+      // definitions and reconciles every line/header total before committing.
+      const { data: invoiceId, error: createError } = await supabase.rpc('create_invoice_draft', {
+        p_customer_id: invoiceData.customer_id,
+        p_issue_date: invoiceDate,
+        p_due_date: invoiceData.due_date || null,
+        p_notes: invoiceData.notes || null,
+        p_terms: invoiceData.terms || null,
+        p_prices_include_tax: Boolean(invoiceData.prices_include_tax),
+        p_subtotal: subtotal,
+        p_discount_amount: discountAmount,
+        p_tax_amount: taxAmount,
+        p_total_amount: totalAmount,
+        p_items: processedItems.map(item => ({
+          product_id: item.product_id || null,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          discount_type: item.discount_type || null,
+          discount_value: item.discount_value || 0,
+          tax_rate: item.tax_rate || 0,
+          tax_amount: item.tax_amount,
+          line_total: item.line_total,
+          sort_order: item.sort_order,
+          tax_breakdown: item.tax_breakdown,
+        })),
       });
-      if (invoiceItemTaxRows.length > 0) {
-        const { error: itemTaxesError } = await supabase
-          .from('invoice_item_taxes')
-          .insert(invoiceItemTaxRows);
-        if (itemTaxesError) throw itemTaxesError;
-      }
 
-      const invoiceTaxRows = [...taxTotals.values()].map(tax => ({
-        invoice_id: invoice.id,
-        tax_id: tax.tax_id,
-        tax_rate: tax.tax_rate,
-        taxable_amount: Math.round((tax.taxable_amount + Number.EPSILON) * 100) / 100,
-        tax_amount: Math.round((tax.tax_amount + Number.EPSILON) * 100) / 100,
-        liability_account_id: tax.liability_account_id,
-      }));
-      if (invoiceTaxRows.length > 0) {
-        const { error: invoiceTaxesError } = await supabase
-          .from('invoice_taxes')
-          .insert(invoiceTaxRows);
-        if (invoiceTaxesError) throw invoiceTaxesError;
-      }
-
-      return invoice;
+      if (createError) throw createError;
+      if (!invoiceId) throw new Error('Invoice draft was not created. Please retry.');
+      return { id: invoiceId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
