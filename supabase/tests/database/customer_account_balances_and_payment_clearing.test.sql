@@ -109,6 +109,7 @@ SELECT extensions.throws_ok(
      SELECT 'CAB-PAY-OTHER',i.id,i.customer_id,1,'other',CURRENT_DATE
      FROM public.invoices i WHERE i.invoice_number='CAB-INV-002' $$,
   'P0001',
+  'Payment method other has no configured ledger account; select a supported method or configure an account mapping',
   'Unconfigured payment method other is rejected instead of being misposted to Bank Operating'
 );
 SELECT extensions.is(
@@ -178,6 +179,7 @@ SELECT extensions.throws_ok(
     'ca100000-0000-4000-8000-000000000102','Attempt to settle more than the remaining balance'
   ) $cab_over_settle_test$,
   'P0001',
+  format('Settlement exceeds the clearing balance available on %s (available 0.00)',CURRENT_DATE),
   'Settlement cannot exceed the clearing balance available on the selected date'
 );
 
