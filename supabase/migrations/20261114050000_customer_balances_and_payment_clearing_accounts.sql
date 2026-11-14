@@ -208,7 +208,7 @@ CREATE TABLE public.payment_clearing_settlements (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   clearing_account_id uuid NOT NULL REFERENCES public.chart_of_accounts(id) ON DELETE RESTRICT,
   gross_amount numeric(15,2) NOT NULL CHECK(gross_amount>0),
-  fee_amount numeric(15,2) NOT NULL DEFAULT 0 CHECK(fee_amount>=0 AND fee_amount<=gross_amount),
+  fee_amount numeric(15,2) NOT NULL DEFAULT 0 CHECK(fee_amount>=0 AND fee_amount<gross_amount),
   net_amount numeric(15,2) GENERATED ALWAYS AS (gross_amount-fee_amount) STORED,
   settled_on date NOT NULL,
   provider_reference text NOT NULL CHECK(length(btrim(provider_reference))>0),
@@ -296,7 +296,7 @@ BEGIN
   END IF;
   IF p_gross_amount IS NULL OR p_gross_amount<=0 OR p_gross_amount<>ROUND(p_gross_amount,2)
      OR p_fee_amount IS NULL OR p_fee_amount<0 OR p_fee_amount<>ROUND(p_fee_amount,2)
-     OR p_fee_amount>p_gross_amount OR p_settled_on IS NULL OR p_settled_on>CURRENT_DATE
+     OR p_fee_amount>=p_gross_amount OR p_settled_on IS NULL OR p_settled_on>CURRENT_DATE
      OR NULLIF(BTRIM(p_provider_reference),'') IS NULL
      OR NULLIF(BTRIM(p_bank_reference),'') IS NULL OR p_idempotency_key IS NULL THEN
     RAISE EXCEPTION 'Enter valid gross amount, fees, settlement date and both settlement references';
