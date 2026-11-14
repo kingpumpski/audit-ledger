@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useReceiptPrint } from './useReceiptPrint';
 import { supabase } from '@/integrations/supabase/client';
 
-const toast = vi.fn();
+const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
