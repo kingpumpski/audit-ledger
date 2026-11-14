@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
-import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, type TaxRule } from '@/lib/tax-calculator';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from '@/lib/tax-calculator';
 
 type Invoice = Tables<'invoices'>;
 type InvoiceItem = Tables<'invoice_items'>;
