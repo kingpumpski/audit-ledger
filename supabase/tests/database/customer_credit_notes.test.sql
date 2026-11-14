@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(49);
+SELECT extensions.plan(50);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -49,8 +49,18 @@ SELECT id,'Credit note manual line',1,100,0,0,100
 FROM public.invoices WHERE invoice_number='INV-CN-001';
 
 SELECT extensions.lives_ok(
-  $$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001')) $$,
+  $ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001')) $,
   'Original invoice can be issued before a credit note is recorded'
+);
+
+SELECT extensions.throws_ok(
+  $direct_cost_method_test$ SELECT public.record_invoice_item_direct_cost(
+    (SELECT id FROM public.invoice_items WHERE description='Credit note manual line'),
+    10,'DIRECT-COST-UNSUPPORTED',CURRENT_DATE,'credit_card',NULL
+  ) $direct_cost_method_test$,
+  'P0001',
+  'Direct invoice costs must use cash or bank transfer',
+  'Direct invoice costs cannot misclassify card payments as bank transfers'
 );
 
 SELECT extensions.lives_ok(
