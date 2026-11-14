@@ -75,6 +75,22 @@ export function useInvoices() {
           .eq('is_active', true);
         if (taxError) throw taxError;
         taxRules = (taxRows || []) as TaxRule[];
+
+        // A selected tax must never disappear silently because it was disabled,
+        // deleted, outside its effective dates, or inaccessible to this user.
+        const availableTaxIds = new Set(taxRules.map(tax => tax.id));
+        const unavailableTaxIds = selectedTaxIds.filter(id => !availableTaxIds.has(id));
+        if (unavailableTaxIds.length > 0) {
+          throw new Error('One or more selected taxes are no longer active or available. Refresh the tax list and review this invoice before saving.');
+        }
+        const ineffectiveTax = taxRules.find(tax => !isTaxEffectiveOnDate(tax, invoiceData.issue_date || new Date().toISOString().slice(0, 10)));
+        if (ineffectiveTax) {
+          throw new Error(`Tax ${ineffectiveTax.code} is not effective on the invoice date. Remove it or choose a valid invoice date.`);
+        }
+        const unconfiguredTax = taxRules.find(tax => !tax.liability_account_id);
+        if (unconfiguredTax) {
+          throw new Error(`Tax ${unconfiguredTax.code} has no liability account configured.`);
+        }
       }
 
       const productIds = [...new Set(invoiceData.items.map(item => item.product_id).filter((id): id is string => Boolean(id)))];
@@ -96,11 +112,15 @@ export function useInvoices() {
 
       const processedItems = invoiceData.items.map((item, index) => {
         const category = item.product_id ? productCategories.get(item.product_id) : null;
-        const applicableTaxes = taxRules.filter(tax =>
-          (item.tax_ids || []).includes(tax.id) &&
-          isTaxEffectiveOnDate(tax, invoiceDate) &&
-          (!tax.applies_to_category || tax.applies_to_category.toLowerCase() === (category || '').toLowerCase())
+        const selectedTaxesForItem = taxRules.filter(tax => (item.tax_ids || []).includes(tax.id));
+        const categoryMismatch = selectedTaxesForItem.find(tax =>
+          tax.applies_to_category &&
+          tax.applies_to_category.toLowerCase() !== (category || '').toLowerCase()
         );
+        if (categoryMismatch) {
+          throw new Error(`Tax ${categoryMismatch.code} does not apply to the category of invoice item "${item.description}". Review the selected taxes.`);
+        }
+        const applicableTaxes = selectedTaxesForItem;
         const calculation = calculateLineAmounts({
           quantity: item.quantity,
           unit_price: item.unit_price,
