@@ -1629,3 +1629,39 @@ ALTER TABLE public.inventory_purchase_reversals
 ALTER TABLE public.inventory_purchase_reversals
   ADD CONSTRAINT inventory_purchase_reversals_refund_payment_method_check
   CHECK (refund_payment_method IS NULL OR refund_payment_method IN ('cash','bank_transfer','mobile_payment','credit_card','debit_card','check'));
+
+
+CREATE OR REPLACE FUNCTION public.get_payment_clearing_settlements()
+RETURNS TABLE(
+  settlement_id uuid,
+  account_code text,
+  account_name text,
+  gross_amount numeric(15,2),
+  fee_amount numeric(15,2),
+  net_amount numeric(15,2),
+  settled_on date,
+  provider_reference text,
+  bank_reference text,
+  notes text,
+  created_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $get_payment_clearing_settlements$
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant','auditor']) THEN
+    RAISE EXCEPTION 'You are not authorized to view payment clearing settlement history';
+  END IF;
+  RETURN QUERY
+  SELECT s.id,coa.code,coa.name,s.gross_amount,s.fee_amount,s.net_amount,
+    s.settled_on,s.provider_reference,s.bank_reference,s.notes,s.created_at
+  FROM public.payment_clearing_settlements s
+  JOIN public.chart_of_accounts coa ON coa.id=s.clearing_account_id
+  ORDER BY s.settled_on DESC,s.created_at DESC
+  LIMIT 100;
+END;
+$get_payment_clearing_settlements$;
+
+REVOKE ALL ON FUNCTION public.get_payment_clearing_settlements() FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_payment_clearing_settlements() TO authenticated;
