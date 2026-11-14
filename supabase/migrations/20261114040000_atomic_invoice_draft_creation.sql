@@ -130,11 +130,13 @@ BEGIN
       RAISE EXCEPTION 'Invoice line % tax amount does not reconcile to its tax evidence', v_item_count;
     END IF;
 
-    IF v_line_total IS DISTINCT FROM CASE
-      WHEN COALESCE(p_prices_include_tax, false)
-        THEN ROUND(v_line_subtotal - v_line_discount, 2)
-      ELSE ROUND(v_line_subtotal - v_line_discount + v_line_tax, 2)
-    END THEN
+    IF v_line_total IS DISTINCT FROM (
+      CASE
+        WHEN COALESCE(p_prices_include_tax, false)
+          THEN ROUND(v_line_subtotal - v_line_discount, 2)
+        ELSE ROUND(v_line_subtotal - v_line_discount + v_line_tax, 2)
+      END
+    ) THEN
       RAISE EXCEPTION 'Invoice line % total does not reconcile to its subtotal, discount and tax', v_item_count;
     END IF;
 
