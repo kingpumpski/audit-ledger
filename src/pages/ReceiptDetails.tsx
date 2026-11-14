@@ -57,7 +57,7 @@ export default function ReceiptDetails() {
           invoice:invoices(*)
         `)
         .eq('id', id!)
-        .is('deleted_at', null)
+        .or('deleted_at.is.null,status.eq.void')
         .single();
 
       if (error) throw error;
