@@ -17,7 +17,7 @@ interface CreateReceiptData {
   invoice_id?: string;
   payment_id?: string;
   amount: number;
-  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment';
   notes?: string;
   reference_number?: string;
   signature_data?: string;
