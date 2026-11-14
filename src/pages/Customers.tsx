@@ -204,7 +204,7 @@ export default function Customers() {
               <p className="font-semibold tabular-nums">
                 {isBalanceLoading ? 'Calculating…' : balancesError ? 'Unavailable' : formatCurrency(totalOutstanding)}
               </p>
-              <p className="text-xs text-muted-foreground">{balancesError ? 'Balance report could not be loaded' : `${balances.filter(balance => balance.outstanding_balance > 0).length} customers owing`}</p>
+              <p className="text-xs text-muted-foreground">{isBalanceLoading ? 'Calculating customer balances…' : balancesError ? 'Balance report could not be loaded' : `${balances.filter(balance => balance.outstanding_balance > 0).length} customers owing`}</p>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={handleExportBalances} disabled={isBalanceLoading || Boolean(balancesError)}>
               <Download className="mr-2 h-4 w-4" /> Export
