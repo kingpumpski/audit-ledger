@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
-import { calculateLineAmounts, isTaxEffectiveOnDate, type TaxRule } from '@/lib/tax-calculator';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, type TaxRule } from '@/lib/tax-calculator';
 
 type Invoice = Tables<'invoices'>;
 type InvoiceItem = Tables<'invoice_items'>;
@@ -76,21 +76,7 @@ export function useInvoices() {
         if (taxError) throw taxError;
         taxRules = (taxRows || []) as TaxRule[];
 
-        // A selected tax must never disappear silently because it was disabled,
-        // deleted, outside its effective dates, or inaccessible to this user.
-        const availableTaxIds = new Set(taxRules.map(tax => tax.id));
-        const unavailableTaxIds = selectedTaxIds.filter(id => !availableTaxIds.has(id));
-        if (unavailableTaxIds.length > 0) {
-          throw new Error('One or more selected taxes are no longer active or available. Refresh the tax list and review this invoice before saving.');
-        }
-        const ineffectiveTax = taxRules.find(tax => !isTaxEffectiveOnDate(tax, invoiceData.issue_date || new Date().toISOString().slice(0, 10)));
-        if (ineffectiveTax) {
-          throw new Error(`Tax ${ineffectiveTax.code} is not effective on the invoice date. Remove it or choose a valid invoice date.`);
-        }
-        const unconfiguredTax = taxRules.find(tax => !tax.liability_account_id);
-        if (unconfiguredTax) {
-          throw new Error(`Tax ${unconfiguredTax.code} has no liability account configured.`);
-        }
+        validateSelectedTaxRules(selectedTaxIds, taxRules, invoiceData.issue_date || new Date().toISOString().slice(0, 10));
       }
 
       const productIds = [...new Set(invoiceData.items.map(item => item.product_id).filter((id): id is string => Boolean(id)))];
