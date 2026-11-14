@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(14);
+SELECT extensions.plan(15);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -117,13 +117,17 @@ SELECT extensions.is(
   'Rejected payment method leaves no payment record'
 );
 
-SELECT extensions.is(
-  public.settle_payment_clearing_account(
+SELECT extensions.lives_ok(
+  $ SELECT public.settle_payment_clearing_account(
     '1020',40,1,CURRENT_DATE,'CARD-PROVIDER-SETTLEMENT-001','BANK-STATEMENT-001',
     'ca100000-0000-4000-8000-000000000101','Card settlement with processor fees'
-  ),
-  (SELECT id FROM public.payment_clearing_settlements WHERE provider_reference='CARD-PROVIDER-SETTLEMENT-001'),
-  'Card settlement is recorded idempotently with its journal'
+  ) $,
+  'Card settlement is recorded with its journal'
+);
+SELECT extensions.is(
+  (SELECT count(*) FROM public.payment_clearing_settlements WHERE provider_reference='CARD-PROVIDER-SETTLEMENT-001'),
+  1::bigint,
+  'One immutable settlement record is created'
 );
 SELECT extensions.is(
   (SELECT clearing_balance FROM public.get_payment_clearing_balances() WHERE account_code='1020'),
@@ -159,6 +163,15 @@ SELECT extensions.is(
      AND coa.code='6400'),
   1.00::numeric,
   'Processor fee is separately recognized as a settlement expense'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.settle_payment_clearing_account(
+    '1020',1,0,CURRENT_DATE,'CARD-PROVIDER-OVERSETTLE','BANK-STATEMENT-OVERSETTLE',
+    'ca100000-0000-4000-8000-000000000102','Attempt to settle more than the remaining balance'
+  ) $,
+  'P0001',
+  'Settlement cannot exceed the clearing balance available on the selected date'
 );
 
 SELECT * FROM extensions.finish();
