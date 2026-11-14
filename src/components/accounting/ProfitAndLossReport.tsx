@@ -238,9 +238,9 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   const uncostedItems = costCoverageQuery.data?.uncostedItems || [];
   const uncosted = costCoverageQuery.data?.uncostedLineCount || 0;
   const costCoverageComplete = costCoverageQuery.isSuccess && uncosted === 0;
-  // Petty cash is not a complete operating-expense workflow. Keep the final
-  // net-profit figure withheld until supplier and other operating expenses can
-  // be recorded, paid/reconciled and included in the ledger.
+  // Expense-entry, settlement, reversal and refund workflows are implemented.
+  // Completeness still requires a finance attestation; never infer it merely
+  // because the system has no currently visible unrecorded expense rows.
   const expenseCaptureComplete = false;
   const canDisplayNetProfit = costCoverageComplete && expenseCaptureComplete;
   const grossProfit = totals.revenue - totals.costOfGoodsSold;
@@ -373,7 +373,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
           <p className="font-medium text-warning">Final net profit is not yet available</p>
           <p className="mt-1 text-muted-foreground">
-            The Operating Expenses register now records supplier and business costs when incurred, recognizes unpaid balances in Accounts Payable, and posts each cash/bank settlement separately. Petty-cash expenses remain supported. However, the system cannot independently prove that every real-world expense has been entered, and controlled reversal plus reconciliation workflows are still pending. This report therefore shows all recorded expense postings but continues to withhold final net profit until expense completeness can be attested and reconciled. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
+            The Operating Expenses register records supplier and business costs when incurred, recognizes unpaid balances in Accounts Payable, and posts each cash/bank settlement separately. Petty-cash expenses, controlled reversals and evidenced supplier refunds are also supported. However, the system cannot independently prove that every real-world expense has been entered. This report shows all recorded expense postings but withholds final net profit until a finance completeness attestation and ledger reconciliation are available. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
           </p>
         </div>
       </CardContent>
