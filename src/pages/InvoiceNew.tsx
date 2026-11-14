@@ -66,7 +66,7 @@ export default function InvoiceNew() {
   const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
-  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined, Boolean(customerId));
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogTargetId, setProductDialogTargetId] = useState<string | null>(null);
