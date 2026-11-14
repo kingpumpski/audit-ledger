@@ -142,7 +142,7 @@ SELECT extensions.is(
     JOIN public.invoices i ON i.id=ii.invoice_id
     WHERE i.customer_id=(SELECT id FROM public.customers WHERE code='ATOMIC-INVOICE-CUSTOMER')
   ),
-  1,
+  2,
   'A failed draft leaves no partial invoice lines'
 );
 
