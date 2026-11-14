@@ -58,7 +58,27 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { invoiceId, returnHtml = false }: InvoicePdfRequest = await req.json();
+    let requestBody: InvoicePdfRequest;
+    try {
+      requestBody = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "A valid JSON request body is required." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const invoiceId = requestBody?.invoiceId;
+    const returnHtml = requestBody?.returnHtml ?? false;
+    if (
+      typeof invoiceId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(invoiceId) ||
+      typeof returnHtml !== "boolean"
+    ) {
+      return new Response(JSON.stringify({ error: "A valid invoice ID and optional boolean returnHtml value are required." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Fetch invoice with all related data
     const { data: rawInvoice, error: invoiceError } = await supabase
