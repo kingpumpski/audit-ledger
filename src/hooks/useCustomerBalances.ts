@@ -17,7 +17,7 @@ export interface CustomerAccountBalance {
  * Receivables calculated from dated issued invoices, payments and credits.
  * Historical balances therefore remain stable when later payments are entered.
  */
-export function useCustomerAccountBalances(asOfDate: string, customerId?: string) {
+export function useCustomerAccountBalances(asOfDate: string, customerId?: string, enabled = true) {
   const query = useQuery({
     queryKey: ['customer-account-balances', asOfDate, customerId || 'all'],
     queryFn: async (): Promise<CustomerAccountBalance[]> => {
@@ -28,7 +28,7 @@ export function useCustomerAccountBalances(asOfDate: string, customerId?: string
       if (error) throw error;
       return (data || []) as CustomerAccountBalance[];
     },
-    enabled: Boolean(asOfDate),
+    enabled: Boolean(asOfDate) && enabled,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
