@@ -1639,6 +1639,10 @@ export type Database = {
           as_of_date: string
         }[]
       }
+      get_payment_clearing_balances: {
+        Args: never
+        Returns: { account_code: string; account_name: string; clearing_balance: number }[]
+      }
       settle_payment_clearing_account: {
         Args: {
           p_clearing_account_code: string
