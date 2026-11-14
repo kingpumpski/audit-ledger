@@ -211,6 +211,7 @@ export function useInvoices() {
     onSuccess: (result, invoiceId) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoice', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
 
       if (result?.requiresDomainVerification) {
