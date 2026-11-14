@@ -47,6 +47,7 @@ serve(async (req) => {
         discount:discounts(*)
       `)
       .eq("id", invoiceId)
+      .is("deleted_at", null)
       .single();
 
     if (invoiceError || !rawInvoice) {
