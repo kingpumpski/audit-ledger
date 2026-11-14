@@ -52,6 +52,7 @@ interface CreditNoteHistory {
   id: string;
   credit_note_number: string;
   invoice_id: string;
+  invoices?: { invoice_number: string };
   credit_note_date: string;
   reason: string;
   reference_number: string;
@@ -148,7 +149,7 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
     queryFn: async () => {
       const db = supabase as unknown as { from: (table: string) => CreditHistoryQuery };
       const { data, error } = await db.from('credit_notes')
-        .select('id, credit_note_number, invoice_id, credit_note_date, reason, reference_number, subtotal, tax_amount, total_amount, receivable_applied, customer_credit_amount, credit_note_lines(id, description, quantity, net_amount, tax_amount, total_amount, credit_note_line_taxes(tax_name, tax_code, tax_rate, taxable_amount, tax_amount)), customer_credit_applications(amount, applied_on, reference_number, applied_to_invoice_id), customer_credit_refunds(amount, refunded_on, payment_method, reference_number)')
+        .select('id, credit_note_number, invoice_id, invoices(invoice_number), credit_note_date, reason, reference_number, subtotal, tax_amount, total_amount, receivable_applied, customer_credit_amount, credit_note_lines(id, description, quantity, net_amount, tax_amount, total_amount, credit_note_line_taxes(tax_name, tax_code, tax_rate, taxable_amount, tax_amount)), customer_credit_applications(amount, applied_on, reference_number, applied_to_invoice_id), customer_credit_refunds(amount, refunded_on, payment_method, reference_number)')
         .eq('customer_id', customerId)
         .order('credit_note_date', { ascending: false });
       if (error) throw new Error(error.message);
@@ -373,14 +374,14 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="font-semibold">{note.credit_note_number}</div>
-                      <div className="text-sm text-muted-foreground">{format(new Date(note.credit_note_date), 'MMM d, yyyy')} · Invoice {note.invoice_id}</div>
+                      <div className="text-sm text-muted-foreground">{format(new Date(note.credit_note_date), 'MMM d, yyyy')} · Invoice {note.invoices?.invoice_number || note.invoice_id}</div>
                       <p className="mt-1 text-sm">{note.reason}</p>
                       <p className="text-xs text-muted-foreground">Reference: {note.reference_number}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right font-semibold tabular-nums">{currencySymbol}{Number(note.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                       <Button size="sm" variant="outline" onClick={() => {
-                        const printed = printCreditNote(note, currencySymbol, note.invoice_id);
+                        const printed = printCreditNote(note, currencySymbol, note.invoices?.invoice_number || note.invoice_id);
                         if (!printed) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups for this site, then print the credit note again.', variant: 'destructive' });
                       }}><Printer className="mr-2 h-4 w-4" /> Print</Button>
                     </div>
