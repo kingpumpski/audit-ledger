@@ -49,7 +49,7 @@ SELECT id,'Credit note manual line',1,100,0,0,100
 FROM public.invoices WHERE invoice_number='INV-CN-001';
 
 SELECT extensions.lives_ok(
-  $ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001')) $,
+  $issue_invoice_test$ SELECT public.issue_invoice((SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001')) $issue_invoice_test$,
   'Original invoice can be issued before a credit note is recorded'
 );
 
