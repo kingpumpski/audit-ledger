@@ -118,10 +118,10 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.settle_payment_clearing_account(
+  $cab_settlement_test$ SELECT public.settle_payment_clearing_account(
     '1020',40,1,CURRENT_DATE,'CARD-PROVIDER-SETTLEMENT-001','BANK-STATEMENT-001',
     'ca100000-0000-4000-8000-000000000101','Card settlement with processor fees'
-  ) $,
+  ) $cab_settlement_test$,
   'Card settlement is recorded with its journal'
 );
 SELECT extensions.is(
@@ -166,10 +166,10 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.settle_payment_clearing_account(
+  $cab_over_settle_test$ SELECT public.settle_payment_clearing_account(
     '1020',1,0,CURRENT_DATE,'CARD-PROVIDER-OVERSETTLE','BANK-STATEMENT-OVERSETTLE',
     'ca100000-0000-4000-8000-000000000102','Attempt to settle more than the remaining balance'
-  ) $,
+  ) $cab_over_settle_test$,
   'P0001',
   'Settlement cannot exceed the clearing balance available on the selected date'
 );
