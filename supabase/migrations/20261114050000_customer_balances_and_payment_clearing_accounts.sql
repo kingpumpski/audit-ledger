@@ -342,10 +342,14 @@ BEGIN
   RETURNING id INTO v_journal_id;
 
   INSERT INTO public.journal_lines(journal_entry_id,line_number,account_id,description,debit,credit)
-  VALUES
-    (v_journal_id,1,v_bank_account,'Net settlement received - '||BTRIM(p_bank_reference),v_net,0),
-    (v_journal_id,2,v_fee_account,'Payment processor / settlement fees',p_fee_amount,0),
-    (v_journal_id,3,v_account_id,'Clearing balance settled - '||BTRIM(p_provider_reference),0,p_gross_amount);
+  VALUES (v_journal_id,1,v_bank_account,'Net settlement received - '||BTRIM(p_bank_reference),v_net,0);
+  IF p_fee_amount>0 THEN
+    INSERT INTO public.journal_lines(journal_entry_id,line_number,account_id,description,debit,credit)
+    VALUES (v_journal_id,2,v_fee_account,'Payment processor / settlement fees',p_fee_amount,0);
+  END IF;
+  INSERT INTO public.journal_lines(journal_entry_id,line_number,account_id,description,debit,credit)
+  VALUES (v_journal_id,CASE WHEN p_fee_amount>0 THEN 3 ELSE 2 END,v_account_id,
+    'Clearing balance settled - '||BTRIM(p_provider_reference),0,p_gross_amount);
 
   INSERT INTO public.payment_clearing_settlements(
     id,clearing_account_id,gross_amount,fee_amount,settled_on,provider_reference,bank_reference,
@@ -562,3 +566,29 @@ $refund_customer_credit$;
 REVOKE ALL ON FUNCTION public.refund_customer_credit(uuid,numeric,date,public.payment_method,text,uuid) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.refund_customer_credit(uuid,numeric,date,public.payment_method,text,uuid) TO authenticated;
 
+
+
+CREATE OR REPLACE FUNCTION public.get_payment_clearing_balances()
+RETURNS TABLE(account_code text,account_name text,clearing_balance numeric(15,2))
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $get_payment_clearing_balances$
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant','auditor']) THEN
+    RAISE EXCEPTION 'You are not authorized to view payment clearing balances';
+  END IF;
+  RETURN QUERY
+  SELECT coa.code,coa.name,
+    ROUND(COALESCE(SUM(jl.debit-jl.credit),0),2)::numeric(15,2)
+  FROM public.chart_of_accounts coa
+  LEFT JOIN public.journal_lines jl ON jl.account_id=coa.id
+  LEFT JOIN public.journal_entries je ON je.id=jl.journal_entry_id
+  WHERE coa.code IN ('1020','1030','1040')
+  GROUP BY coa.code,coa.name
+  ORDER BY coa.code;
+END;
+$get_payment_clearing_balances$;
+
+REVOKE ALL ON FUNCTION public.get_payment_clearing_balances() FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_payment_clearing_balances() TO authenticated;
