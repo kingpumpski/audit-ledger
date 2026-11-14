@@ -1540,6 +1540,22 @@ export type Database = {
         Returns: number
       }
       get_next_sequence: { Args: { seq_name: string }; Returns: string }
+      create_invoice_draft: {
+        Args: {
+          p_customer_id: string
+          p_issue_date: string
+          p_due_date: string | null
+          p_notes: string | null
+          p_terms: string | null
+          p_prices_include_tax: boolean
+          p_subtotal: number
+          p_discount_amount: number
+          p_tax_amount: number
+          p_total_amount: number
+          p_items: Json
+        }
+        Returns: string
+      }
       issue_invoice: { Args: { p_invoice_id: string }; Returns: string }
       record_stock_purchase: {
         Args: {
