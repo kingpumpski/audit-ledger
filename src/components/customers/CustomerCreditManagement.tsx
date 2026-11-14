@@ -63,7 +63,7 @@ interface CreditNoteHistory {
   receivable_applied: number;
   customer_credit_amount: number;
   credit_note_lines?: CreditNoteHistoryLine[];
-  customer_credit_applications?: Array<{ amount: number; applied_on: string; reference_number: string; applied_to_invoice_id: string }>;
+  customer_credit_applications?: Array<{ amount: number; applied_on: string; reference_number: string; applied_to_invoice_id: string; invoices?: { invoice_number: string } }>;
   customer_credit_refunds?: Array<{ amount: number; refunded_on: string; payment_method: string; reference_number: string }>;
 }
 type CreditHistoryQuery = {
@@ -91,7 +91,7 @@ function printCreditNote(note: CreditNoteHistory, currencySymbol: string, origin
     return `<tr><td>${escapePrintText(line.description)}${taxes}</td><td class="num">${Number(line.quantity).toLocaleString()}</td><td class="num">${money(line.net_amount)}</td><td class="num">${money(line.tax_amount)}</td><td class="num">${money(line.total_amount)}</td></tr>`;
   }).join('');
   const applications = (note.customer_credit_applications || []).map((entry) =>
-    `<tr><td>Applied to invoice</td><td>${escapePrintText(entry.applied_on)}</td><td>${escapePrintText(entry.reference_number)}</td><td class="num">${money(entry.amount)}</td></tr>`
+    `<tr><td>Applied to invoice ${escapePrintText(entry.invoices?.invoice_number || entry.applied_to_invoice_id)}</td><td>${escapePrintText(entry.applied_on)}</td><td>${escapePrintText(entry.reference_number)}</td><td class="num">${money(entry.amount)}</td></tr>`
   ).join('');
   const refunds = (note.customer_credit_refunds || []).map((entry) =>
     `<tr><td>Customer refund · ${escapePrintText(entry.payment_method.replace(/_/g, ' '))}</td><td>${escapePrintText(entry.refunded_on)}</td><td>${escapePrintText(entry.reference_number)}</td><td class="num">${money(entry.amount)}</td></tr>`
@@ -150,7 +150,7 @@ export function CustomerCreditManagement({ customerId, customerName = '', curren
     queryFn: async () => {
       const db = supabase as unknown as { from: (table: string) => CreditHistoryQuery };
       const { data, error } = await db.from('credit_notes')
-        .select('id, credit_note_number, invoice_id, invoices(invoice_number), credit_note_date, reason, reference_number, subtotal, tax_amount, total_amount, receivable_applied, customer_credit_amount, credit_note_lines(id, description, quantity, net_amount, tax_amount, total_amount, credit_note_line_taxes(tax_name, tax_code, tax_rate, taxable_amount, tax_amount)), customer_credit_applications(amount, applied_on, reference_number, applied_to_invoice_id), customer_credit_refunds(amount, refunded_on, payment_method, reference_number)')
+        .select('id, credit_note_number, invoice_id, invoices(invoice_number), credit_note_date, reason, reference_number, subtotal, tax_amount, total_amount, receivable_applied, customer_credit_amount, credit_note_lines(id, description, quantity, net_amount, tax_amount, total_amount, credit_note_line_taxes(tax_name, tax_code, tax_rate, taxable_amount, tax_amount)), customer_credit_applications(amount, applied_on, reference_number, applied_to_invoice_id, invoices(invoice_number)), customer_credit_refunds(amount, refunded_on, payment_method, reference_number)')
         .eq('customer_id', customerId)
         .order('credit_note_date', { ascending: false });
       if (error) throw new Error(error.message);
