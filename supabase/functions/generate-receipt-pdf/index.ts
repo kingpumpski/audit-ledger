@@ -71,7 +71,7 @@ function formatAmount(value: number | string): string {
 
 function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyName: string): string {
   // Company settings are user-managed data; escape the currency symbol before inserting it into HTML.
-  const safeCurrencySymbol = escapeHtml(currencySymbol || "$ ").trim();
+  const safeCurrencySymbol = escapeHtml(currencySymbol || "$");
   const status = receipt.status === "issued" ? "issued" : "void";
   const statusLabel = status === "issued" ? "Issued" : "Void";
   const date = new Date(receipt.issue_date);
