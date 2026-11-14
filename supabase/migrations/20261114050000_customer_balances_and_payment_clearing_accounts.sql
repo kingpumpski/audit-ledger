@@ -450,3 +450,115 @@ REVOKE ALL ON FUNCTION public.get_customer_account_balances(date,uuid) FROM PUBL
 GRANT EXECUTE ON FUNCTION public.get_customer_account_balances(date,uuid) TO authenticated;
 
 NOTIFY pgrst,'reload schema';
+
+
+-- Refunds use the same configured clearing-account mapping as customer payments.
+CREATE OR REPLACE FUNCTION public.refund_customer_credit(
+  p_credit_note_id uuid,
+  p_amount numeric,
+  p_refunded_on date,
+  p_payment_method public.payment_method,
+  p_reference_number text,
+  p_idempotency_key uuid
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $refund_customer_credit$
+DECLARE
+  v_note public.credit_notes%ROWTYPE;
+  v_refund_id uuid := gen_random_uuid();
+  v_journal_id uuid;
+  v_entry_number text;
+  v_credit_account uuid;
+  v_payment_account uuid;
+  v_currency text;
+  v_remaining numeric(15,2);
+  v_fingerprint text;
+  v_existing_id uuid;
+  v_existing_fingerprint text;
+  v_debits numeric(15,2);
+  v_credits numeric(15,2);
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_any_role(ARRAY['admin','accountant']) THEN
+    RAISE EXCEPTION 'Only an admin or accountant can refund customer credit';
+  END IF;
+  IF p_amount IS NULL OR p_amount<=0 OR p_amount <> ROUND(p_amount,2) OR p_refunded_on IS NULL
+     OR p_payment_method IS NULL OR p_idempotency_key IS NULL
+     OR NULLIF(BTRIM(p_reference_number),'') IS NULL THEN
+    RAISE EXCEPTION 'A positive refund, date, payment method, reference and idempotency key are required';
+  END IF;
+  IF p_payment_method NOT IN (
+    'cash'::public.payment_method,
+    'bank_transfer'::public.payment_method,
+    'credit_card'::public.payment_method,
+    'debit_card'::public.payment_method,
+    'mobile_payment'::public.payment_method,
+    'check'::public.payment_method
+  ) THEN
+    RAISE EXCEPTION 'Customer-credit refunds must use cash, bank transfer or mobile payment';
+  END IF;
+  v_fingerprint:=md5(p_credit_note_id::text||'|'||p_amount::text||'|'||p_refunded_on::text||'|'||p_payment_method::text||'|'||BTRIM(p_reference_number));
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
+  SELECT id,request_fingerprint INTO v_existing_id,v_existing_fingerprint
+  FROM public.customer_credit_refunds WHERE idempotency_key=p_idempotency_key;
+  IF FOUND THEN
+    IF v_existing_fingerprint IS DISTINCT FROM v_fingerprint THEN
+      RAISE EXCEPTION 'This customer-credit refund key was reused with different details';
+    END IF;
+    RETURN v_existing_id;
+  END IF;
+
+  SELECT * INTO v_note FROM public.credit_notes WHERE id=p_credit_note_id FOR UPDATE;
+  IF NOT FOUND OR v_note.customer_credit_amount<=0 THEN
+    RAISE EXCEPTION 'The selected credit note has no refundable customer credit';
+  END IF;
+  IF p_refunded_on < v_note.credit_note_date THEN
+    RAISE EXCEPTION 'Refund date cannot be earlier than the credit note';
+  END IF;
+  SELECT COALESCE(v_note.customer_credit_amount,0)
+    - COALESCE((SELECT SUM(amount) FROM public.customer_credit_applications WHERE credit_note_id=v_note.id),0)
+    - COALESCE((SELECT SUM(amount) FROM public.customer_credit_refunds WHERE credit_note_id=v_note.id),0)
+  INTO v_remaining;
+  IF p_amount>v_remaining THEN RAISE EXCEPTION 'Refund exceeds the remaining customer credit'; END IF;
+
+  PERFORM set_config('app.customer_credit_settlement_rpc','on',true);
+  INSERT INTO public.customer_credit_refunds(
+    id,credit_note_id,amount,refunded_on,payment_method,reference_number,
+    idempotency_key,request_fingerprint,created_by
+  ) VALUES (
+    v_refund_id,v_note.id,ROUND(p_amount,2),p_refunded_on,p_payment_method,
+    BTRIM(p_reference_number),p_idempotency_key,v_fingerprint,auth.uid()
+  );
+
+  SELECT id INTO v_credit_account FROM public.chart_of_accounts
+  WHERE code='2200' AND account_type='liability' AND is_active LIMIT 1;
+  v_payment_account := public.resolve_payment_account_id(p_payment_method);
+  IF v_credit_account IS NULL OR v_payment_account IS NULL THEN
+    RAISE EXCEPTION 'Customer credit liability or cash/bank account is not configured';
+  END IF;
+
+  v_entry_number:=public.get_next_sequence('journal');
+  SELECT COALESCE(currency_code,'USD') INTO v_currency FROM public.company_settings ORDER BY created_at LIMIT 1;
+  v_currency:=COALESCE(v_currency,'USD');
+  INSERT INTO public.journal_entries(entry_number,entry_date,description,source_type,source_id,currency,created_by)
+  VALUES(v_entry_number,p_refunded_on,'Customer credit refund','customer_credit_refund',v_refund_id,v_currency,auth.uid())
+  RETURNING id INTO v_journal_id;
+  INSERT INTO public.journal_lines(journal_entry_id,line_number,account_id,description,debit,credit)
+  VALUES
+    (v_journal_id,1,v_credit_account,'Customer credit liability settled',ROUND(p_amount,2),0),
+    (v_journal_id,2,v_payment_account,'Customer refund paid',0,ROUND(p_amount,2));
+
+  SELECT ROUND(SUM(debit),2),ROUND(SUM(credit),2) INTO v_debits,v_credits
+  FROM public.journal_lines WHERE journal_entry_id=v_journal_id;
+  IF v_debits<>v_credits THEN RAISE EXCEPTION 'Customer credit refund journal is not balanced'; END IF;
+
+  UPDATE public.customer_credit_refunds SET journal_entry_id=v_journal_id WHERE id=v_refund_id;
+  RETURN v_refund_id;
+END;
+$refund_customer_credit$;
+
+REVOKE ALL ON FUNCTION public.refund_customer_credit(uuid,numeric,date,public.payment_method,text,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.refund_customer_credit(uuid,numeric,date,public.payment_method,text,uuid) TO authenticated;
+
