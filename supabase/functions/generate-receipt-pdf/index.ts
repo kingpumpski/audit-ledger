@@ -82,6 +82,8 @@ function formatAmount(value: number | string): string {
 }
 
 function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyName: string): string {
+  // Company settings are user-managed data; escape the currency symbol before inserting it into HTML.
+  const safeCurrencySymbol = escapeHtml(currencySymbol || "$ ").trim();
   const status = receipt.status === "issued" ? "issued" : "void";
   const statusLabel = status === "issued" ? "Issued" : "Void";
   const date = new Date(receipt.issue_date);
@@ -98,21 +100,21 @@ function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyNa
   const invoiceItemsHtml = invoice?.items?.map(item => {
     const discount = Number(item.discount_value || 0);
     const discountLabel = discount > 0
-      ? item.discount_type === "percentage" ? `${formatAmount(discount)}%` : `${currencySymbol} ${formatAmount(discount)}`
+      ? item.discount_type === "percentage" ? `${formatAmount(discount)}%` : `${safeCurrencySymbol} ${formatAmount(discount)}`
       : "—";
     return `<tr>
       <td>${escapeHtml(item.description)}</td>
       <td style="text-align:center">${escapeHtml(item.quantity)}</td>
-      <td style="text-align:right">${currencySymbol} ${formatAmount(item.unit_price)}</td>
+      <td style="text-align:right">${safeCurrencySymbol} ${formatAmount(item.unit_price)}</td>
       <td style="text-align:right">${discountLabel}</td>
-      <td style="text-align:right">${currencySymbol} ${formatAmount(item.line_total)}</td>
+      <td style="text-align:right">${safeCurrencySymbol} ${formatAmount(item.line_total)}</td>
     </tr>`;
   }).join("") || "";
   const taxBreakdownHtml = invoice?.invoice_taxes?.map(tax => `<tr>
     <td>${escapeHtml(tax.tax?.name || tax.tax?.code || "Tax")}</td>
     <td style="text-align:right">${formatAmount(tax.tax_rate)}%</td>
-    <td style="text-align:right">${currencySymbol} ${formatAmount(tax.taxable_amount)}</td>
-    <td style="text-align:right">${currencySymbol} ${formatAmount(tax.tax_amount)}</td>
+    <td style="text-align:right">${safeCurrencySymbol} ${formatAmount(tax.taxable_amount)}</td>
+    <td style="text-align:right">${safeCurrencySymbol} ${formatAmount(tax.tax_amount)}</td>
   </tr>`).join("") || "";
   const taxIsIncludedInSubtotal = Boolean(invoice &&
     Number(invoice.tax_amount || 0) > 0 &&
@@ -120,13 +122,13 @@ function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyNa
   const invoiceSummaryHtml = invoice ? `
     <table class="summary-table">
       <tbody>
-        <tr><td>${taxIsIncludedInSubtotal ? "Subtotal (tax-inclusive)" : "Subtotal"}</td><td>${currencySymbol} ${formatAmount(invoice.subtotal || 0)}</td></tr>
-        <tr><td>Discount</td><td>− ${currencySymbol} ${formatAmount(invoice.discount_amount || 0)}</td></tr>
-        <tr><td>${taxIsIncludedInSubtotal ? "Tax included in subtotal" : "Total taxes added"}</td><td>${currencySymbol} ${formatAmount(invoice.tax_amount || 0)}</td></tr>
-        <tr class="summary-total"><td>Invoice total</td><td>${currencySymbol} ${formatAmount(invoice.total_amount || 0)}</td></tr>
-        <tr><td>Received on this receipt</td><td>${currencySymbol} ${amount}</td></tr>
-        <tr><td>Paid to date</td><td>${currencySymbol} ${formatAmount(invoice.amount_paid || 0)}</td></tr>
-        <tr class="summary-balance"><td>Balance remaining</td><td>${currencySymbol} ${formatAmount(invoice.balance_due || 0)}</td></tr>
+        <tr><td>${taxIsIncludedInSubtotal ? "Subtotal (tax-inclusive)" : "Subtotal"}</td><td>${safeCurrencySymbol} ${formatAmount(invoice.subtotal || 0)}</td></tr>
+        <tr><td>Discount</td><td>− ${safeCurrencySymbol} ${formatAmount(invoice.discount_amount || 0)}</td></tr>
+        <tr><td>${taxIsIncludedInSubtotal ? "Tax included in subtotal" : "Total taxes added"}</td><td>${safeCurrencySymbol} ${formatAmount(invoice.tax_amount || 0)}</td></tr>
+        <tr class="summary-total"><td>Invoice total</td><td>${safeCurrencySymbol} ${formatAmount(invoice.total_amount || 0)}</td></tr>
+        <tr><td>Received on this receipt</td><td>${safeCurrencySymbol} ${amount}</td></tr>
+        <tr><td>Paid to date</td><td>${safeCurrencySymbol} ${formatAmount(invoice.amount_paid || 0)}</td></tr>
+        <tr class="summary-balance"><td>Balance remaining</td><td>${safeCurrencySymbol} ${formatAmount(invoice.balance_due || 0)}</td></tr>
       </tbody>
     </table>` : "";
 
@@ -217,7 +219,7 @@ function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyNa
 
   <section class="amount-box">
     <div class="amount-label">Amount Received</div>
-    <div class="amount-value">${currencySymbol} ${amount}</div>
+    <div class="amount-value">${safeCurrencySymbol} ${amount}</div>
   </section>
 
   ${invoice ? `
@@ -235,7 +237,7 @@ function renderReceipt(receipt: ReceiptRecord, currencySymbol: string, companyNa
   ${invoiceSummaryHtml}
   ` : `
   <table class="details-table"><thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
-    <tbody><tr><td>Payment for services</td><td style="text-align:right">${currencySymbol} ${amount}</td></tr></tbody>
+    <tbody><tr><td>Payment for services</td><td style="text-align:right">${safeCurrencySymbol} ${amount}</td></tr></tbody>
   </table>`}
   ${receipt.notes ? `<p style="margin:18px 0;color:#666;font-style:italic">Note: ${escapeHtml(receipt.notes)}</p>` : ""}
 
