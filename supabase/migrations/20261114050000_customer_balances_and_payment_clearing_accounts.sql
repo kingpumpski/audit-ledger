@@ -103,7 +103,7 @@ BEGIN
 
   v_new_paid := ROUND(COALESCE(v_invoice.amount_paid,0)+NEW.amount,2);
   v_new_balance := GREATEST(0,ROUND(COALESCE(v_invoice.total_amount,0)-v_new_paid,2));
-  IF NEW.amount > COALESCE(v_invoice.balance_due,0) THEN
+  IF NEW.amount > COALESCE(v_invoice.balance_due,v_invoice.total_amount-COALESCE(v_invoice.amount_paid,0),0) THEN
     RAISE EXCEPTION 'Payment exceeds the invoice balance due';
   END IF;
 
@@ -223,6 +223,8 @@ CREATE TABLE public.payment_clearing_settlements (
 
 CREATE INDEX payment_clearing_settlements_account_date_idx
   ON public.payment_clearing_settlements(clearing_account_id,settled_on DESC);
+CREATE UNIQUE INDEX payment_clearing_settlements_provider_reference_uidx
+  ON public.payment_clearing_settlements(clearing_account_id,provider_reference);
 
 ALTER TABLE public.payment_clearing_settlements ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.payment_clearing_settlements FROM PUBLIC,anon,authenticated;
