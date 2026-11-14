@@ -141,6 +141,7 @@ export function useReceipts() {
         })
         .eq('id', id)
         .eq('status', 'issued') // Only allow editing issued receipts
+        .is('deleted_at', null)
         .select('id')
         .maybeSingle();
 
