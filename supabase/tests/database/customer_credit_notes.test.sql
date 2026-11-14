@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(50);
+SELECT extensions.plan(54);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -88,6 +88,31 @@ SELECT extensions.is(
   'Credit note reduces the original invoice receivable balance'
 );
 
+SELECT extensions.lives_ok(
+  $ SELECT public.record_invoice_credit_note(
+    (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001'),
+    jsonb_build_array(jsonb_build_object(
+      'invoice_item_id',(SELECT id FROM public.invoice_items WHERE description='Credit note manual line'),
+      'quantity',0.5
+    )),
+    CURRENT_DATE,'Customer returned remaining half','RETURN-REF-CN-001-FINAL',
+    'c1000000-0000-4000-8000-000000000111'
+  ) $,
+  'Final credit against an invoice fully settles its remaining receivable'
+);
+
+SELECT extensions.is(
+  (SELECT balance_due FROM public.invoices WHERE invoice_number='INV-CN-001'),
+  0.00::numeric,
+  'Full credit-note settlement leaves no receivable balance'
+);
+
+SELECT extensions.is(
+  (SELECT status FROM public.invoices WHERE invoice_number='INV-CN-001'),
+  'paid'::public.invoice_status,
+  'A fully credited invoice is marked paid rather than remaining issued'
+);
+
 SELECT extensions.is(
   (SELECT round(sum(jl.debit-jl.credit),2)
    FROM public.journal_lines jl JOIN public.journal_entries je ON je.id=jl.journal_entry_id
@@ -173,10 +198,10 @@ SELECT extensions.is(
 INSERT INTO public.invoices (
   invoice_number,customer_id,status,issue_date,subtotal,tax_amount,total_amount,amount_paid,balance_due
 )
-SELECT 'INV-CN-003',id,'draft',CURRENT_DATE,80,0,80,0,80
+SELECT 'INV-CN-003',id,'draft',CURRENT_DATE,30,0,30,0,30
 FROM public.customers WHERE code='CREDIT-NOTE-CUSTOMER';
 INSERT INTO public.invoice_items(invoice_id,description,quantity,unit_price,tax_rate,tax_amount,line_total)
-SELECT id,'Target invoice line',1,80,0,0,80
+SELECT id,'Target invoice line',1,30,0,0,30
 FROM public.invoices WHERE invoice_number='INV-CN-003';
 
 SELECT extensions.lives_ok(
@@ -196,8 +221,14 @@ SELECT extensions.lives_ok(
 
 SELECT extensions.is(
   (SELECT balance_due FROM public.invoices WHERE invoice_number='INV-CN-003'),
-  50.00::numeric,
-  'Applying customer credit reduces the target invoice balance'
+  0.00::numeric,
+  'Applying customer credit fully settles the target invoice receivable'
+);
+
+SELECT extensions.is(
+  (SELECT status FROM public.invoices WHERE invoice_number='INV-CN-003'),
+  'paid'::public.invoice_status,
+  'A target invoice fully settled by customer credit is marked paid'
 );
 
 SELECT extensions.lives_ok(
