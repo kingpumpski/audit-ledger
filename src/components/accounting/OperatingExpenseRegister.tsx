@@ -13,7 +13,7 @@ import { Loader2, Plus, Wallet, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
-type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+type PaymentMethod = 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment';
 type ExpenseAccount = { id: string; code: string; name: string };
 type ExpenseRow = {
   id: string; expense_number: string; description: string; vendor_name: string;
