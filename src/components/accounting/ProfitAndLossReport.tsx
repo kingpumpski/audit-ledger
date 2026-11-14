@@ -119,6 +119,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
     refetchOnWindowFocus: true,
   });
   const asOfDate = attestationQuery.data?.attested_through || new Date().toISOString().slice(0, 10);
+  const costCoverageThroughDate = attestationOpen ? attestationDate : asOfDate;
 
   const journalQuery = useQuery({
     queryKey: ['profit-loss-journal', asOfDate],
@@ -145,7 +146,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   });
 
   const costCoverageQuery = useQuery({
-    queryKey: ['profit-loss-cost-coverage', asOfDate],
+    queryKey: ['profit-loss-cost-coverage', costCoverageThroughDate],
     queryFn: async () => {
       const pageSize = 1000;
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
@@ -166,7 +167,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           .select('id, invoice_number, issue_date')
           .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
           .is('deleted_at', null)
-          .lte('issue_date', asOfDate)
+          .lte('issue_date', costCoverageThroughDate)
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -208,7 +209,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         if (!invoice) return [];
         const isService = !item.product_id || productMap.get(item.product_id)?.is_service === true;
         const directCost = directCostMap.get(item.id);
-        const directCostAmount = directCost && directCost.incurred_on <= asOfDate
+        const directCostAmount = directCost && directCost.incurred_on <= costCoverageThroughDate
           ? Number(directCost.amount)
           : null;
         const hasVerifiedCost = isService
