@@ -52,7 +52,7 @@ export function calculateLineAmounts(input: {
   const amountAfterDiscount = Math.max(0, subtotal - discountAmount);
 
   const orderedTaxes = [...input.taxes]
-    .filter(tax => Number.isFinite(Number(tax.rate)) && Number(tax.rate) > 0)
+    .filter(tax => Number.isFinite(Number(tax.rate)) && Number(tax.rate) >= 0)
     .sort((a, b) => Number(Boolean(a.is_compound)) - Number(Boolean(b.is_compound)) || a.code.localeCompare(b.code));
 
   // Non-compound taxes use the base amount. Compound taxes are calculated
@@ -110,6 +110,13 @@ export function validateSelectedTaxRules(selectedTaxIds: string[], taxRules: Tax
   const availableTaxIds = new Set(taxRules.map(tax => tax.id));
   if (selectedTaxIds.some(id => !availableTaxIds.has(id))) {
     throw new Error('One or more selected taxes are no longer active or available. Refresh the tax list and review this invoice before saving.');
+  }
+
+  const invalidRateTax = taxRules.find(tax =>
+    !Number.isFinite(Number(tax.rate)) || Number(tax.rate) < 0 || Number(tax.rate) > 100
+  );
+  if (invalidRateTax) {
+    throw new Error(`Tax ${invalidRateTax.code} has an invalid rate. Tax rates must be between 0 and 100 percent.`);
   }
 
   const ineffectiveTax = taxRules.find(tax => !isTaxEffectiveOnDate(tax, date));
