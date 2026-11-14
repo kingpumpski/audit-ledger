@@ -36,6 +36,7 @@ interface OutstandingInvoice {
 
 interface CustomerCreditManagementProps {
   customerId: string;
+  customerName?: string;
   currencySymbol: string;
 }
 
@@ -79,7 +80,7 @@ function escapePrintText(value: unknown): string {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[character] || character);
 }
-function printCreditNote(note: CreditNoteHistory, currencySymbol: string, originalInvoiceNumber: string) {
+function printCreditNote(note: CreditNoteHistory, currencySymbol: string, originalInvoiceNumber: string, customerName = '') {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return false;
   const money = (value: number) => `${escapePrintText(currencySymbol)}${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -103,7 +104,7 @@ function printCreditNote(note: CreditNoteHistory, currencySymbol: string, origin
     .num{text-align:right;white-space:nowrap}.totals{margin:18px 0 0 auto;width:320px}.totals div{display:flex;justify-content:space-between;padding:5px}
     @media print{body{margin:14mm}}
   </style></head><body><h1>Credit Note</h1><div class="muted">${escapePrintText(note.credit_note_number)}</div>
-  <div class="meta"><div><b>Original invoice</b><br>${escapePrintText(originalInvoiceNumber)}</div><div><b>Credit date</b><br>${escapePrintText(note.credit_note_date)}</div>
+  <div class="meta"><div><b>Customer</b><br>${escapePrintText(customerName)}</div><div><b>Original invoice</b><br>${escapePrintText(originalInvoiceNumber)}</div><div><b>Credit date</b><br>${escapePrintText(note.credit_note_date)}</div>
   <div><b>Supporting reference</b><br>${escapePrintText(note.reference_number)}</div><div><b>Reason</b><br>${escapePrintText(note.reason)}</div></div>
   <table><thead><tr><th>Description / tax evidence</th><th class="num">Qty</th><th class="num">Net</th><th class="num">Tax</th><th class="num">Total</th></tr></thead><tbody>${lineRows || '<tr><td colspan="5">No credit lines recorded</td></tr>'}</tbody></table>
   <div class="totals"><div><span>Subtotal</span><b>${money(note.subtotal)}</b></div><div><span>Tax credited</span><b>${money(note.tax_amount)}</b></div><div><span>Total credit</span><b>${money(note.total_amount)}</b></div><div><span>Applied to receivable</span><b>${money(note.receivable_applied)}</b></div><div><span>Customer credit created</span><b>${money(note.customer_credit_amount)}</b></div></div>
@@ -125,7 +126,7 @@ const rpc = supabase.rpc as unknown as (
   args: Record<string, unknown>,
 ) => Promise<RpcResult<string>>;
 
-export function CustomerCreditManagement({ customerId, currencySymbol }: CustomerCreditManagementProps) {
+export function CustomerCreditManagement({ customerId, customerName = '', currencySymbol }: CustomerCreditManagementProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedCredit, setSelectedCredit] = useState<CustomerCreditBalance | null>(null);
@@ -381,7 +382,7 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
                     <div className="flex items-center gap-3">
                       <div className="text-right font-semibold tabular-nums">{currencySymbol}{Number(note.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                       <Button size="sm" variant="outline" onClick={() => {
-                        const printed = printCreditNote(note, currencySymbol, note.invoices?.invoice_number || note.invoice_id);
+                        const printed = printCreditNote(note, currencySymbol, note.invoices?.invoice_number || note.invoice_id, customerName);
                         if (!printed) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups for this site, then print the credit note again.', variant: 'destructive' });
                       }}><Printer className="mr-2 h-4 w-4" /> Print</Button>
                     </div>
