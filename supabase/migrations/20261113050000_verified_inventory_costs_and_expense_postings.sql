@@ -1171,6 +1171,12 @@ BEGIN
   IF p_incurred_on IS NULL OR p_payment_method IS NULL THEN
     RAISE EXCEPTION 'Cost date and payment method are required';
   END IF;
+  IF p_payment_method NOT IN (
+    'cash'::public.payment_method,
+    'bank_transfer'::public.payment_method
+  ) THEN
+    RAISE EXCEPTION 'Direct invoice costs must use cash or bank transfer';
+  END IF;
 
   SELECT * INTO v_item
   FROM public.invoice_items
