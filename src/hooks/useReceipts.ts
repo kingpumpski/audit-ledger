@@ -47,8 +47,8 @@ export function useReceipts() {
           customer:customers(*),
           invoice:invoices(*)
         `)
-        // Keep voided receipts visible for audit history while excluding other soft-deleted rows.
-        .or('deleted_at.is.null,status.eq.void')
+        // Voided receipts remain visible for audit history unless soft-deleted.
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -206,7 +206,8 @@ export function useReceipt(id: string) {
           invoice:invoices(*)
         `)
         .eq('id', id)
-        .or('deleted_at.is.null,status.eq.void')
+        // Keep voided receipts accessible only while they remain in the audit record.
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;
