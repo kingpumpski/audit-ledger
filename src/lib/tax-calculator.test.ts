@@ -36,6 +36,16 @@ describe('calculateLineAmounts', () => {
     expect(result.line_total).toBe(99);
   });
 
+  it('preserves a selected zero-rated tax in the tax evidence breakdown', () => {
+    const zeroRated: TaxRule = { ...vat, id: 'zero', code: 'ZERO', rate: 0 };
+    const result = calculateLineAmounts({
+      quantity: 1, unit_price: 100, taxes: [zeroRated], pricesIncludeTax: false,
+    });
+    expect(result.tax_amount).toBe(0);
+    expect(result.taxes).toHaveLength(1);
+    expect(result.taxes[0]).toMatchObject({ tax_id: 'zero', rate: 0, tax_amount: 0 });
+  });
+
   it('returns a no-tax total without changing the price', () => {
     const result = calculateLineAmounts({
       quantity: 3, unit_price: 12.5, taxes: [], pricesIncludeTax: false,
@@ -60,6 +70,12 @@ describe('validateSelectedTaxRules', () => {
   it('rejects selected taxes without a liability account', () => {
     expect(() => validateSelectedTaxRules(['vat'], [vat], '2026-11-14'))
       .toThrow('has no liability account configured');
+  });
+
+  it('rejects negative or out-of-range tax rates instead of omitting them', () => {
+    const invalid: TaxRule = { ...vat, rate: -1, liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [invalid], '2026-11-14'))
+      .toThrow('invalid rate');
   });
 
   it('accepts all selected taxes when active, effective and mapped', () => {
