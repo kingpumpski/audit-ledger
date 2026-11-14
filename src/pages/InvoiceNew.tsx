@@ -61,12 +61,12 @@ export default function InvoiceNew() {
   const { toast } = useToast();
   const { createInvoice, issueInvoiceAsync, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
-  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
   const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
 
   const [customerId, setCustomerId] = useState<string>('');
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [productDialogTargetId, setProductDialogTargetId] = useState<string | null>(null);
