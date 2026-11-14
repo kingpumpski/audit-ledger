@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(15);
+SELECT extensions.plan(16);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -128,6 +128,13 @@ SELECT extensions.is(
   (SELECT count(*) FROM public.payment_clearing_settlements WHERE provider_reference='CARD-PROVIDER-SETTLEMENT-001'),
   1::bigint,
   'One immutable settlement record is created'
+);
+SELECT extensions.lives_ok(
+  $cab_settlement_retry$ SELECT public.settle_payment_clearing_account(
+    '1020',40,1,CURRENT_DATE,'CARD-PROVIDER-SETTLEMENT-001','BANK-STATEMENT-001',
+    'ca100000-0000-4000-8000-000000000101','Card settlement with processor fees'
+  ) $cab_settlement_retry$,
+  'Retrying the same settlement request returns the original immutable settlement'
 );
 SELECT extensions.is(
   (SELECT clearing_balance FROM public.get_payment_clearing_balances() WHERE account_code='1020'),
