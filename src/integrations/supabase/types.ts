@@ -1625,6 +1625,33 @@ export type Database = {
         }
         Returns: string
       }
+      get_customer_account_balances: {
+        Args: { p_as_of_date?: string; p_customer_id?: string | null }
+        Returns: {
+          customer_id: string
+          customer_code: string
+          customer_name: string
+          invoiced_amount: number
+          payments_received: number
+          credit_notes_applied: number
+          customer_credits_applied: number
+          outstanding_balance: number
+          as_of_date: string
+        }[]
+      }
+      settle_payment_clearing_account: {
+        Args: {
+          p_clearing_account_code: string
+          p_gross_amount: number
+          p_fee_amount: number
+          p_settled_on: string
+          p_provider_reference: string
+          p_bank_reference: string
+          p_idempotency_key: string
+          p_notes?: string | null
+        }
+        Returns: string
+      }
       create_receipt_with_payment: {
         Args: {
           p_customer_id: string
