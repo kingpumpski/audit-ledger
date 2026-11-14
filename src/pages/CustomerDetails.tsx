@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import { CustomerCreditManagement } from '@/components/customers/CustomerCreditManagement';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +36,8 @@ export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { customers, updateCustomer, isUpdating } = useCustomers();
+  const { roles } = useAuth();
+  const canViewCustomerCredits = roles.some((role) => ['admin', 'accountant', 'auditor'].includes(role));
   const { settings } = useSettings();
   const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);
   const customer = customers.find(c => c.id === id);
@@ -217,7 +220,7 @@ export default function CustomerDetails() {
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="receipts">Receipts</TabsTrigger>
-            <TabsTrigger value="credits">Credits</TabsTrigger>
+            {canViewCustomerCredits && <TabsTrigger value="credits">Credits</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="details">
@@ -508,9 +511,9 @@ export default function CustomerDetails() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="credits">
+          {canViewCustomerCredits && <TabsContent value="credits">
             <CustomerCreditManagement customerId={customer.id} customerName={customer.name} currencySymbol={currencySymbol} />
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
       </div>
     </AppLayout>
