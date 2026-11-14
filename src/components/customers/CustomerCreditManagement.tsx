@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowRightLeft, Loader2, RefreshCw, Wallet } from 'lucide-react';
+import { ArrowRightLeft, Loader2, Printer, RefreshCw, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +39,80 @@ interface CustomerCreditManagementProps {
   currencySymbol: string;
 }
 
+interface CreditNoteHistoryLine {
+  id: string;
+  description: string;
+  quantity: number;
+  net_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  credit_note_line_taxes?: Array<{ tax_name: string; tax_code: string; tax_rate: number; taxable_amount: number; tax_amount: number }>;
+}
+interface CreditNoteHistory {
+  id: string;
+  credit_note_number: string;
+  invoice_id: string;
+  credit_note_date: string;
+  reason: string;
+  reference_number: string;
+  subtotal: number;
+  tax_amount: number;
+  total_amount: number;
+  receivable_applied: number;
+  customer_credit_amount: number;
+  credit_note_lines?: CreditNoteHistoryLine[];
+  customer_credit_applications?: Array<{ amount: number; applied_on: string; reference_number: string; applied_to_invoice_id: string }>;
+  customer_credit_refunds?: Array<{ amount: number; refunded_on: string; payment_method: string; reference_number: string }>;
+}
+type CreditHistoryQuery = {
+  select(columns: string): CreditHistoryQuery;
+  eq(column: string, value: string): CreditHistoryQuery;
+  order(column: string, options: { ascending: boolean }): CreditHistoryQuery;
+  then<TResult1 = { data: unknown[] | null; error: { message: string } | null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[] | null; error: { message: string } | null }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+};
+function escapePrintText(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] || character);
+}
+function printCreditNote(note: CreditNoteHistory, currencySymbol: string, originalInvoiceNumber: string) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return false;
+  const money = (value: number) => `${escapePrintText(currencySymbol)}${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const lineRows = (note.credit_note_lines || []).map((line) => {
+    const taxes = (line.credit_note_line_taxes || []).map((tax) =>
+      `<div class="muted">${escapePrintText(tax.tax_name)} (${escapePrintText(tax.tax_code)}) · ${Number(tax.tax_rate).toFixed(2)}% · ${money(tax.tax_amount)}</div>`
+    ).join('');
+    return `<tr><td>${escapePrintText(line.description)}${taxes}</td><td class="num">${Number(line.quantity).toLocaleString()}</td><td class="num">${money(line.net_amount)}</td><td class="num">${money(line.tax_amount)}</td><td class="num">${money(line.total_amount)}</td></tr>`;
+  }).join('');
+  const applications = (note.customer_credit_applications || []).map((entry) =>
+    `<tr><td>Applied to invoice</td><td>${escapePrintText(entry.applied_on)}</td><td>${escapePrintText(entry.reference_number)}</td><td class="num">${money(entry.amount)}</td></tr>`
+  ).join('');
+  const refunds = (note.customer_credit_refunds || []).map((entry) =>
+    `<tr><td>Customer refund · ${escapePrintText(entry.payment_method.replace(/_/g, ' '))}</td><td>${escapePrintText(entry.refunded_on)}</td><td>${escapePrintText(entry.reference_number)}</td><td class="num">${money(entry.amount)}</td></tr>`
+  ).join('');
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapePrintText(note.credit_note_number)}</title><style>
+    body{font:14px Arial,sans-serif;color:#172033;margin:36px}h1{font-size:24px;margin:0 0 6px}.muted{color:#667085;font-size:12px;margin-top:4px}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:24px 0}.meta div{padding:10px;background:#f6f7f9}
+    table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:9px;border-bottom:1px solid #d9dee7;text-align:left;vertical-align:top}th{background:#f6f7f9}
+    .num{text-align:right;white-space:nowrap}.totals{margin:18px 0 0 auto;width:320px}.totals div{display:flex;justify-content:space-between;padding:5px}
+    @media print{body{margin:14mm}}
+  </style></head><body><h1>Credit Note</h1><div class="muted">${escapePrintText(note.credit_note_number)}</div>
+  <div class="meta"><div><b>Original invoice</b><br>${escapePrintText(originalInvoiceNumber)}</div><div><b>Credit date</b><br>${escapePrintText(note.credit_note_date)}</div>
+  <div><b>Supporting reference</b><br>${escapePrintText(note.reference_number)}</div><div><b>Reason</b><br>${escapePrintText(note.reason)}</div></div>
+  <table><thead><tr><th>Description / tax evidence</th><th class="num">Qty</th><th class="num">Net</th><th class="num">Tax</th><th class="num">Total</th></tr></thead><tbody>${lineRows || '<tr><td colspan="5">No credit lines recorded</td></tr>'}</tbody></table>
+  <div class="totals"><div><span>Subtotal</span><b>${money(note.subtotal)}</b></div><div><span>Tax credited</span><b>${money(note.tax_amount)}</b></div><div><span>Total credit</span><b>${money(note.total_amount)}</b></div><div><span>Applied to receivable</span><b>${money(note.receivable_applied)}</b></div><div><span>Customer credit created</span><b>${money(note.customer_credit_amount)}</b></div></div>
+  <h3>Customer credit settlement history</h3><table><thead><tr><th>Type</th><th>Date</th><th>Reference</th><th class="num">Amount</th></tr></thead><tbody>${applications}${refunds}${applications || refunds ? '' : '<tr><td colspan="4">No customer-credit settlement recorded</td></tr>'}</tbody></table>
+  <script>window.addEventListener('load',()=>{window.focus();window.print();});</script></body></html>`);
+  printWindow.document.close();
+  return true;
+}
+
+
 function todayValue() {
   const date = new Date();
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -68,6 +142,21 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
   const [refundKey, setRefundKey] = useState(() => crypto.randomUUID());
   const [isApplying, setIsApplying] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
+
+  const historyQuery = useQuery({
+    queryKey: ['customer-credit-note-history', customerId],
+    queryFn: async () => {
+      const db = supabase as unknown as { from: (table: string) => CreditHistoryQuery };
+      const { data, error } = await db.from('credit_notes')
+        .select('id, credit_note_number, invoice_id, credit_note_date, reason, reference_number, subtotal, tax_amount, total_amount, receivable_applied, customer_credit_amount, credit_note_lines(id, description, quantity, net_amount, tax_amount, total_amount, credit_note_line_taxes(tax_name, tax_code, tax_rate, taxable_amount, tax_amount)), customer_credit_applications(amount, applied_on, reference_number, applied_to_invoice_id), customer_credit_refunds(amount, refunded_on, payment_method, reference_number)')
+        .eq('customer_id', customerId)
+        .order('credit_note_date', { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data || []) as unknown as CreditNoteHistory[];
+    },
+    enabled: !!customerId,
+  });
+
 
   const balancesQuery = useQuery({
     queryKey: ['customer-credit-balances', customerId],
@@ -255,6 +344,57 @@ export function CustomerCreditManagement({ customerId, currencySymbol }: Custome
                       </Button>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Credit Note History</CardTitle>
+          <CardDescription>All issued credit notes, including credits fully applied to receivables, with original tax evidence and settlement references.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {historyQuery.isLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : historyQuery.error ? (
+            <div className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
+              {getErrorMessage(historyQuery.error, 'Credit-note history could not be loaded.')}
+              <Button className="mt-2" size="sm" variant="outline" onClick={() => historyQuery.refetch()}>Retry</Button>
+            </div>
+          ) : !historyQuery.data?.length ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No credit notes have been issued for this customer.</p>
+          ) : (
+            <div className="space-y-3">
+              {historyQuery.data.map((note) => (
+                <div key={note.id} className="rounded-lg border p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="font-semibold">{note.credit_note_number}</div>
+                      <div className="text-sm text-muted-foreground">{format(new Date(note.credit_note_date), 'MMM d, yyyy')} · Invoice {note.invoice_id}</div>
+                      <p className="mt-1 text-sm">{note.reason}</p>
+                      <p className="text-xs text-muted-foreground">Reference: {note.reference_number}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right font-semibold tabular-nums">{currencySymbol}{Number(note.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                      <Button size="sm" variant="outline" onClick={() => {
+                        const printed = printCreditNote(note, currencySymbol, note.invoice_id);
+                        if (!printed) toast({ title: 'Pop-up blocked', description: 'Allow pop-ups for this site, then print the credit note again.', variant: 'destructive' });
+                      }}><Printer className="mr-2 h-4 w-4" /> Print</Button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                    <div>Lines: {note.credit_note_lines?.length || 0}</div>
+                    <div>Applied to A/R: {currencySymbol}{Number(note.receivable_applied).toFixed(2)}</div>
+                    <div>Customer credit: {currencySymbol}{Number(note.customer_credit_amount).toFixed(2)}</div>
+                  </div>
+                  {(note.customer_credit_applications?.length || note.customer_credit_refunds?.length) ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Settlements: {(note.customer_credit_applications?.length || 0)} applications · {(note.customer_credit_refunds?.length || 0)} refunds
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
