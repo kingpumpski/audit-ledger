@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(12);
+SELECT extensions.plan(13);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -113,6 +113,26 @@ SELECT extensions.is(
   (SELECT is_current FROM public.get_financial_completeness_attestation()),
   true,
   'The latest attestation is current after the updated ledger is reviewed'
+);
+
+INSERT INTO public.journal_entries (
+  entry_number, entry_date, description, source_type, source_id, currency, created_by
+) VALUES (
+  public.get_next_sequence('journal'), CURRENT_DATE,
+  'Incomplete empty journal must block finance sign-off', 'payment',
+  'f0000000-0000-4000-8000-000000000202', 'USD',
+  'f0000000-0000-4000-8000-000000000001'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.attest_financial_completeness(
+    CURRENT_DATE,
+    'I confirm that all expenses and direct costs through this date have been entered and reconciled to supporting evidence.',
+    'f0000000-0000-4000-8000-000000000104'
+  ) $,
+  'P0001',
+  'The ledger contains an unbalanced or incomplete journal through the attestation date',
+  'An empty journal cannot pass the finance completeness attestation'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000002', true);
