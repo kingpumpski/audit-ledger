@@ -104,6 +104,8 @@ export default function Accounting() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_entries' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
         void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
+        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_items' }, () => {
         void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
