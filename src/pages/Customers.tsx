@@ -46,14 +46,14 @@ export default function Customers() {
         balance.as_of_date,
       ]),
     ];
-    const csv = rows.map(row => row.map(cell).join(',')).join('\\r\\n');
+    const csv = rows.map(row => row.map(cell).join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `customer-balances-as-at-${asOfDate}.csv`;
     link.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
