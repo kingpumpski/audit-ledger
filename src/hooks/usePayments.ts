@@ -16,7 +16,7 @@ interface CreatePaymentData {
   invoice_id: string;
   customer_id: string;
   amount: number;
-  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other';
+  payment_method: 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment';
   reference_number?: string;
   notes?: string;
   idempotency_key: string;
