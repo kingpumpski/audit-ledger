@@ -441,7 +441,7 @@ export default function InvoiceNew() {
                   </Select>
                   {customerId && (
                     <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Customer outstanding balance</span>
+                      <span className="text-muted-foreground">Current outstanding balance</span>
                       <span className="font-semibold tabular-nums">
                         {isCustomerBalanceLoading ? 'Calculating…' : selectedCustomerBalanceError ? 'Unavailable' : `${currencySymbol}${selectedCustomerBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
