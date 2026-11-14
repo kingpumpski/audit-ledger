@@ -125,11 +125,11 @@ INSERT INTO public.journal_entries (
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.attest_financial_completeness(
+  $$ SELECT public.attest_financial_completeness(
     CURRENT_DATE,
     'I confirm that all expenses and direct costs through this date have been entered and reconciled to supporting evidence.',
     'f0000000-0000-4000-8000-000000000104'
-  ) $,
+  ) $$,
   'P0001',
   'The ledger contains an unbalanced or incomplete journal through the attestation date',
   'An empty journal cannot pass the finance completeness attestation'
