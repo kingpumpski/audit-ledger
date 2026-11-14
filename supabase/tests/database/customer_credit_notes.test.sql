@@ -209,11 +209,11 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.refund_customer_credit(
+  $refund_method_test$ SELECT public.refund_customer_credit(
     (SELECT id FROM public.credit_notes WHERE reference_number='RETURN-REF-CN-002'),
     1,CURRENT_DATE,'credit_card','CUSTOMER-REFUND-UNSUPPORTED',
     'c1000000-0000-4000-8000-000000000405'
-  ) $,
+  ) $refund_method_test$,
   'P0001',
   'Customer-credit refunds must use cash, bank transfer or mobile payment',
   'Customer-credit refunds cannot misclassify card or unsupported methods as bank transfers'
