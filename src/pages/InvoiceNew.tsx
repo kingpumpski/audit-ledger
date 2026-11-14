@@ -61,7 +61,7 @@ export default function InvoiceNew() {
   const { toast } = useToast();
   const { createInvoice, issueInvoiceAsync, isCreating, isIssuing } = useInvoices();
   const { customers, isLoading: customersLoading, createCustomer, isCreating: isCreatingCustomer } = useCustomers();
-  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
+  const { balances: selectedCustomerBalances, isLoading: isCustomerBalanceLoading, error: selectedCustomerBalanceError } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), customerId || undefined);
   const { products, isLoading: productsLoading, createProduct, isCreating: isCreatingProduct } = useProducts();
   const { taxes } = useTaxes();
   const { settings } = useSettings();
@@ -443,7 +443,7 @@ export default function InvoiceNew() {
                     <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center justify-between gap-3">
                       <span className="text-muted-foreground">Customer outstanding balance</span>
                       <span className="font-semibold tabular-nums">
-                        {isCustomerBalanceLoading ? 'Calculating…' : `${currencySymbol}${selectedCustomerBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        {isCustomerBalanceLoading ? 'Calculating…' : selectedCustomerBalanceError ? 'Unavailable' : `${currencySymbol}${selectedCustomerBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                     </div>
                   )}
