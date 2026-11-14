@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Tables } from '@/integrations/supabase/types';
+import { Tables, type Json } from '@/integrations/supabase/types';
 import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from '@/lib/tax-calculator';
 
 type Invoice = Tables<'invoices'>;
@@ -165,8 +165,17 @@ export function useInvoices() {
           tax_amount: item.tax_amount,
           line_total: item.line_total,
           sort_order: item.sort_order,
-          tax_breakdown: item.tax_breakdown,
-        })),
+          tax_breakdown: item.tax_breakdown.map(tax => ({
+            tax_id: tax.tax_id,
+            name: tax.name,
+            code: tax.code,
+            rate: tax.rate,
+            taxable_amount: tax.taxable_amount,
+            tax_amount: tax.tax_amount,
+            is_compound: tax.is_compound,
+            tax_order: tax.tax_order,
+          })),
+        })) as unknown as Json,
       });
 
       if (createError) throw createError;
