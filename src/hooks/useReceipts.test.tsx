@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useReceipts } from './useReceipts';
+import { useReceipt, useReceipts } from './useReceipts';
 import { supabase } from '@/integrations/supabase/client';
 
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
@@ -29,6 +29,7 @@ function makeBuilder(result: { data: unknown; error: unknown }) {
     or: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     maybeSingle: ReturnType<typeof vi.fn>;
+    single: ReturnType<typeof vi.fn>;
     then: (resolve: (value: typeof result) => unknown) => Promise<unknown>;
   } = {
     select: vi.fn(),
@@ -38,6 +39,7 @@ function makeBuilder(result: { data: unknown; error: unknown }) {
     or: vi.fn(),
     order: vi.fn(),
     maybeSingle: vi.fn(),
+    single: vi.fn(),
     then: (resolve) => Promise.resolve(result).then(resolve),
   };
 
@@ -45,6 +47,7 @@ function makeBuilder(result: { data: unknown; error: unknown }) {
     builder[method].mockReturnValue(builder);
   }
   builder.maybeSingle.mockResolvedValue(result);
+  builder.single.mockResolvedValue(result);
   return builder;
 }
 
@@ -57,6 +60,36 @@ function renderReceiptsHook() {
   );
   return renderHook(() => useReceipts(), { wrapper });
 }
+
+describe('receipt soft-delete filtering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('keeps voided receipts in the register but excludes every soft-deleted receipt', async () => {
+    const builder = makeBuilder({ data: [], error: null });
+    from.mockReturnValue(builder as never);
+    renderReceiptsHook();
+
+    await waitFor(() => expect(builder.order).toHaveBeenCalledWith('created_at', { ascending: false }));
+    expect(builder.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(builder.or).not.toHaveBeenCalled();
+  });
+
+  it('does not allow a soft-deleted void receipt to be loaded by direct URL', async () => {
+    const builder = makeBuilder({ data: null, error: new Error('Not found') });
+    from.mockReturnValue(builder as never);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useReceipt('receipt-voided-deleted'), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(builder.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(builder.or).not.toHaveBeenCalled();
+  });
+});
 
 describe('useReceipts updateReceipt', () => {
   beforeEach(() => {
