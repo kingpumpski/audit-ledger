@@ -473,10 +473,6 @@ export function CustomerCreditManagement({ customerId, customerName = '', curren
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="bank_transfer">Bank transfer</SelectItem>
                   <SelectItem value="mobile_payment">Mobile payment</SelectItem>
-                  <SelectItem value="credit_card">Credit card</SelectItem>
-                  <SelectItem value="debit_card">Debit card</SelectItem>
-                  <SelectItem value="check">Cheque</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </label>
