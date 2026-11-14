@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { useCustomers } from '@/hooks/useCustomers';
+import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/hooks/useSettings';
 import { CustomerCreditManagement } from '@/components/customers/CustomerCreditManagement';
@@ -41,6 +42,8 @@ export default function CustomerDetails() {
   const { settings } = useSettings();
   const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);
   const customer = customers.find(c => c.id === id);
+  const { balances: customerBalances, isLoading: isCustomerBalanceLoading } = useCustomerAccountBalances(format(new Date(), 'yyyy-MM-dd'), id || undefined);
+  const currentOutstandingBalance = customerBalances[0]?.outstanding_balance ?? 0;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -206,8 +209,8 @@ export default function CustomerDetails() {
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Current Balance</p>
-                <p className="text-2xl font-bold">
-                  ${(customer.current_balance || 0).toLocaleString()}
+                <p className="text-2xl font-bold tabular-nums">
+                  {isCustomerBalanceLoading ? 'Calculating…' : `${currencySymbol}${currentOutstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </p>
               </div>
             </div>
