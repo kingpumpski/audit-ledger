@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, TrendingUp, TrendingDown, CircleAlert, CircleCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type JournalLine = {
   debit: number;
@@ -40,11 +44,12 @@ type CostInput = { unitCost: string; reference: string; notes: string; incurredO
 type DirectInvoiceCostRecord = {
   invoice_item_id: string;
   amount: number | string;
+  incurred_on: string;
 };
 
 type DirectCostApi = {
   from: (table: 'invoice_item_direct_costs') => {
-    select: (columns: 'invoice_item_id, amount') => PromiseLike<{
+    select: (columns: 'invoice_item_id, amount, incurred_on') => PromiseLike<{
       data: DirectInvoiceCostRecord[] | null;
       error: { message: string } | null;
     }>;
@@ -64,13 +69,59 @@ type DirectCostApi = {
 
 const directCostApi = supabase as unknown as DirectCostApi;
 
+type FinancialAttestation = {
+  attestation_id: string;
+  attested_through: string;
+  statement: string;
+  attested_by: string;
+  attested_at: string;
+  is_current: boolean;
+};
+
+type FinancialAttestationApi = {
+  rpc: {
+    (functionName: 'get_financial_completeness_attestation'): PromiseLike<{
+      data: FinancialAttestation[] | null;
+      error: { message: string } | null;
+    }>;
+    (functionName: 'attest_financial_completeness', args: {
+      p_attested_through: string;
+      p_statement: string;
+      p_idempotency_key: string;
+    }): PromiseLike<{ data: string | null; error: { message: string } | null }>;
+  };
+};
+
+const financialAttestationApi = supabase as unknown as FinancialAttestationApi;
+
 export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { roles } = useAuth();
+  const canAttestCompleteness = roles.includes('admin') || roles.includes('accountant');
   const [costInputs, setCostInputs] = useState<Record<string, CostInput>>({});
+  const [attestationOpen, setAttestationOpen] = useState(false);
+  const [attestationDate, setAttestationDate] = useState(new Date().toISOString().slice(0, 10));
+  const [attestationStatement, setAttestationStatement] = useState(
+    'I confirm that all operating expenses and direct costs incurred through this date have been entered and reconciled to supporting evidence.'
+  );
+  const [attestationConfirmed, setAttestationConfirmed] = useState(false);
+  const [attestationIdempotencyKey, setAttestationIdempotencyKey] = useState(() => crypto.randomUUID());
+
+  const attestationQuery = useQuery({
+    queryKey: ['financial-completeness-attestation'],
+    queryFn: async (): Promise<FinancialAttestation | null> => {
+      const { data, error } = await financialAttestationApi.rpc('get_financial_completeness_attestation');
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+  });
+  const asOfDate = attestationQuery.data?.attested_through || new Date().toISOString().slice(0, 10);
 
   const journalQuery = useQuery({
-    queryKey: ['profit-loss-journal'],
+    queryKey: ['profit-loss-journal', asOfDate],
     queryFn: async (): Promise<JournalEntry[]> => {
       const allEntries: JournalEntry[] = [];
       let offset = 0;
@@ -79,6 +130,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const { data, error } = await supabase
           .from('journal_entries')
           .select('entry_date, source_type, lines:journal_lines(debit, credit, account:chart_of_accounts(code, account_type))')
+          .lte('entry_date', asOfDate)
           .order('entry_date', { ascending: true })
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -93,7 +145,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   });
 
   const costCoverageQuery = useQuery({
-    queryKey: ['profit-loss-cost-coverage'],
+    queryKey: ['profit-loss-cost-coverage', asOfDate],
     queryFn: async () => {
       const pageSize = 1000;
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
@@ -101,10 +153,10 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       const products: Array<{ id: string; name: string; is_service: boolean }> = [];
       const { data: directCosts, error: directCostsError } = await directCostApi
         .from('invoice_item_direct_costs')
-        .select('invoice_item_id, amount');
+        .select('invoice_item_id, amount, incurred_on');
       if (directCostsError) throw directCostsError;
-      const directCostMap = new Map<string, number>(
-        (directCosts || []).map((cost) => [cost.invoice_item_id, Number(cost.amount)])
+      const directCostMap = new Map<string, DirectInvoiceCostRecord>(
+        (directCosts || []).map((cost) => [cost.invoice_item_id, cost])
       );
 
       let offset = 0;
@@ -114,6 +166,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           .select('id, invoice_number, issue_date')
           .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
           .is('deleted_at', null)
+          .lte('issue_date', asOfDate)
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -155,7 +208,10 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const invoice = invoiceMap.get(item.invoice_id);
         if (!invoice) return [];
         const isService = !item.product_id || productMap.get(item.product_id)?.is_service === true;
-        const directCostAmount = directCostMap.get(item.id) ?? null;
+        const directCost = directCostMap.get(item.id);
+        const directCostAmount = directCost && directCost.incurred_on <= asOfDate
+          ? Number(directCost.amount)
+          : null;
         if (isService && directCostAmount !== null) return [];
         return [{
           ...item,
@@ -193,6 +249,32 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       toast({ title: 'Historical cost verified', description: 'The source reference was saved and cost of sales was posted when the invoice became fully costed.' });
     },
     onError: error => toast({ title: 'Could not verify historical cost', description: error.message, variant: 'destructive' }),
+  });
+
+  const attestCompleteness = useMutation({
+    mutationFn: async () => {
+      if (!attestationConfirmed) throw new Error('Confirm the completeness declaration before attesting.');
+      if (!costCoverageComplete) throw new Error('Verify every issued invoice line cost before attesting.');
+      if (!attestationDate || attestationDate > new Date().toISOString().slice(0, 10)) {
+        throw new Error('Choose a past or current attestation date.');
+      }
+      const { error } = await financialAttestationApi.rpc('attest_financial_completeness', {
+        p_attested_through: attestationDate,
+        p_statement: attestationStatement.trim(),
+        p_idempotency_key: attestationIdempotencyKey,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['financial-completeness-attestation'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+      toast({ title: 'Financial completeness attested', description: 'The report is now bound to the reviewed ledger and issued-invoice cost evidence through the selected date.' });
+      setAttestationOpen(false);
+      setAttestationConfirmed(false);
+      setAttestationIdempotencyKey(crypto.randomUUID());
+    },
+    onError: error => toast({ title: 'Could not attest financial completeness', description: error.message, variant: 'destructive' }),
   });
 
   const recordServiceDirectCost = useMutation({
@@ -241,38 +323,54 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   // Expense-entry, settlement, reversal and refund workflows are implemented.
   // Completeness still requires a finance attestation; never infer it merely
   // because the system has no currently visible unrecorded expense rows.
-  const expenseCaptureComplete = false;
+  const expenseCaptureComplete = attestationQuery.data?.is_current === true;
   const canDisplayNetProfit = costCoverageComplete && expenseCaptureComplete;
   const grossProfit = totals.revenue - totals.costOfGoodsSold;
   const netProfit = grossProfit - totals.operatingExpenses;
   const formatAmount = (amount: number) =>
     `${currencySymbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  if (journalQuery.isLoading || costCoverageQuery.isLoading) {
+  if (attestationQuery.isLoading || journalQuery.isLoading || costCoverageQuery.isLoading) {
     return <Card><CardContent className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin" /></CardContent></Card>;
   }
 
-  if (journalQuery.isError || costCoverageQuery.isError) {
+  if (attestationQuery.isError || journalQuery.isError || costCoverageQuery.isError) {
     return <Card><CardContent className="py-8 text-sm text-destructive">The profit and loss report could not be loaded. Check finance-role access and refresh the report.</CardContent></Card>;
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
-        <CardTitle>Profit &amp; Loss — All Recorded Time</CardTitle>
+        <CardTitle>Profit &amp; Loss — Through {asOfDate}</CardTitle>
         <CardDescription>
           Accrual-basis sales and verified product costs. Final net profit remains withheld until complete operating-expense capture is available.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="flex flex-wrap items-center gap-2">
+          {expenseCaptureComplete ? (
+            <Badge variant="secondary" className="gap-1"><CircleCheck className="h-3.5 w-3.5" />Finance attested through {asOfDate}</Badge>
+          ) : attestationQuery.data ? (
+            <Badge variant="destructive" className="gap-1"><CircleAlert className="h-3.5 w-3.5" />Attestation stale — review ledger changes</Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1"><CircleAlert className="h-3.5 w-3.5" />Finance completeness sign-off required</Badge>
+          )}
+          {canAttestCompleteness && (
+            <Button size="sm" variant="outline" onClick={() => {
+              setAttestationDate(new Date().toISOString().slice(0, 10));
+              setAttestationConfirmed(false);
+              setAttestationOpen(true);
+            }} disabled={!costCoverageComplete || attestCompleteness.isPending}>
+              Attest completeness
+            </Button>
+          )}
           {costCoverageComplete ? (
             <Badge variant="secondary" className="gap-1"><CircleCheck className="h-3.5 w-3.5" />Product cost coverage complete</Badge>
           ) : (
             <Badge variant="destructive" className="gap-1"><CircleAlert className="h-3.5 w-3.5" />Profit withheld — {uncosted} sold line(s) without verified cost</Badge>
           )}
-          <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice(s) checked</span>
-          <Badge variant="outline" className="border-warning/40 text-warning">Expense capture incomplete</Badge>
+          <span className="text-xs text-muted-foreground">{costCoverageQuery.data?.soldLineCount || 0} issued invoice(s) checked through {asOfDate}</span>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -370,13 +468,51 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           </div>
         )}
 
-        <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
-          <p className="font-medium text-warning">Final net profit is not yet available</p>
-          <p className="mt-1 text-muted-foreground">
-            The Operating Expenses register records supplier and business costs when incurred, recognizes unpaid balances in Accounts Payable, and posts each cash/bank settlement separately. Petty-cash expenses, controlled reversals and evidenced supplier refunds are also supported. However, the system cannot independently prove that every real-world expense has been entered. This report shows all recorded expense postings but withholds final net profit until a finance completeness attestation and ledger reconciliation are available. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
-          </p>
-        </div>
+        {!expenseCaptureComplete && (
+          <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-sm">
+            <p className="font-medium text-warning">Final net profit is withheld pending finance sign-off</p>
+            <p className="mt-1 text-muted-foreground">
+              All recorded operating expenses, petty-cash expenses, reversals and supplier refunds are included. An authorized accountant or administrator must attest that expenses through the reporting date are complete. The attestation is invalidated automatically if backdated journal entries or issued-invoice cost evidence change. Stock purchases remain Inventory assets until sold; tax collected is excluded from sales revenue.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
+    <Dialog open={attestationOpen} onOpenChange={setAttestationOpen}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Attest financial completeness</DialogTitle>
+          <DialogDescription>
+            This is an auditable finance sign-off. The database will reject the attestation if the ledger is unbalanced or any issued invoice line through the selected date lacks verified cost evidence.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="attestation-date">Reporting date</Label>
+            <Input id="attestation-date" type="date" max={new Date().toISOString().slice(0, 10)} value={attestationDate} onChange={event => setAttestationDate(event.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="attestation-statement">Finance declaration</Label>
+            <Textarea id="attestation-statement" value={attestationStatement} onChange={event => setAttestationStatement(event.target.value)} rows={4} />
+            <p className="text-xs text-muted-foreground">At least 30 characters. This statement is retained with the immutable attestation record.</p>
+          </div>
+          <label className="flex items-start gap-3 text-sm">
+            <Checkbox checked={attestationConfirmed} onCheckedChange={value => setAttestationConfirmed(value === true)} />
+            <span>I confirm that all expenses and direct costs incurred through this date have been entered and reconciled to supporting evidence.</span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAttestationOpen(false)}>Cancel</Button>
+            <Button onClick={() => attestCompleteness.mutate()} disabled={
+              attestCompleteness.isPending || !attestationConfirmed ||
+              attestationStatement.trim().length < 30 || !attestationDate || !costCoverageComplete
+            }>
+              {attestCompleteness.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Record attestation
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
