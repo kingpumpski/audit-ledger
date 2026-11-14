@@ -43,6 +43,29 @@ export function useReceiptPrint() {
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
+
+      // Wait for the document, web fonts and embedded images before opening
+      // the print dialog; otherwise the first print can omit the logo or styles.
+      if (printWindow.document.readyState !== 'complete') {
+        await new Promise<void>((resolve) => {
+          printWindow.addEventListener('load', () => resolve(), { once: true });
+        });
+      }
+      if (printWindow.document.fonts?.ready) {
+        await printWindow.document.fonts.ready;
+      }
+      await Promise.all(
+        Array.from(printWindow.document.images).map((image) =>
+          typeof image.decode === 'function' ? image.decode().catch(() => undefined) : Promise.resolve()
+        )
+      );
+      await new Promise<void>((resolve) => {
+        printWindow.requestAnimationFrame(() => resolve());
+      });
+
+      if (printWindow.closed) {
+        throw new Error('The print window was closed before the receipt was ready.');
+      }
       printWindow.focus();
       printWindow.print();
     } catch (error) {
