@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateLineAmounts, isTaxEffectiveOnDate, type TaxRule } from './tax-calculator';
+import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, type TaxRule } from './tax-calculator';
 
 const vat: TaxRule = { id: 'vat', name: 'VAT', code: 'VAT', rate: 10, is_compound: false };
 const levy: TaxRule = { id: 'levy', name: 'Levy', code: 'LEVY', rate: 2, is_compound: false };
@@ -42,6 +42,29 @@ describe('calculateLineAmounts', () => {
     });
     expect(result.line_total).toBe(37.5);
     expect(result.tax_amount).toBe(0);
+  });
+});
+
+describe('validateSelectedTaxRules', () => {
+  it('rejects selected taxes that are no longer active or available', () => {
+    expect(() => validateSelectedTaxRules(['vat', 'inactive'], [vat], '2026-11-14'))
+      .toThrow('no longer active or available');
+  });
+
+  it('rejects selected taxes outside their effective date', () => {
+    const expired: TaxRule = { ...vat, effective_to: '2026-10-31', liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [expired], '2026-11-14'))
+      .toThrow('not effective on the invoice date');
+  });
+
+  it('rejects selected taxes without a liability account', () => {
+    expect(() => validateSelectedTaxRules(['vat'], [vat], '2026-11-14'))
+      .toThrow('has no liability account configured');
+  });
+
+  it('accepts all selected taxes when active, effective and mapped', () => {
+    const configured: TaxRule = { ...vat, liability_account_id: 'liability-1' };
+    expect(() => validateSelectedTaxRules(['vat'], [configured], '2026-11-14')).not.toThrow();
   });
 });
 
