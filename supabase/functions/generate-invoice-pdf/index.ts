@@ -87,7 +87,8 @@ serve(async (req) => {
         *,
         customer:customers(*),
         items:invoice_items(*),
-        discount:discounts(*)
+        discount:discounts(*),
+        invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes(name, code))
       `)
       .eq("id", invoiceId)
       .is("deleted_at", null)
@@ -128,6 +129,20 @@ serve(async (req) => {
       `)
       .join("");
 
+    const taxBreakdownHtml = (invoice.invoice_taxes ?? []).map((tax: {
+      tax_rate: number;
+      taxable_amount: number;
+      tax_amount: number;
+      tax?: { name?: string | null; code?: string | null } | null;
+    }) => `
+      <tr>
+        <td>${tax.tax?.name || tax.tax?.code || "Tax"}</td>
+        <td style="text-align: right;">${Number(tax.tax_rate || 0).toFixed(2)}%</td>
+        <td style="text-align: right;">${currencySymbol}${Number(tax.taxable_amount || 0).toFixed(2)}</td>
+        <td style="text-align: right;">${currencySymbol}${Number(tax.tax_amount || 0).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
     const statusColors: Record<string, { bg: string; text: string }> = {
       draft: { bg: "#f1f5f9", text: "#475569" },
       issued: { bg: "#fef3c7", text: "#92400e" },
@@ -144,6 +159,8 @@ serve(async (req) => {
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <title>Invoice ${invoice.invoice_number}</title>
   <style>
     @page { margin: 0; size: A4; }
@@ -172,6 +189,12 @@ serve(async (req) => {
     .items-table th:first-child { border-radius: 8px 0 0 0; }
     .items-table th:last-child { border-radius: 0 8px 0 0; }
     .items-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; }
+    .tax-breakdown { margin: 24px 0 30px; }
+    .tax-breakdown h3 { font-size: 14px; margin-bottom: 10px; color: #475569; }
+    .tax-breakdown table { width: 100%; border-collapse: collapse; }
+    .tax-breakdown th, .tax-breakdown td { padding: 9px 12px; border-bottom: 1px solid #e5e7eb; font-size: 12px; text-align: left; }
+    .tax-breakdown th { background: #f8fafc; color: #64748b; text-transform: uppercase; font-size: 10px; }
+    .tax-breakdown th:not(:first-child), .tax-breakdown td:not(:first-child) { text-align: right; }
     .totals-section { display: flex; justify-content: flex-end; }
     .totals-box { width: 300px; }
     .total-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
@@ -243,6 +266,16 @@ serve(async (req) => {
       ${itemsHtml}
     </tbody>
   </table>
+
+  ${invoice.invoice_taxes?.length ? `
+  <section class="tax-breakdown">
+    <h3>Tax breakdown</h3>
+    <table>
+      <thead><tr><th>Tax</th><th>Rate</th><th>Taxable amount</th><th>Tax amount</th></tr></thead>
+      <tbody>${taxBreakdownHtml}</tbody>
+    </table>
+  </section>
+  ` : ""}
 
   <div class="totals-section">
     <div class="totals-box">
