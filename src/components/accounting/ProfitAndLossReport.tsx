@@ -149,7 +149,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
     queryFn: async () => {
       const pageSize = 1000;
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
-      const missingItems: Array<{ id: string; invoice_id: string; description: string; quantity: number; unit_price: number; product_id: string | null }> = [];
+      const missingItems: Array<{ id: string; invoice_id: string; description: string; quantity: number; unit_price: number; product_id: string | null; unit_cost: number | null }> = [];
       const products: Array<{ id: string; name: string; is_service: boolean }> = [];
       const { data: directCosts, error: directCostsError } = await directCostApi
         .from('invoice_item_direct_costs')
@@ -179,8 +179,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       while (true) {
         const { data, error } = await supabase
           .from('invoice_items')
-          .select('id, invoice_id, description, quantity, unit_price, product_id')
-          .is('unit_cost', null)
+          .select('id, invoice_id, description, quantity, unit_price, product_id, unit_cost')
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -212,7 +211,10 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const directCostAmount = directCost && directCost.incurred_on <= asOfDate
           ? Number(directCost.amount)
           : null;
-        if (isService && directCostAmount !== null) return [];
+        const hasVerifiedCost = isService
+          ? directCostAmount !== null
+          : item.unit_cost !== null;
+        if (hasVerifiedCost) return [];
         return [{
           ...item,
           invoice_number: invoice.invoice_number,
@@ -489,7 +491,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="attestation-date">Reporting date</Label>
-            <Input id="attestation-date" type="date" max={new Date().toISOString().slice(0, 10)} value={attestationDate} onChange={event => setAttestationDate(event.target.value)} />
+            <Input id="attestation-date" type="date" min={attestationQuery.data?.attested_through || undefined} max={new Date().toISOString().slice(0, 10)} value={attestationDate} onChange={event => setAttestationDate(event.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="attestation-statement">Finance declaration</Label>
