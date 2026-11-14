@@ -58,7 +58,7 @@ export default function Inventory() {
   const [purchaseReversalKey, setPurchaseReversalKey] = useState(() => crypto.randomUUID());
   const [purchaseReversalForm, setPurchaseReversalForm] = useState({
     reversedOn: format(new Date(), 'yyyy-MM-dd'),
-    refundPaymentMethod: 'bank_transfer' as 'cash' | 'bank_transfer' | 'mobile_payment',
+    refundPaymentMethod: 'bank_transfer' as 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check',
     reason: '',
     referenceNumber: '',
   });
@@ -71,7 +71,7 @@ export default function Inventory() {
     supplierName: '',
     referenceNumber: '',
     amountPaid: 0,
-    paymentMethod: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other',
+    paymentMethod: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -433,12 +433,15 @@ export default function Inventory() {
               <div className="space-y-2">
                 <Label>Actual supplier refund received through *</Label>
                 <Select value={purchaseReversalForm.refundPaymentMethod}
-                  onValueChange={(value: 'cash' | 'bank_transfer' | 'mobile_payment') => setPurchaseReversalForm({ ...purchaseReversalForm, refundPaymentMethod: value })}>
+                  onValueChange={(value: 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check') => setPurchaseReversalForm({ ...purchaseReversalForm, refundPaymentMethod: value })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
                     <SelectItem value="bank_transfer">Bank transfer</SelectItem>
                     <SelectItem value="mobile_payment">Mobile payment</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                    <SelectItem value="debit_card">Debit Card</SelectItem>
+                    <SelectItem value="check">Cheque</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -601,7 +604,6 @@ export default function Inventory() {
                       <SelectItem value="credit_card">Credit Card</SelectItem>
                       <SelectItem value="debit_card">Debit Card</SelectItem>
                       <SelectItem value="check">Cheque</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
