@@ -63,8 +63,8 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
     mutationFn: async () => {
       const gross = Number(form.grossAmount);
       const fees = Number(form.feeAmount || 0);
-      if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(fees) || fees < 0 || fees > gross) {
-        throw new Error('Enter a valid gross settlement amount and fees not exceeding the gross amount.');
+      if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(fees) || fees < 0 || fees >= gross) {
+        throw new Error('Enter a valid gross settlement amount and fees lower than the gross amount so a positive bank receipt remains.');
       }
       if (gross > selectedBalance) {
         throw new Error('The gross settlement cannot exceed the available clearing balance.');
