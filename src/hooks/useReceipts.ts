@@ -134,15 +134,20 @@ export function useReceipts() {
       id: string; 
       data: { notes?: string };
     }) => {
-      const { error } = await supabase
+      const { data: updatedReceipt, error } = await supabase
         .from('receipts')
         .update({
           notes: data.notes,
         })
         .eq('id', id)
-        .eq('status', 'issued'); // Only allow editing issued receipts
+        .eq('status', 'issued') // Only allow editing issued receipts
+        .select('id')
+        .maybeSingle();
 
       if (error) throw error;
+      if (!updatedReceipt) {
+        throw new Error('This receipt could not be updated. It may have been voided, deleted or is no longer available for editing.');
+      }
 
     },
     onSuccess: () => {
