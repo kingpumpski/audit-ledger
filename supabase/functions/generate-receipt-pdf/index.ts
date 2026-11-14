@@ -1,3 +1,4 @@
+import { escapeHtml } from "../_shared/html.ts";
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -54,19 +55,6 @@ interface ReceiptRecord {
       tax: { name: string; code: string } | null;
     }>;
   } | null;
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? "").replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-    return entities[character];
-  });
 }
 
 function safeSignatureDataUrl(value: string | null): string | null {
