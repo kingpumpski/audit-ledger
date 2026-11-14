@@ -131,13 +131,13 @@ export default function Accounting() {
   const [pettyCashToReverse, setPettyCashToReverse] = useState<{ id: string; description: string; amount: number | string } | null>(null);
   const [pettyCashReversalForm, setPettyCashReversalForm] = useState({
     reversedOn: format(new Date(), 'yyyy-MM-dd'),
-    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'mobile_payment',
+    paymentMethod: 'cash' as 'cash' | 'bank_transfer' | 'mobile_payment' | 'credit_card' | 'debit_card' | 'check',
     reason: '',
     reference: '',
   });
   const [pettyCashForm, setPettyCashForm] = useState({
     description: '', amount: 0, type: 'expense' as string, category: '', reference_number: '',
-    payment_method: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment' | 'other',
+    payment_method: 'cash' as 'cash' | 'credit_card' | 'debit_card' | 'bank_transfer' | 'check' | 'mobile_payment',
   });
 
   const currencySymbol = settings?.currency_symbol || '$';
@@ -687,6 +687,9 @@ export default function Accounting() {
                   <SelectItem value="cash">Cash</SelectItem>
                   <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="mobile_payment">Mobile Money</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="debit_card">Debit Card</SelectItem>
+                  <SelectItem value="check">Cheque</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -768,7 +771,6 @@ export default function Accounting() {
                   <SelectItem value="credit_card">Credit Card</SelectItem>
                   <SelectItem value="debit_card">Debit Card</SelectItem>
                   <SelectItem value="check">Cheque</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
