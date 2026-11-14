@@ -46,6 +46,8 @@ DECLARE
   v_taxable_factor numeric;
   v_tax_factor numeric;
   v_taxable_base numeric;
+  v_previous_compound boolean;
+  v_previous_tax_code text;
   v_item_count integer := 0;
 BEGIN
   IF v_user_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']) THEN
@@ -202,6 +204,8 @@ BEGIN
     END IF;
 
     v_tax_order := 0;
+    v_previous_compound := NULL;
+    v_previous_tax_code := NULL;
     FOR v_tax IN
       SELECT value
       FROM jsonb_array_elements(COALESCE(v_item->'tax_breakdown', '[]'::jsonb))
@@ -232,6 +236,18 @@ BEGIN
          OR (v_tax->>'tax_order')::integer <> v_tax_order THEN
         RAISE EXCEPTION 'Invoice line % tax evidence does not match the current tax definition or order', v_item_count;
       END IF;
+
+      IF v_tax_order > 0 AND (
+        (v_previous_compound AND NOT COALESCE(v_tax_rule.is_compound, false))
+        OR (
+          v_previous_compound = COALESCE(v_tax_rule.is_compound, false)
+          AND v_previous_tax_code > v_tax_rule.code
+        )
+      ) THEN
+        RAISE EXCEPTION 'Invoice line % taxes are not in deterministic non-compound/code order', v_item_count;
+      END IF;
+      v_previous_compound := COALESCE(v_tax_rule.is_compound, false);
+      v_previous_tax_code := v_tax_rule.code;
 
       v_taxable_factor := CASE
         WHEN COALESCE(v_tax_rule.is_compound, false) THEN 1 + v_accumulated_tax_factor
