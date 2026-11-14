@@ -84,6 +84,7 @@ export function usePayments() {
     onSuccess: (payment) => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-account-balances'] });
       queryClient.invalidateQueries({ queryKey: ['invoice', payment.invoice_id] });
       queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
       queryClient.invalidateQueries({ queryKey: ['accounting'] });
