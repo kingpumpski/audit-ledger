@@ -139,3 +139,5 @@ A tenant migration is not ready to merge unless automated tests prove:
 ## Explicitly out of scope for this phase
 
 This contract does not itself add operational `business_id` columns, change production RLS, create invitations, or claim tenant isolation. Those changes must be delivered as separately reviewable, tested migrations with their corresponding frontend and RPC updates.
+
+<!-- CI refresh: validate the tenancy contract against the merged foundation on main. -->
