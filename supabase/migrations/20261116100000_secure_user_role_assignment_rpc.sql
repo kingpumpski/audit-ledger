@@ -53,4 +53,4 @@ $function$;
 REVOKE ALL ON FUNCTION public.assign_user_role(uuid, public.app_role, uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.assign_user_role(uuid, public.app_role, uuid)
-  TO authenticated, service_role;
+  TO authenticated;
