@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(11);
+SELECT extensions.plan(13);
 
 SELECT extensions.ok(
   NOT has_table_privilege('anon', 'public.customers', 'SELECT'),
@@ -55,6 +55,15 @@ SELECT extensions.ok(
 );
 
 SELECT extensions.ok(
+  has_function_privilege('authenticated', 'public.create_invoice_draft(uuid,date,date,text,text,boolean,numeric,numeric,numeric,numeric,jsonb)', 'EXECUTE'),
+  'Authenticated users retain the atomic invoice draft RPC'
+);
+SELECT extensions.ok(
+  has_function_privilege('authenticated', 'public.record_invoice_payment(uuid,uuid,numeric,payment_method,uuid,text,text)', 'EXECUTE'),
+  'Authenticated users retain the invoice payment RPC'
+);
+
+SELECT extensions.ok(
   EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
@@ -83,9 +92,7 @@ SELECT extensions.ok(
     FROM pg_default_acl d
     CROSS JOIN LATERAL aclexplode(d.defaclacl) acl
     WHERE d.defaclnamespace = 'public'::regnamespace
-      AND d.defaclrole IN (
-        SELECT oid FROM pg_roles WHERE rolname IN ('postgres', 'supabase_admin')
-      )
+      AND d.defaclrole = (SELECT oid FROM pg_roles WHERE rolname = 'postgres')
       AND acl.grantee IN (
         0,
         (SELECT oid FROM pg_roles WHERE rolname = 'anon')
@@ -97,7 +104,7 @@ SELECT extensions.ok(
         OR (d.defaclobjtype = 'f' AND acl.privilege_type = 'EXECUTE')
       )
   ),
-  'Future public-schema tables, sequences and functions do not grant PUBLIC or anon access by default'
+  'Future objects created by the migration owner do not grant PUBLIC or anon access by default'
 );
 
 SELECT * FROM extensions.finish();
