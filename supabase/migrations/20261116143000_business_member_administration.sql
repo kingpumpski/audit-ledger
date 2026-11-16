@@ -45,14 +45,11 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- Serialize membership mutations per business. This also prevents two
-  -- concurrent requests from both removing the final active owner.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(p_business_id::text, 0)
   );
 
-  SELECT b.status
-    INTO v_business_status
+  SELECT b.status INTO v_business_status
   FROM public.businesses b
   WHERE b.id = p_business_id
   FOR UPDATE;
@@ -62,8 +59,7 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  SELECT bm.role
-    INTO v_actor_role
+  SELECT bm.role INTO v_actor_role
   FROM public.business_members bm
   WHERE bm.business_id = p_business_id
     AND bm.user_id = v_actor_id
@@ -86,13 +82,11 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  SELECT u.email
-    INTO v_target_email
+  SELECT u.email INTO v_target_email
   FROM auth.users u
   WHERE u.id = p_user_id;
 
-  SELECT bm.*
-    INTO v_existing
+  SELECT bm.* INTO v_existing
   FROM public.business_members bm
   WHERE bm.business_id = p_business_id
     AND bm.user_id = p_user_id
@@ -100,16 +94,11 @@ BEGIN
 
   IF FOUND THEN
     v_member_id := v_existing.id;
-    v_old_data := pg_catalog.jsonb_build_object(
-      'role', v_existing.role,
-      'status', v_existing.status
-    );
+    v_old_data := pg_catalog.jsonb_build_object('role', v_existing.role, 'status', v_existing.status);
   ELSE
     v_old_data := NULL;
   END IF;
 
-  -- An administrator cannot change or suspend an owner/admin membership,
-  -- even if the requested replacement role would otherwise be permitted.
   IF v_actor_role = 'admin'
      AND v_existing.id IS NOT NULL
      AND v_existing.role IN ('owner', 'admin') THEN
@@ -117,13 +106,10 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  -- Owners may add/promote another owner. Demotion or suspension is blocked
-  -- when it would leave the business without an active owner.
   IF v_existing.id IS NOT NULL
      AND v_existing.role = 'owner'
      AND (p_role <> 'owner' OR p_status <> 'active') THEN
-    SELECT count(*)
-      INTO v_active_owner_count
+    SELECT count(*) INTO v_active_owner_count
     FROM public.business_members bm
     WHERE bm.business_id = p_business_id
       AND bm.role = 'owner'
@@ -140,11 +126,7 @@ BEGIN
       business_id, user_id, role, status, invited_by, joined_at
     )
     VALUES (
-      p_business_id,
-      p_user_id,
-      p_role,
-      p_status,
-      v_actor_id,
+      p_business_id, p_user_id, p_role, p_status, v_actor_id,
       CASE WHEN p_status = 'active' THEN pg_catalog.now() ELSE NULL END
     )
     RETURNING id INTO v_member_id;
@@ -154,13 +136,11 @@ BEGIN
     SET role = p_role,
         status = p_status,
         invited_by = CASE
-          WHEN p_status = 'active' AND v_existing.status <> 'active'
-            THEN v_actor_id
+          WHEN p_status = 'active' AND v_existing.status <> 'active' THEN v_actor_id
           ELSE invited_by
         END,
         joined_at = CASE
-          WHEN p_status = 'active' AND joined_at IS NULL
-            THEN pg_catalog.now()
+          WHEN p_status = 'active' AND joined_at IS NULL THEN pg_catalog.now()
           ELSE joined_at
         END
     WHERE id = v_existing.id
@@ -169,31 +149,16 @@ BEGIN
   END IF;
 
   v_new_data := pg_catalog.jsonb_build_object(
-    'role', p_role,
-    'status', p_status,
-    'target_user_id', p_user_id,
-    'target_email', v_target_email
+    'role', p_role, 'status', p_status,
+    'target_user_id', p_user_id, 'target_email', v_target_email
   );
 
   INSERT INTO public.audit_logs (
-    user_id,
-    user_email,
-    action,
-    entity_type,
-    entity_id,
-    old_data,
-    new_data,
-    metadata
+    user_id, user_email, action, entity_type, entity_id, old_data, new_data, metadata
   )
   SELECT
-    v_actor_id,
-    u.email,
-    v_action,
-    'business_member',
-    v_member_id,
-    v_old_data,
-    v_new_data,
-    pg_catalog.jsonb_build_object('business_id', p_business_id)
+    v_actor_id, u.email, v_action, 'business_member', v_member_id,
+    v_old_data, v_new_data, pg_catalog.jsonb_build_object('business_id', p_business_id)
   FROM auth.users u
   WHERE u.id = v_actor_id;
 
@@ -207,3 +172,5 @@ GRANT EXECUTE ON FUNCTION public.set_business_member_access(uuid, uuid, text, te
   TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
+
+-- CI refresh: rerun the clean migration replay and membership pgTAP checks after base retargeting.
