@@ -224,8 +224,25 @@ BEGIN
     END,
     'active',
     now()
-  FROM public.user_roles ur
-  WHERE ur.role::text IN ('admin', 'accountant', 'cashier', 'auditor')
+  FROM (
+    -- A user may hold more than one legacy global role, while a business
+    -- membership intentionally stores one role per user. Select the strongest
+    -- supported role deterministically instead of letting row order decide.
+    SELECT DISTINCT ON (ur.user_id)
+      ur.user_id,
+      ur.role
+    FROM public.user_roles ur
+    WHERE ur.role::text IN ('admin', 'accountant', 'cashier', 'auditor')
+    ORDER BY
+      ur.user_id,
+      CASE ur.role::text
+        WHEN 'admin' THEN 1
+        WHEN 'accountant' THEN 2
+        WHEN 'auditor' THEN 3
+        WHEN 'cashier' THEN 4
+        ELSE 5
+      END
+  ) ur
   ON CONFLICT (business_id, user_id) DO NOTHING;
 END;
 $legacy_business$;
