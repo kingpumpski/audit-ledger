@@ -35,12 +35,12 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  IF p_role NOT IN ('owner', 'admin', 'accountant', 'cashier', 'auditor') THEN
+  IF p_role IS NULL OR p_role NOT IN ('owner', 'admin', 'accountant', 'cashier', 'auditor') THEN
     RAISE EXCEPTION 'Unsupported business role'
       USING ERRCODE = '22023';
   END IF;
 
-  IF p_status NOT IN ('active', 'suspended') THEN
+  IF p_status IS NULL OR p_status NOT IN ('active', 'suspended') THEN
     RAISE EXCEPTION 'Membership status must be active or suspended'
       USING ERRCODE = '22023';
   END IF;
