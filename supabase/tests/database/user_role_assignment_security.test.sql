@@ -14,7 +14,14 @@ SELECT extensions.ok(
 );
 
 SELECT extensions.ok(
-  NOT has_function_privilege('public', 'public.assign_user_role(uuid,public.app_role,uuid)', 'EXECUTE'),
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p,
+         LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) acl
+    WHERE p.oid = 'public.assign_user_role(uuid,public.app_role,uuid)'::regprocedure
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ),
   'PUBLIC cannot execute role assignment'
 );
 
