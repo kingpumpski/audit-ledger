@@ -1,7 +1,7 @@
 -- Public-schema objects are for authenticated application users and trusted
 -- backend services. Anonymous clients use Supabase Auth, not direct table/RPC
 -- access. Remove inherited anon/PUBLIC privileges and prevent them returning
--- through the default ACLs used by both normal migrations and platform admin.
+-- through the default ACLs used by the migration owner.
 
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM PUBLIC, anon;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC, anon;
@@ -12,13 +12,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON SEQUENCES FROM PUBLIC, anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon;
-
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM PUBLIC, anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM PUBLIC, anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon;
 
 -- These four policies were created for authenticated employees but were
