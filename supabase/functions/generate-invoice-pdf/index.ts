@@ -85,10 +85,10 @@ serve(async (req) => {
       .from("invoices")
       .select(`
         *,
-        customer:customers(*),
-        items:invoice_items(*),
-        discount:discounts(*),
-        invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes(name, code))
+        customer:customers!invoices_customer_id_fkey(*),
+        items:invoice_items!invoice_items_invoice_id_fkey(*),
+        discount:discounts!invoices_discount_id_fkey(*),
+        invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes!invoice_taxes_tax_id_fkey(name, code))
       `)
       .eq("id", invoiceId)
       .is("deleted_at", null)
