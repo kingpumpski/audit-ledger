@@ -1,6 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
+import { BusinessSwitcher } from './BusinessSwitcher';
 import { PageActionBar } from './PageActionBar';
 import { getSidebarItems } from '@/config/sidebarConfig';
 import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
@@ -8,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight, Building2 } from 'lucide-react';
+import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -44,7 +45,6 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
   const { profile, roles, signOut, userPersona } = useAuth();
-  const { activeBusiness, isLoading: businessLoading } = useBusiness();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -115,12 +115,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
                 </h1>
               </div>
             )}
-            {!businessLoading && activeBusiness && (
-              <div className="hidden min-w-0 items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground lg:flex">
-                <Building2 className="h-3.5 w-3.5 shrink-0" />
-                <span className="max-w-40 truncate">{activeBusiness.name}</span>
-              </div>
-            )}
+            <BusinessSwitcher />
           </div>
 
           <div className="ml-auto flex w-full min-w-0 items-center justify-end gap-2 sm:w-auto">
