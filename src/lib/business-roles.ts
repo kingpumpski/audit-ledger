@@ -23,5 +23,10 @@ export function getEffectiveRoles(
     ? BUSINESS_ROLE_MAP[businessRole] ?? []
     : [];
 
-  return [...new Set([...validGlobalRoles, ...membershipRoles])];
+  // Once a user has an active business membership, that membership is the
+  // authoritative permission source. Global roles are a legacy fallback only
+  // for users who have not yet been migrated into a workspace.
+  return businessRole
+    ? [...new Set(membershipRoles)]
+    : [...new Set(validGlobalRoles)];
 }
