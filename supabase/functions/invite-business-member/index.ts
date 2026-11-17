@@ -17,7 +17,7 @@ function respond(body: Record<string, unknown>, status = 200) {
   });
 }
 
-async function findAuthUserByEmail(adminClient: ReturnType<typeof createClient>, email: string) {
+async function findAuthUserByEmail(adminClient: any, email: string) {
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
