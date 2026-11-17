@@ -30,8 +30,15 @@ BEGIN
   END IF;
 
   v_legacy_business_id := public.legacy_business_id();
-  IF auth.uid() IS NOT NULL
-     AND public.is_business_member(v_legacy_business_id) THEN
+  IF auth.uid() IS NOT NULL AND (
+    public.is_business_member(v_legacy_business_id)
+    OR EXISTS (
+      -- Transitional compatibility for existing role-managed accounts and
+      -- database integration fixtures created after the membership seed.
+      -- The coordinated tenant RLS cutover removes this global-role fallback.
+      SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid()
+    )
+  ) THEN
     RETURN v_legacy_business_id;
   END IF;
 
