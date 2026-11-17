@@ -42,8 +42,8 @@ serve(async (req) => {
       .from("invoices")
       .select(`
         *,
-        customer:customers(*),
-        items:invoice_items(*)
+        customer:customers!invoices_customer_id_fkey(*),
+        items:invoice_items!invoice_items_invoice_id_fkey(*)
       `)
       .eq("id", invoiceId)
       .single();
