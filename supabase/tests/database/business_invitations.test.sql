@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(8);
+SELECT plan(9);
 
 SELECT ok(
   to_regclass('public.business_invitations') IS NOT NULL,
@@ -46,6 +46,12 @@ SELECT ok(
       AND indexname='uq_business_invitations_pending_email'
   ),
   'pending invitations are unique per business and email'
+);
+
+SELECT ok(
+  has_function_privilege('authenticated','public.get_business_members(uuid)','EXECUTE')
+  AND NOT has_function_privilege('anon','public.get_business_members(uuid)','EXECUTE'),
+  'only authenticated users can call the manager-guarded member directory RPC'
 );
 
 SELECT * FROM finish();
