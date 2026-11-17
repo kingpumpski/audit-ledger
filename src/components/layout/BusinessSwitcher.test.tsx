@@ -102,6 +102,26 @@ describe("BusinessSwitcher", () => {
     }));
   });
 
+
+  it("requires an explicit workspace choice when multiple memberships have no active claim", async () => {
+    const switchBusiness = vi.fn().mockResolvedValue(undefined);
+    useBusinessMock.mockReturnValue({
+      memberships: [legacyMembership, secondMembership],
+      activeMembership: null,
+      isLoading: false,
+      switchBusiness,
+    });
+
+    render(<BusinessSwitcher />);
+    fireEvent.click(screen.getByRole("button", {
+      name: "Choose a business workspace",
+    }));
+
+    expect(screen.getByText("Switch business")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Market Stall"));
+    await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
+  });
+
   it("does not render while memberships are loading or unavailable", () => {
     useBusinessMock.mockReturnValue({
       memberships: [],
