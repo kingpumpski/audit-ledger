@@ -54,8 +54,8 @@ describe("BusinessSwitcher", () => {
   it("shows the active workspace without presenting a switch menu for a single membership", () => {
     render(<BusinessSwitcher />);
 
-    expect(screen.getByLabelText("Active business: Legacy Workspace")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Active business: Legacy Workspace")).toBeTruthy();
+    expect(screen.queryByRole("button")).not.toBeTruthy();
   });
 
   it("lists authorized memberships and switches only after the user selects one", async () => {
@@ -72,8 +72,8 @@ describe("BusinessSwitcher", () => {
       name: "Active business: Legacy Workspace. Switch business",
     }));
 
-    expect(screen.getByText("Switch business")).toBeInTheDocument();
-    expect(screen.getByText("Market Stall")).toBeInTheDocument();
+    expect(screen.getByText("Switch business")).toBeTruthy();
+    expect(screen.getByText("Market Stall")).toBeTruthy();
     fireEvent.click(screen.getByText("Market Stall"));
 
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
@@ -117,7 +117,7 @@ describe("BusinessSwitcher", () => {
       name: "Choose a business workspace",
     }));
 
-    expect(screen.getByText("Switch business")).toBeInTheDocument();
+    expect(screen.getByText("Switch business")).toBeTruthy();
     fireEvent.click(screen.getByText("Market Stall"));
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
   });
@@ -131,6 +131,6 @@ describe("BusinessSwitcher", () => {
     });
 
     const { container } = render(<BusinessSwitcher />);
-    expect(container).toBeEmptyDOMElement();
+    expect(container.childElementCount).toBe(0);
   });
 });
