@@ -500,4 +500,10 @@ REVOKE ALL ON FUNCTION public.secure_definer_function_owners() FROM PUBLIC, anon
 GRANT EXECUTE ON FUNCTION public.can_access_business(uuid) TO authenticated, audit_ledger_rpc_owner;
 REVOKE ALL ON FUNCTION public.can_access_business(uuid) FROM PUBLIC, anon;
 
+-- Reassert the Auth API privileges after all function-owner transfers and DDL hooks.
+GRANT USAGE ON SCHEMA auth TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.jwt() TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.role() TO authenticated, service_role, audit_ledger_rpc_owner;
+
 NOTIFY pgrst, 'reload schema';
