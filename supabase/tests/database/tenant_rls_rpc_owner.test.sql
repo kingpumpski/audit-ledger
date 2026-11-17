@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(15);
+SELECT extensions.plan(18);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -10,7 +10,9 @@ INSERT INTO auth.users (
   ('b2000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
    'tenant-a@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
   ('b2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
-   'tenant-b@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+   'tenant-b@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('b2000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
+   'tenant-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
 
 SELECT extensions.ok(
   EXISTS (
@@ -84,6 +86,33 @@ SELECT extensions.ok(
   public.has_any_role(ARRAY['admin','accountant','cashier','auditor']::text[]),
   'an owner membership receives the expected application permissions'
 );
+
+SELECT public.set_business_member_access(
+  current_setting('test.tenant_a')::uuid,
+  'b2000000-0000-4000-8000-000000000003',
+  'cashier',
+  'active'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000003', true);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  current_setting('test.tenant_a')::uuid,
+  'a newly invited single-business member resolves the assigned workspace'
+);
+
+SELECT extensions.ok(
+  public.has_any_role(ARRAY['cashier']::text[]),
+  'business membership grants the assigned cashier permission'
+);
+
+SELECT extensions.ok(
+  NOT public.has_any_role(ARRAY['admin']::text[]),
+  'a cashier membership does not inherit administrator permissions'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true);
 
 WITH inserted AS (
   INSERT INTO public.customers (code, name)
