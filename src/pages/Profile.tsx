@@ -14,7 +14,6 @@ import type { UserPersona } from '@/config/sidebarConfig';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
-import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Loader2, User, Pen, Save } from 'lucide-react';
 
 export default function Profile() {
