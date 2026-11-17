@@ -53,8 +53,8 @@ serve(async (req) => {
       .from("payments")
       .select(`
         *,
-        customer:customers(*),
-        invoice:invoices(*)
+        customer:customers!payments_customer_id_fkey(*),
+        invoice:invoices!payments_invoice_id_fkey(*)
       `)
       .eq("id", paymentId)
       .single();
