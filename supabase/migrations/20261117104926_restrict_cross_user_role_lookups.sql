@@ -1,6 +1,7 @@
 -- Prevent authenticated callers from enumerating another user's role assignments.
 -- Existing RLS policies pass auth.uid(), so self-check behavior remains unchanged.
 -- Administrators and trusted service-role callers retain legitimate cross-user lookup.
+-- Use auth.jwt()->>'role' for service-role detection; auth.role() is deprecated.
 
 CREATE OR REPLACE FUNCTION public.get_user_role(_user_id uuid)
 RETURNS public.app_role
@@ -11,7 +12,7 @@ SET search_path = ''
 AS $get_user_role$
   SELECT CASE
     WHEN _user_id IS NULL THEN NULL::public.app_role
-    WHEN COALESCE(auth.role(), '') = 'service_role'
+    WHEN COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
       OR _user_id = auth.uid()
       OR EXISTS (
         SELECT 1
@@ -44,7 +45,7 @@ SET search_path = ''
 AS $has_any_role_user$
   SELECT CASE
     WHEN _user_id IS NULL THEN false
-    WHEN COALESCE(auth.role(), '') = 'service_role'
+    WHEN COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
       OR _user_id = auth.uid()
       OR EXISTS (
         SELECT 1
@@ -70,7 +71,7 @@ SET search_path = ''
 AS $has_role_user$
   SELECT CASE
     WHEN _user_id IS NULL OR _role IS NULL THEN false
-    WHEN COALESCE(auth.role(), '') = 'service_role'
+    WHEN COALESCE(auth.jwt() ->> 'role', '') = 'service_role'
       OR _user_id = auth.uid()
       OR EXISTS (
         SELECT 1

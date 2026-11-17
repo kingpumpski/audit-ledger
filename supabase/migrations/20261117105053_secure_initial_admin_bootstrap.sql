@@ -27,7 +27,6 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  -- Serialize the empty-table check with every concurrent role-table writer.
   LOCK TABLE public.user_roles IN EXCLUSIVE MODE;
 
   IF EXISTS (SELECT 1 FROM public.user_roles) THEN

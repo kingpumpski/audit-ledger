@@ -14,9 +14,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon;
 
--- These four policies were created for authenticated employees but were
--- accidentally scoped to PUBLIC. Preserve their existing authorization checks
--- while limiting policy evaluation to authenticated application sessions.
 DROP POLICY IF EXISTS "Authenticated users can insert own audit logs" ON public.audit_logs;
 CREATE POLICY "Authenticated users can insert own audit logs"
   ON public.audit_logs
