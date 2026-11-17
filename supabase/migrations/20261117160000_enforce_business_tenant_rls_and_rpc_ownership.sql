@@ -230,8 +230,14 @@ SET search_path = ''
 AS $has_business_permission$
   SELECT CASE
     WHEN target_user_id IS NULL THEN false
-    WHEN coalesce(auth.role(), '') = 'service_role'
-      AND target_user_id IS DISTINCT FROM auth.uid() THEN false
+    WHEN coalesce(auth.role(), '') = 'service_role' THEN EXISTS (
+      SELECT 1
+      FROM public.user_roles ur
+      JOIN public.role_permissions rp ON rp.role = ur.role::text
+      JOIN public.permissions p ON p.id = rp.permission_id
+      WHERE ur.user_id = target_user_id
+        AND p.code = permission_code
+    )
     WHEN target_user_id = auth.uid()
       AND EXISTS (
         SELECT 1 FROM public.business_members bm
