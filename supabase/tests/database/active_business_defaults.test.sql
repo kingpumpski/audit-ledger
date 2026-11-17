@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(5);
+SELECT plan(6);
 
 SELECT ok(
   has_function_privilege('authenticated','public.current_business_id()','EXECUTE'),
@@ -36,6 +36,12 @@ SELECT is(
 SELECT ok(
   has_function_privilege('service_role','public.current_business_id()','EXECUTE'),
   'trusted backend automation can resolve the compatibility business default'
+);
+
+SELECT is(
+  public.current_business_id(),
+  public.legacy_business_id(),
+  'SQL maintenance and migration sessions retain the legacy default'
 );
 
 SELECT * FROM finish();
