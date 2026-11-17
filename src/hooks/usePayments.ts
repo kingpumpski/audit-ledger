@@ -33,8 +33,8 @@ export function usePayments() {
         .from('payments')
         .select(`
           *,
-          customer:customers(*),
-          invoice:invoices(*)
+          customer:customers!payments_customer_id_fkey(*),
+          invoice:invoices!payments_invoice_id_fkey(*)
         `)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -112,8 +112,8 @@ export function usePayment(id: string) {
         .from('payments')
         .select(`
           *,
-          customer:customers(*),
-          invoice:invoices(*)
+          customer:customers!payments_customer_id_fkey(*),
+          invoice:invoices!payments_invoice_id_fkey(*)
         `)
         .eq('id', id)
         .single();
