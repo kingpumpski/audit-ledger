@@ -175,6 +175,22 @@ serve(async (req) => {
       .eq("id", invitation.id);
     if (updateError) throw updateError;
 
+    const { error: auditError } = await adminClient.from("audit_logs").insert({
+      user_id: authData.user.id,
+      user_email: authData.user.email,
+      action: "create",
+      entity_type: "business_invitation",
+      entity_id: invitation.id,
+      old_data: null,
+      new_data: { email, role, status: "pending" },
+      metadata: { business_id: businessId },
+      business_id: businessId,
+    });
+    if (auditError) {
+      console.error("Invitation sent but audit event could not be recorded", auditError);
+      return respond({ error: "The invitation was sent but its audit record could not be saved" }, 500);
+    }
+
     return respond({ status: "invited", invitation_id: invitation.id });
   } catch (error) {
     console.error("Business invitation failed", error);
