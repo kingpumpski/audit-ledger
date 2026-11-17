@@ -48,9 +48,9 @@ SELECT is(
    FROM information_schema.columns
    WHERE table_schema='public'
      AND column_name='business_id'
-     AND column_default LIKE '%legacy_business_id%'),
+     AND column_default LIKE '%current_business_id%'),
   33,
-  'legacy workspace default preserves current application inserts'
+  'active business default preserves current application inserts'
 );
 
 SELECT ok(
