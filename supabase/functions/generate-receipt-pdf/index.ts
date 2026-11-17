@@ -328,8 +328,8 @@ serve(async (req) => {
         signature_data,
         checksum,
         notes,
-        customer:customers(name, email, phone, address_line1, city),
-        invoice:invoices(invoice_number, subtotal, discount_amount, tax_amount, total_amount, amount_paid, balance_due, items:invoice_items(description, quantity, unit_price, discount_type, discount_value, tax_rate, tax_amount, line_total), invoice_taxes:invoice_taxes(tax_rate, taxable_amount, tax_amount, tax:taxes(name, code)))
+        customer:customers!receipts_customer_id_fkey(name, email, phone, address_line1, city),
+        invoice:invoices!receipts_invoice_id_fkey(invoice_number, subtotal, discount_amount, tax_amount, total_amount, amount_paid, balance_due, items:invoice_items!invoice_items_invoice_id_fkey(description, quantity, unit_price, discount_type, discount_value, tax_rate, tax_amount, line_total), invoice_taxes:invoice_taxes!invoice_taxes_invoice_id_fkey(tax_rate, taxable_amount, tax_amount, tax:taxes!invoice_taxes_tax_id_fkey(name, code)))
       `)
       .eq("id", body.receiptId)
       .is("deleted_at", null)

@@ -82,7 +82,7 @@ export default function Inventory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory_transactions')
-        .select('*, product:products(name, sku)')
+        .select('*, product:products!inventory_transactions_product_id_fkey(name, sku)')
         .order('created_at', { ascending: false })
         .limit(50);
       if (error) throw error;

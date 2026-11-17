@@ -30,7 +30,7 @@ export function DocumentsPage({ kind }: { kind: 'invoice' | 'receipt' }) {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     const [records, settings] = await Promise.all([
-      kind === 'invoice' ? supabase.from('invoices').select('*, customers(*)').is('deleted_at', null).order('created_at', { ascending: false }) : supabase.from('receipts').select('*, customers(*)').is('deleted_at', null).order('created_at', { ascending: false }),
+      kind === 'invoice' ? supabase.from('invoices').select('*, customers!invoices_customer_id_fkey(*)').is('deleted_at', null).order('created_at', { ascending: false }) : supabase.from('receipts').select('*, customers!receipts_customer_id_fkey(*)').is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('company_settings').select('*').limit(1).maybeSingle(),
     ]);
     if (records.error || settings.error) setError(records.error?.message || settings.error?.message || 'Unable to load documents');

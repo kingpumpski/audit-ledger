@@ -53,8 +53,8 @@ export default function ReceiptDetails() {
         .from('receipts')
         .select(`
           *,
-          customer:customers(*),
-          invoice:invoices(*)
+          customer:customers!receipts_customer_id_fkey(*),
+          invoice:invoices!receipts_invoice_id_fkey(*)
         `)
         .eq('id', id!)
         .or('deleted_at.is.null,status.eq.void')

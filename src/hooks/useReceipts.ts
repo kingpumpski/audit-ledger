@@ -44,8 +44,8 @@ export function useReceipts() {
         .from('receipts')
         .select(`
           *,
-          customer:customers(*),
-          invoice:invoices(*)
+          customer:customers!receipts_customer_id_fkey(*),
+          invoice:invoices!receipts_invoice_id_fkey(*)
         `)
         // Voided receipts remain visible for audit history unless soft-deleted.
         .is('deleted_at', null)
@@ -204,8 +204,8 @@ export function useReceipt(id: string) {
         .from('receipts')
         .select(`
           *,
-          customer:customers(*),
-          invoice:invoices(*)
+          customer:customers!receipts_customer_id_fkey(*),
+          invoice:invoices!receipts_invoice_id_fkey(*)
         `)
         .eq('id', id)
         // Keep voided receipts accessible only while they remain in the audit record.

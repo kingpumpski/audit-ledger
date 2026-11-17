@@ -42,8 +42,8 @@ export function useInvoices() {
         .from('invoices')
         .select(`
           *,
-          customer:customers(*),
-          items:invoice_items(*)
+          customer:customers!invoices_customer_id_fkey(*),
+          items:invoice_items!invoice_items_invoice_id_fkey(*)
         `)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -250,8 +250,8 @@ export function useInvoice(id: string) {
         .from('invoices')
         .select(`
           *,
-          customer:customers(*),
-          items:invoice_items(*)
+          customer:customers!invoices_customer_id_fkey(*),
+          items:invoice_items!invoice_items_invoice_id_fkey(*)
         `)
         .eq('id', id)
         .single();

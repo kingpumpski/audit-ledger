@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.create-users]
 verify_jwt = false
+
+[functions.set-active-business]
+verify_jwt = true

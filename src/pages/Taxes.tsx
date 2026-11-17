@@ -154,8 +154,8 @@ export default function Taxes() {
           .from('invoice_taxes')
           .select(`
             id, tax_rate, taxable_amount, tax_amount, created_at,
-            tax:taxes(name, code),
-            invoice:invoices(invoice_number, issue_date, status, customer:customers(name))
+            tax:taxes!invoice_taxes_tax_id_fkey(name, code),
+            invoice:invoices!invoice_taxes_invoice_id_fkey(invoice_number, issue_date, status, customer:customers!invoices_customer_id_fkey(name))
           `)
           .order('created_at', { ascending: false })
           .range(offset, offset + pageSize - 1);

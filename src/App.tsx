@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { BusinessProvider } from "@/contexts/BusinessContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InitialAdminSetup } from "@/components/auth/InitialAdminSetup";
@@ -57,6 +58,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
+          <BusinessProvider>
           <CurrencyProvider>
             <InitialAdminSetup />
             <Suspense fallback={<div className="flex min-h-screen items-center justify-center" role="status">Loading page...</div>}>
@@ -97,6 +99,7 @@ const App = () => (
               </Routes>
             </Suspense>
           </CurrencyProvider>
+          </BusinessProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
