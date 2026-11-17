@@ -63,7 +63,7 @@ serve(async (req) => {
       .from("invoices")
       .select(`
         *,
-        customer:customers(*)
+        customer:customers!invoices_customer_id_fkey(*)
       `)
       .lt("due_date", today.toISOString())
       .in("status", ["issued", "overdue", "partially_paid"])
