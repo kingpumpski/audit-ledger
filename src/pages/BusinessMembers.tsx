@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ const roleOptions: MemberRole[] = ["admin", "accountant", "cashier", "auditor"];
 
 export default function BusinessMembersPage() {
   const { activeBusiness, activeMembership, isLoading: businessLoading } = useBusiness();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<MemberRole>("accountant");
@@ -67,7 +69,7 @@ export default function BusinessMembersPage() {
     ]);
   };
 
-  const inviteMember = async (event: React.FormEvent<HTMLFormElement>) => {
+  const inviteMember = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!activeBusiness) return;
     setIsInviting(true);
@@ -171,7 +173,7 @@ export default function BusinessMembersPage() {
               onChange={(event) => setRole(event.target.value as MemberRole)}
               aria-label="Business role"
             >
-              {roleOptions.filter((option) => isOwner || option !== "admin").map((option) => (
+              {(isOwner ? ["owner", ...roleOptions] : roleOptions.filter((option) => option !== "admin")).map((option) => (
                 <option key={option} value={option}>{roleLabels[option]}</option>
               ))}
             </select>
@@ -205,7 +207,7 @@ export default function BusinessMembersPage() {
           ) : (
             <div className="divide-y">
               {(membersQuery.data ?? []).map((member) => {
-                const isSelf = member.user_id === activeMembership?.business_id; // replaced below using actor identity
+                const isSelf = member.user_id === user?.id;
                 const protectedMember = !isOwner && ["owner", "admin"].includes(member.role);
                 const isBusy = busyMemberId === member.member_id;
                 return (
