@@ -74,8 +74,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const claimedBusinessId = user?.app_metadata?.active_business_id;
   const activeMembership =
     memberships.find((membership) => membership.business_id === claimedBusinessId) ??
-    memberships[0] ??
-    null;
+    (memberships.length === 1 ? memberships[0] : null);
   const activeBusiness = activeMembership?.business ?? null;
 
   const switchBusiness = useCallback(async (businessId: string) => {
