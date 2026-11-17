@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(13);
+SELECT extensions.plan(15);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -171,6 +171,34 @@ SELECT extensions.is(
   public.current_business_id(),
   current_setting('test.tenant_a')::uuid,
   'a valid signed active-business claim selects exactly its membership'
+);
+
+
+RESET ROLE;
+INSERT INTO public.user_roles (user_id, role, granted_by)
+VALUES (
+  'b2000000-0000-4000-8000-000000000002',
+  'admin'::public.app_role,
+  'b2000000-0000-4000-8000-000000000001'
+);
+UPDATE public.business_members
+SET status='suspended'
+WHERE business_id=current_setting('test.tenant_b')::uuid
+  AND user_id='b2000000-0000-4000-8000-000000000002';
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000002', true);
+SET LOCAL ROLE authenticated;
+
+SELECT extensions.is(
+  public.current_business_id(),
+  NULL::uuid,
+  'a suspended member cannot fall back to legacy workspace through a global role'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.customers),
+  0,
+  'a suspended member with a legacy global role still cannot read operational data'
 );
 
 RESET ROLE;
