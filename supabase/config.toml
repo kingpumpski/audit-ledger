@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.set-active-business]
 verify_jwt = true
+
+[functions.invite-business-member]
+verify_jwt = true
+
+[functions.accept-business-invitation]
+verify_jwt = true
