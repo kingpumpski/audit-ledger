@@ -233,9 +233,53 @@ BEGIN
 END;
 $revoke_business_invitation$;
 
+CREATE OR REPLACE FUNCTION public.get_business_members(p_business_id uuid)
+RETURNS TABLE (
+  member_id uuid,
+  user_id uuid,
+  email text,
+  full_name text,
+  role text,
+  status text,
+  joined_at timestamptz,
+  created_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $get_business_members$
+  SELECT
+    bm.id,
+    bm.user_id,
+    u.email::text,
+    COALESCE(p.full_name, u.raw_user_meta_data ->> 'full_name')::text,
+    bm.role,
+    bm.status,
+    bm.joined_at,
+    bm.created_at
+  FROM public.business_members bm
+  JOIN auth.users u ON u.id = bm.user_id
+  LEFT JOIN public.profiles p ON p.id = bm.user_id
+  WHERE bm.business_id = p_business_id
+    AND public.has_business_role(p_business_id, ARRAY['owner', 'admin']::text[])
+  ORDER BY
+    CASE bm.role
+      WHEN 'owner' THEN 1
+      WHEN 'admin' THEN 2
+      WHEN 'accountant' THEN 3
+      WHEN 'cashier' THEN 4
+      ELSE 5
+    END,
+    bm.created_at;
+$get_business_members$;
+
 REVOKE ALL ON FUNCTION public.accept_business_invitation(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.revoke_business_invitation(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.accept_business_invitation(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revoke_business_invitation(uuid) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.get_business_members(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_business_members(uuid) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
