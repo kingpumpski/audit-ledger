@@ -22,10 +22,10 @@ export function BusinessSwitcher() {
   const { toast } = useToast();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
 
-  if (isLoading || !activeMembership) return null;
+  if (isLoading || memberships.length === 0) return null;
 
   const handleSwitch = async (businessId: string) => {
-    if (businessId === activeMembership.business_id || switchingId) return;
+    if (businessId === activeMembership?.business_id || switchingId) return;
 
     setSwitchingId(businessId);
     try {
@@ -45,11 +45,13 @@ export function BusinessSwitcher() {
   const activeLabel = (
     <>
       <Building2 className="h-3.5 w-3.5 shrink-0" />
-      <span className="max-w-40 truncate">{activeMembership.business.name}</span>
+      <span className="max-w-40 truncate">
+        {activeMembership?.business.name ?? "Choose business"}
+      </span>
     </>
   );
 
-  if (memberships.length < 2) {
+  if (memberships.length === 1 && activeMembership) {
     return (
       <div
         className="hidden min-w-0 items-center gap-1.5 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground lg:flex"
@@ -69,7 +71,9 @@ export function BusinessSwitcher() {
           variant="outline"
           size="sm"
           className="hidden max-w-56 items-center gap-2 lg:inline-flex"
-          aria-label={`Active business: ${activeMembership.business.name}. Switch business`}
+          aria-label={activeMembership
+            ? `Active business: ${activeMembership.business.name}. Switch business`
+            : "Choose a business workspace"}
         >
           {activeLabel}
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
@@ -79,7 +83,7 @@ export function BusinessSwitcher() {
         <DropdownMenuLabel>Switch business</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {memberships.map((membership) => {
-          const isActive = membership.business_id === activeMembership.business_id;
+          const isActive = membership.business_id === activeMembership?.business_id;
           const isSwitching = switchingId === membership.business_id;
           return (
             <DropdownMenuItem
