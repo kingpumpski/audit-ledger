@@ -89,12 +89,15 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) throw error;
 
+    // Cancel and clear all cached records before accepting the refreshed token.
+    // This prevents a previous business's query results from flashing after a switch.
+    await queryClient.cancelQueries();
+    queryClient.clear();
+
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) throw refreshError;
 
-    // Never reuse cached records from the previous business after a switch.
-    queryClient.clear();
-    await membershipsQuery.refetch();
+    await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
   }, [memberships, membershipsQuery, queryClient]);
 
   const refreshMemberships = useCallback(async () => {
