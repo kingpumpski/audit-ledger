@@ -15,9 +15,13 @@ describe("getEffectiveRoles", () => {
     expect(getEffectiveRoles([], "auditor")).toEqual(["auditor"]);
   });
 
-  it("preserves existing global roles during the migration transition", () => {
-    expect(getEffectiveRoles(["accountant", "cashier"], "auditor")).toEqual([
-      "accountant", "cashier", "auditor",
+  it("uses active business membership as the authority instead of global legacy roles", () => {
+    expect(getEffectiveRoles(["admin"], "cashier")).toEqual(["cashier"]);
+  });
+
+  it("uses global roles only for accounts without a business membership", () => {
+    expect(getEffectiveRoles(["accountant", "cashier"])).toEqual([
+      "accountant", "cashier",
     ]);
   });
 
