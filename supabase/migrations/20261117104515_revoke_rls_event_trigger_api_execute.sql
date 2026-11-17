@@ -40,15 +40,11 @@ BEGIN
 END;
 $function$;
 
--- Recreate the known production event trigger definition explicitly. This
--- also makes clean replays deterministic without relying on dashboard state.
 DROP EVENT TRIGGER IF EXISTS ensure_rls;
 CREATE EVENT TRIGGER ensure_rls
   ON ddl_command_end
   WHEN TAG IN ('CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO')
   EXECUTE FUNCTION public.rls_auto_enable();
 
--- Event-trigger functions are invoked by PostgreSQL's DDL event-trigger machinery,
--- not by application clients. Never expose this SECURITY DEFINER function as an RPC.
 REVOKE ALL ON FUNCTION public.rls_auto_enable()
   FROM PUBLIC, anon, authenticated, service_role;

@@ -24,8 +24,6 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- The legacy caller-supplied actor is never trusted. Reject mismatches to
-  -- surface stale or malicious clients rather than silently accepting them.
   IF granted_by_user IS NOT NULL AND granted_by_user IS DISTINCT FROM v_actor THEN
     RAISE EXCEPTION 'The granting user must match the authenticated user'
       USING ERRCODE = '42501';
