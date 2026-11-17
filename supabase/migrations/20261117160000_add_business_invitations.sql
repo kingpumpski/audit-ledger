@@ -12,7 +12,7 @@ CREATE TABLE public.business_invitations (
   invited_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   auth_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   accepted_user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  expires_at timestamptz NOT NULL DEFAULT (now() + interval '7 days'),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '1 hour'),
   accepted_at timestamptz,
   revoked_at timestamptz,
   last_sent_at timestamptz NOT NULL DEFAULT now(),
@@ -28,6 +28,12 @@ CREATE INDEX idx_business_invitations_business_status
 CREATE INDEX idx_business_invitations_expiry
   ON public.business_invitations (expires_at)
   WHERE status = 'pending';
+CREATE INDEX idx_business_invitations_invited_by
+  ON public.business_invitations (invited_by);
+CREATE INDEX idx_business_invitations_auth_user_id
+  ON public.business_invitations (auth_user_id);
+CREATE INDEX idx_business_invitations_accepted_user_id
+  ON public.business_invitations (accepted_user_id);
 
 ALTER TABLE public.business_invitations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.business_invitations FROM PUBLIC, anon, authenticated;
