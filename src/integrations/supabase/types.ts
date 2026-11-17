@@ -70,6 +70,65 @@ export type Database = {
           },
         ]
       }
+      business_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_user_id: string | null
+          auth_user_id: string | null
+          business_id: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          last_sent_at: string
+          revoked_at: string | null
+          role: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          auth_user_id?: string | null
+          business_id: string
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by: string
+          last_sent_at?: string
+          revoked_at?: string | null
+          role: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_user_id?: string | null
+          auth_user_id?: string | null
+          business_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          last_sent_at?: string
+          revoked_at?: string | null
+          role?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_invitations_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_members: {
         Row: {
           business_id: string
@@ -3332,6 +3391,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_business_invitation: {
+        Args: { p_invitation_id: string }
+        Returns: string
+      }
+      current_business_id: { Args: never; Returns: string }
       apply_customer_credit: {
         Args: {
           p_amount: number
@@ -3414,6 +3478,19 @@ export type Database = {
       financial_completeness_evidence_digest: {
         Args: { p_through_date: string }
         Returns: string
+      }
+      get_business_members: {
+        Args: { p_business_id: string }
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string | null
+          joined_at: string | null
+          member_id: string
+          role: string
+          status: string
+          user_id: string
+        }[]
       }
       get_customer_account_balances: {
         Args: { p_as_of_date?: string; p_customer_id?: string }
@@ -3715,6 +3792,10 @@ export type Database = {
           p_reference_number: string
         }
         Returns: string
+      }
+      revoke_business_invitation: {
+        Args: { p_invitation_id: string }
+        Returns: boolean
       }
       set_business_member_access: {
         Args: {
