@@ -30,6 +30,7 @@ const Discounts = lazy(() => import("./pages/Discounts"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Reports = lazy(() => import("./pages/Reports"));
 const AdminUsers = lazy(() => import("./pages/AdminUsers"));
+const BusinessMembers = lazy(() => import("./pages/BusinessMembers"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Accounting = lazy(() => import("./pages/Accounting"));
@@ -91,6 +92,7 @@ const App = () => (
                 <Route path="/audit-logs" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AuditLogs /></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Reports /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute requiredRoles={['admin']}><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin/business-members" element={<ProtectedRoute requiredRoles={['admin']}><BusinessMembers /></ProtectedRoute>} />
                 <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AdminPasswordResets /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute requiredRoles={['admin']}><Settings /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
