@@ -187,6 +187,15 @@ WHERE business_id=current_setting('test.tenant_b')::uuid
   AND user_id='b2000000-0000-4000-8000-000000000002';
 
 SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000002', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'b2000000-0000-4000-8000-000000000002',
+    'role', 'authenticated',
+    'app_metadata', '{}'::jsonb
+  )::text,
+  true
+);
 SET LOCAL ROLE authenticated;
 
 SELECT extensions.is(
