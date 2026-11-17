@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useProducts } from '@/hooks/useProducts';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { useSettings } from '@/hooks/useSettings';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ type PurchaseForReversal = {
 
 export default function Inventory() {
   const { products } = useProducts();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canRecordInventoryDamage = roles.includes('admin') || roles.includes('accountant');
   const { settings } = useSettings();
   const { toast } = useToast();
