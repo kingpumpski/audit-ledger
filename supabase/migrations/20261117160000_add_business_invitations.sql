@@ -250,7 +250,7 @@ BEGIN
     pg_catalog.jsonb_build_object('status', 'pending', 'email', v_invitation.email, 'role', v_invitation.role),
     pg_catalog.jsonb_build_object('status', 'revoked'),
     pg_catalog.jsonb_build_object('business_id', v_invitation.business_id),
-    v_invitation.business_id
+    NULL
   FROM auth.users u
   WHERE u.id = v_user_id;
 
