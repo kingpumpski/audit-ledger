@@ -63,7 +63,9 @@ serve(async (req) => {
       p_invitation_id: invitationId,
     });
     if (acceptError || typeof businessId !== "string") {
-      return respond({ error: acceptError?.message ?? "The invitation could not be accepted" }, 403);
+      return respond({
+        error: acceptError?.message ?? "This invitation has expired or is no longer pending",
+      }, 403);
     }
 
     const { data: adminUser, error: adminLookupError } = await adminClient.auth.admin.getUserById(authData.user.id);
