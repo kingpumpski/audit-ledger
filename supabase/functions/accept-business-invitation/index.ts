@@ -74,7 +74,10 @@ serve(async (req) => {
       return respond({ success: true, business_id: businessId, active_business_set: false });
     }
 
-    const appMetadata = { ...(adminUser.user.app_metadata ?? {}), active_business_id: businessId };
+    const appMetadata = {
+      ...(adminUser.user.app_metadata ?? {}),
+      active_business_id: businessId,
+    } as typeof adminUser.user.app_metadata & { pending_business_invitation_id?: string };
     delete appMetadata.pending_business_invitation_id;
 
     const userMetadata = { ...(adminUser.user.user_metadata ?? {}) };
