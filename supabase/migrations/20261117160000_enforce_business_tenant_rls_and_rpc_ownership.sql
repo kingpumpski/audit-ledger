@@ -74,8 +74,15 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  -- Transitional fallback for pre-tenancy role-managed accounts only. It is
-  -- unavailable to users who already have any active business membership.
+  -- A suspended or otherwise inactive membership must not fall back to a
+  -- global role and regain legacy workspace access.
+  IF EXISTS (
+    SELECT 1 FROM public.business_members bm WHERE bm.user_id = auth.uid()
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  -- Transitional fallback for pre-tenancy role-managed accounts only.
   IF EXISTS (SELECT 1 FROM public.user_roles ur WHERE ur.user_id = auth.uid()) THEN
     RETURN public.legacy_business_id();
   END IF;
@@ -276,41 +283,6 @@ DO $rpc_policies$
 DECLARE
   v_table record;
   v_has_business_id boolean;
-  v_business_tables text[] := ARRAY[
-    'chart_of_accounts',
-    'company_settings',
-    'credit_note_line_taxes',
-    'credit_note_lines',
-    'credit_notes',
-    'customer_credit_applications',
-    'customer_credit_refunds',
-    'customers',
-    'discounts',
-    'financial_completeness_attestations',
-    'inventory_count_adjustments',
-    'inventory_purchase_reversals',
-    'inventory_transactions',
-    'invoice_item_direct_costs',
-    'invoice_item_taxes',
-    'invoice_items',
-    'invoice_taxes',
-    'invoices',
-    'journal_entries',
-    'journal_lines',
-    'operating_expense_payments',
-    'operating_expense_refunds',
-    'operating_expense_reversals',
-    'operating_expenses',
-    'payment_clearing_settlements',
-    'payments',
-    'petty_cash_expense_reversals',
-    'petty_cash_transactions',
-    'product_price_history',
-    'products',
-    'receipts',
-    'sequences',
-    'taxes'
-  ];
 BEGIN
   FOR v_table IN
     SELECT c.relname
