@@ -425,7 +425,7 @@ BEGIN
     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','secure_definer_function_owners')
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners')
   LOOP
     EXECUTE pg_catalog.format(
       'ALTER FUNCTION %s OWNER TO audit_ledger_rpc_owner',
@@ -438,6 +438,13 @@ BEGIN
   END LOOP;
 END;
 $transfer_definers$;
+
+-- The function-owner role must be able to resolve the signed JWT helpers.
+-- Keep auth schema usage explicit rather than relying on platform defaults.
+GRANT USAGE ON SCHEMA auth TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.jwt() TO authenticated, service_role, audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION auth.role() TO authenticated, service_role, audit_ledger_rpc_owner;
 
 -- Future SECURITY DEFINER routines are automatically assigned the same
 -- constrained owner after creation/replacement.
@@ -463,7 +470,7 @@ BEGIN
     FROM pg_catalog.pg_proc p
     WHERE p.oid = cmd.objid
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','secure_definer_function_owners');
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners');
 
     IF v_signature IS NOT NULL THEN
       EXECUTE pg_catalog.format(
