@@ -20,7 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Search, Loader2, Lock } from 'lucide-react';
 import { z } from 'zod';
@@ -88,7 +88,7 @@ const emptyForm = {
 };
 
 export function ChartOfAccounts() {
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const { toast } = useToast();
   const canEdit = roles.includes('admin') || roles.includes('accountant');
   const canDelete = roles.includes('admin');
