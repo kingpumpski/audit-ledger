@@ -72,6 +72,9 @@ jobs:
       - name: Type-check invoice Edge Function
         run: deno check supabase/functions/generate-invoice-pdf/index.ts
 
+      - name: Type-check active business Edge Function
+        run: deno check supabase/functions/set-active-business/index.ts
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
