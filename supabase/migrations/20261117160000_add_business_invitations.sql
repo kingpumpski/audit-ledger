@@ -58,6 +58,7 @@ DECLARE
   v_invitation public.business_invitations%ROWTYPE;
   v_existing public.business_members%ROWTYPE;
   v_member_id uuid;
+  v_inviter_role text;
 BEGIN
   IF v_user_id IS NULL OR v_email = '' THEN
     RAISE EXCEPTION 'A verified authenticated email is required to accept an invitation'
@@ -91,8 +92,9 @@ BEGIN
     UPDATE public.business_invitations
     SET status = 'expired', updated_at = pg_catalog.now()
     WHERE id = v_invitation.id;
-    RAISE EXCEPTION 'This invitation has expired'
-      USING ERRCODE = '55000';
+    -- Return NULL so the expiry state commits. Raising an exception here
+    -- would roll back the status update with the surrounding transaction.
+    RETURN NULL;
   END IF;
 
   IF v_email <> v_invitation.email THEN
@@ -108,14 +110,37 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.business_members bm
-    WHERE bm.business_id = v_invitation.business_id
-      AND bm.user_id = v_invitation.invited_by
-      AND bm.status = 'active'
-      AND bm.role IN ('owner', 'admin')
-  ) THEN
+  SELECT bm.role INTO v_inviter_role
+  FROM public.business_members bm
+  WHERE bm.business_id = v_invitation.business_id
+    AND bm.user_id = v_invitation.invited_by
+    AND bm.status = 'active'
+  FOR UPDATE;
+
+  IF v_inviter_role IS NULL OR v_inviter_role NOT IN ('owner', 'admin') THEN
     RAISE EXCEPTION 'The person who issued this invitation is no longer authorized'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_inviter_role = 'admin' AND v_invitation.role IN ('owner', 'admin') THEN
+    RAISE EXCEPTION 'Administrators cannot issue owner or administrator access'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_invitation.auth_user_id IS NOT NULL
+     AND v_invitation.auth_user_id IS DISTINCT FROM v_user_id THEN
+    RAISE EXCEPTION 'This invitation is bound to a different user account'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM auth.users u
+    WHERE u.id = v_user_id
+      AND lower(u.email) = v_email
+      AND u.email_confirmed_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'Confirm the invited email address before accepting this invitation'
       USING ERRCODE = '42501';
   END IF;
 
@@ -163,7 +188,7 @@ BEGIN
       'target_user_id', v_user_id, 'target_email', v_email
     ),
     pg_catalog.jsonb_build_object('business_id', v_invitation.business_id, 'invitation_id', v_invitation.id),
-    v_invitation.business_id
+    NULL
   );
 
   RETURN v_invitation.business_id;
