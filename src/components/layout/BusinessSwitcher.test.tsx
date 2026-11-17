@@ -68,9 +68,10 @@ describe("BusinessSwitcher", () => {
     });
 
     render(<BusinessSwitcher />);
-    fireEvent.click(screen.getByRole("button", {
+    const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
-    }));
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
 
     expect(screen.getByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
@@ -90,9 +91,10 @@ describe("BusinessSwitcher", () => {
     });
 
     render(<BusinessSwitcher />);
-    fireEvent.click(screen.getByRole("button", {
+    const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
-    }));
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
     fireEvent.click(screen.getByText("Market Stall"));
 
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith({
@@ -113,9 +115,10 @@ describe("BusinessSwitcher", () => {
     });
 
     render(<BusinessSwitcher />);
-    fireEvent.click(screen.getByRole("button", {
+    const trigger = screen.getByRole("button", {
       name: "Choose a business workspace",
-    }));
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
 
     expect(screen.getByText("Switch business")).toBeTruthy();
     fireEvent.click(screen.getByText("Market Stall"));
