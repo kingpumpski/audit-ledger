@@ -74,6 +74,14 @@ BEGIN
       USING ERRCODE = 'P0002';
   END IF;
 
+  IF v_invitation.status = 'accepted' THEN
+    IF v_invitation.accepted_user_id = v_user_id THEN
+      RETURN v_invitation.business_id;
+    END IF;
+    RAISE EXCEPTION 'This invitation has already been accepted by another account'
+      USING ERRCODE = '55000';
+  END IF;
+
   IF v_invitation.status <> 'pending' THEN
     RAISE EXCEPTION 'This invitation is no longer pending'
       USING ERRCODE = '55000';
