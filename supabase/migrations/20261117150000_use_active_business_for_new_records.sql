@@ -14,7 +14,10 @@ DECLARE
   v_claimed_business_id uuid;
   v_legacy_business_id uuid;
 BEGIN
-  IF auth.jwt() ->> 'role' = 'service_role' THEN
+  IF auth.jwt() ->> 'role' = 'service_role' OR auth.uid() IS NULL THEN
+    -- Trusted backend jobs and SQL maintenance/test sessions without an end
+    -- user retain the legacy compatibility default. Anonymous callers do not
+    -- have EXECUTE permission on this function.
     RETURN public.legacy_business_id();
   END IF;
 
