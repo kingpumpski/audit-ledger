@@ -44,11 +44,12 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
   const { profile, roles, signOut, userPersona } = useAuth();
-  const { activeBusiness, isLoading: businessLoading } = useBusiness();
+  const { activeBusiness, activeMembership, isLoading: businessLoading } = useBusiness();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const isAdmin = roles.includes('admin');
+  const isBusinessManager = activeMembership?.role === 'owner' || activeMembership?.role === 'admin';
   const canAudit = roles.includes('admin') || roles.includes('auditor');
   const initials = (profile?.full_name || profile?.email || 'U')
     .split(/[\s@]+/)
@@ -206,7 +207,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
                 <DropdownMenuItem asChild><Link to="/notifications"><Bell className="mr-2 h-4 w-4" />Notifications</Link></DropdownMenuItem>
                 {isAdmin && <DropdownMenuItem asChild><Link to="/settings"><Settings className="mr-2 h-4 w-4" />Settings</Link></DropdownMenuItem>}
                 {isAdmin && <DropdownMenuItem asChild><Link to="/admin/users"><Users className="mr-2 h-4 w-4" />User management</Link></DropdownMenuItem>}
-                {isAdmin && <DropdownMenuItem asChild><Link to="/admin/business-members"><Users className="mr-2 h-4 w-4" />Business members</Link></DropdownMenuItem>}
+                {isBusinessManager && <DropdownMenuItem asChild><Link to="/admin/business-members"><Users className="mr-2 h-4 w-4" />Business members</Link></DropdownMenuItem>}
                 {canAudit && <DropdownMenuItem asChild><Link to="/admin/password-resets"><KeyRound className="mr-2 h-4 w-4" />Password resets</Link></DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => void signOut()} className="text-destructive focus:text-destructive">
