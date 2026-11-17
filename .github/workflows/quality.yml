@@ -75,6 +75,11 @@ jobs:
       - name: Type-check active business Edge Function
         run: deno check supabase/functions/set-active-business/index.ts
 
+      - name: Type-check business invitation Edge Functions
+        run: |
+          deno check supabase/functions/invite-business-member/index.ts
+          deno check supabase/functions/accept-business-invitation/index.ts
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
