@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useInvoice, useInvoices } from '@/hooks/useInvoices';
 import { useSettings } from '@/hooks/useSettings';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { RecordPaymentDialog } from '@/components/payments/RecordPaymentDialog';
 import { EditInvoiceDialog } from '@/components/invoices/EditInvoiceDialog';
 import { CreateCreditNoteDialog } from '@/components/invoices/CreateCreditNoteDialog';
@@ -50,7 +50,7 @@ export default function InvoiceDetails() {
   const { data: invoice, isLoading, error } = useInvoice(id || '');
   const { issueInvoice, isIssuing } = useInvoices();
   const { settings } = useSettings();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canIssueCreditNotes = roles.some((role) => ['admin', 'accountant'].includes(role));
   const [isPrinting, setIsPrinting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
