@@ -111,11 +111,16 @@ BEGIN
 
     -- Composite uniqueness supports tenant-consistent foreign keys in phase 2
     -- and doubles as the leading business_id index for tenant-filtered reads.
-    EXECUTE pg_catalog.format(
-      'CREATE UNIQUE INDEX %I ON public.%I (business_id, id)',
-      'uq_' || v_table || '_business_id_id',
-      v_table
-    );
+    IF v_table = 'sequences' THEN
+      -- Sequences are keyed by name, not an id column.
+      EXECUTE 'CREATE UNIQUE INDEX uq_sequences_business_id_name ON public.sequences (business_id, name)';
+    ELSE
+      EXECUTE pg_catalog.format(
+        'CREATE UNIQUE INDEX %I ON public.%I (business_id, id)',
+        'uq_' || v_table || '_business_id_id',
+        v_table
+      );
+    END IF;
 
     EXECUTE pg_catalog.format(
       'COMMENT ON COLUMN public.%I.business_id IS %L',
