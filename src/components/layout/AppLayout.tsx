@@ -6,7 +6,6 @@ import { PageActionBar } from './PageActionBar';
 import { getSidebarItems } from '@/config/sidebarConfig';
 import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useBusiness } from '@/contexts/BusinessContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight } from 'lucide-react';
