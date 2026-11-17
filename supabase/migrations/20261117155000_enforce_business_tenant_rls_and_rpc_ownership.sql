@@ -24,7 +24,24 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA extensions TO audit_ledger_rpc_owner;
 GRANT SELECT ON auth.users TO audit_ledger_rpc_owner;
-GRANT USAGE ON ALL TYPES IN SCHEMA public TO audit_ledger_rpc_owner;
+DO $grant_public_types$
+DECLARE
+  v_type record;
+BEGIN
+  FOR v_type IN
+    SELECT t.typname
+    FROM pg_catalog.pg_type t
+    JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace
+    WHERE n.nspname='public'
+      AND t.typtype IN ('e','d','r','m')
+  LOOP
+    EXECUTE pg_catalog.format(
+      'GRANT USAGE ON TYPE public.%I TO audit_ledger_rpc_owner',
+      v_type.typname
+    );
+  END LOOP;
+END;
+$grant_public_types$;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT ALL PRIVILEGES ON TABLES TO audit_ledger_rpc_owner;
