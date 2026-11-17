@@ -2,13 +2,17 @@ import { NavLink } from 'react-router-dom';
 import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
+import { getEffectiveRoles } from '@/lib/business-roles';
 import { getSidebarItems } from '@/config/sidebarConfig';
 import { Button } from '@/components/ui/button';
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function AppSidebar() {
   const { collapsed: isCollapsed, setCollapsed: setIsCollapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { roles, userPersona } = useAuth();
+  const { roles: globalRoles, userPersona } = useAuth();
+  const { activeMembership } = useBusiness();
+  const roles = getEffectiveRoles(globalRoles, activeMembership?.role);
 
   const handleToggle = () => {
     setIsCollapsed(!isCollapsed);
