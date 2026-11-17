@@ -6,6 +6,8 @@ import { PageActionBar } from './PageActionBar';
 import { getSidebarItems } from '@/config/sidebarConfig';
 import { SidebarProvider, useSidebarState } from '@/contexts/SidebarContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
+import { getEffectiveRoles } from '@/lib/business-roles';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight } from 'lucide-react';
@@ -43,7 +45,9 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
 
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { profile, roles, signOut, userPersona } = useAuth();
+  const { profile, roles: globalRoles, signOut, userPersona } = useAuth();
+  const { activeMembership } = useBusiness();
+  const roles = getEffectiveRoles(globalRoles, activeMembership?.role);
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
