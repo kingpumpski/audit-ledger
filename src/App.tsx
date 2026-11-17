@@ -13,6 +13,7 @@ import { BusinessManagerRoute } from "@/components/auth/BusinessManagerRoute";
 import { DocumentsPage } from "./components/documents/DocumentsPage";
 
 const Login = lazy(() => import("./pages/Login"));
+const AcceptInvitation = lazy(() => import("./pages/AcceptInvitation"));
 const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -67,6 +68,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/accept-invitation" element={<AcceptInvitation />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
