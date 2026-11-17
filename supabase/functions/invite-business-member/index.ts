@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,7 @@ function respond(body: Record<string, unknown>, status = 200) {
   });
 }
 
-async function findAuthUserByEmail(adminClient: any, email: string) {
+async function findAuthUserByEmail(adminClient: SupabaseClient, email: string) {
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
