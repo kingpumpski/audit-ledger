@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(18);
+SELECT extensions.plan(21);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -22,6 +22,21 @@ SELECT extensions.ok(
       AND NOT rolbypassrls
   ),
   'SECURITY DEFINER routines use a non-login, non-BYPASSRLS owner'
+);
+
+SELECT extensions.ok(
+  has_schema_privilege('authenticated', 'auth', 'USAGE'),
+  'authenticated role retains usage on the Supabase Auth schema'
+);
+
+SELECT extensions.ok(
+  has_schema_privilege('audit_ledger_rpc_owner', 'auth', 'USAGE'),
+  'constrained RPC owner retains usage on the Supabase Auth schema'
+);
+
+SELECT extensions.ok(
+  has_function_privilege('audit_ledger_rpc_owner', 'auth.uid()', 'EXECUTE'),
+  'constrained RPC owner can execute auth.uid()'
 );
 
 SELECT extensions.ok(
