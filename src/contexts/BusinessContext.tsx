@@ -1,8 +1,9 @@
-import React, { createContext, useCallback, useContext, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 type BusinessRow = Tables<"businesses">;
 type BusinessMemberRow = Tables<"business_members">;
@@ -71,6 +72,38 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   });
 
   const memberships = membershipsQuery.data ?? [];
+  const pendingInvitationId = String(
+    user?.app_metadata?.pending_business_invitation_id ??
+    user?.user_metadata?.business_invitation_id ??
+    "",
+  );
+  const processedInvitationRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!user || !pendingInvitationId || processedInvitationRef.current === pendingInvitationId) return;
+    processedInvitationRef.current = pendingInvitationId;
+
+    void (async () => {
+      const { error } = await supabase.functions.invoke("accept-business-invitation", {
+        body: { invitationId: pendingInvitationId },
+      });
+      if (error) {
+        toast.error(error.message || "Unable to accept the business invitation");
+        return;
+      }
+
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        toast.error("Invitation accepted. Please refresh to load your business workspace.");
+        return;
+      }
+      await membershipsQuery.refetch();
+      toast.success("Business invitation accepted");
+    })();
+  }, [user?.id, pendingInvitationId, queryClient, membershipsQuery.refetch]);
+
   const claimedBusinessId = user?.app_metadata?.active_business_id;
   const activeMembership =
     memberships.find((membership) => membership.business_id === claimedBusinessId) ??
