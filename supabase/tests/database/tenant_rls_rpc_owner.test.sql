@@ -1,0 +1,178 @@
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+
+BEGIN;
+SELECT extensions.plan(13);
+
+INSERT INTO auth.users (
+  id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data
+) VALUES
+  ('b2000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
+   'tenant-a@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('b2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
+   'tenant-b@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+
+SELECT extensions.ok(
+  EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles
+    WHERE rolname='audit_ledger_rpc_owner'
+      AND NOT rolcanlogin
+      AND NOT rolbypassrls
+  ),
+  'SECURITY DEFINER routines use a non-login, non-BYPASSRLS owner'
+);
+
+SELECT extensions.ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public'
+      AND p.prosecdef
+      AND p.proname NOT IN ('rls_auto_enable','secure_definer_function_owners')
+      AND p.proowner <> 'audit_ledger_rpc_owner'::regrole
+  ),
+  'all application SECURITY DEFINER routines are owned by the constrained RPC role'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer
+   FROM pg_catalog.pg_policies
+   WHERE schemaname='public'
+     AND policyname='tenant_business_scope'
+     AND tablename = ANY(ARRAY['chart_of_accounts','company_settings','credit_note_line_taxes','credit_note_lines','credit_notes','customer_credit_applications','customer_credit_refunds','customers','discounts','financial_completeness_attestations','inventory_count_adjustments','inventory_purchase_reversals','inventory_transactions','invoice_item_direct_costs','invoice_item_taxes','invoice_items','invoice_taxes','invoices','journal_entries','journal_lines','operating_expense_payments','operating_expense_refunds','operating_expense_reversals','operating_expenses','payment_clearing_settlements','payments','petty_cash_expense_reversals','petty_cash_transactions','product_price_history','products','receipts','sequences','taxes'])),
+  33,
+  'all 33 operational tables have restrictive tenant-scope policies'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer
+   FROM pg_catalog.pg_policies
+   WHERE schemaname='public'
+     AND policyname='rpc_owner_access'
+     AND tablename = ANY(ARRAY['chart_of_accounts','company_settings','credit_note_line_taxes','credit_note_lines','credit_notes','customer_credit_applications','customer_credit_refunds','customers','discounts','financial_completeness_attestations','inventory_count_adjustments','inventory_purchase_reversals','inventory_transactions','invoice_item_direct_costs','invoice_item_taxes','invoice_items','invoice_taxes','invoices','journal_entries','journal_lines','operating_expense_payments','operating_expense_refunds','operating_expense_reversals','operating_expenses','payment_clearing_settlements','payments','petty_cash_expense_reversals','petty_cash_transactions','product_price_history','products','receipts','sequences','taxes'])),
+  33,
+  'the constrained RPC role has an explicit permissive policy on all operational tables'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer
+   FROM information_schema.columns
+   WHERE table_schema='public'
+     AND column_name='business_id'
+     AND column_default LIKE '%current_business_id%'
+     AND table_name = ANY(ARRAY['chart_of_accounts','company_settings','credit_note_line_taxes','credit_note_lines','credit_notes','customer_credit_applications','customer_credit_refunds','customers','discounts','financial_completeness_attestations','inventory_count_adjustments','inventory_purchase_reversals','inventory_transactions','invoice_item_direct_costs','invoice_item_taxes','invoice_items','invoice_taxes','invoices','journal_entries','journal_lines','operating_expense_payments','operating_expense_refunds','operating_expense_reversals','operating_expenses','payment_clearing_settlements','payments','petty_cash_expense_reversals','petty_cash_transactions','product_price_history','products','receipts','sequences','taxes'])),
+  33,
+  'all business-owned operational tables default to the active business'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true);
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'test.tenant_a',
+  public.create_business('Tenant A Test', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  current_setting('test.tenant_a')::uuid,
+  'a user with one active membership resolves that business without a claim'
+);
+
+SELECT extensions.ok(
+  public.has_any_role(ARRAY['admin','accountant','cashier','auditor']::text[]),
+  'an owner membership receives the expected application permissions'
+);
+
+WITH inserted AS (
+  INSERT INTO public.customers (code, name)
+  VALUES ('TENANT-CUSTOMER', 'Tenant A Customer')
+  RETURNING id
+)
+SELECT set_config('test.customer_a', (SELECT id::text FROM inserted), true);
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000002', true);
+SELECT set_config(
+  'test.tenant_b',
+  public.create_business('Tenant B Test', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+WITH inserted AS (
+  INSERT INTO public.customers (code, name)
+  VALUES ('TENANT-CUSTOMER', 'Tenant B Customer')
+  RETURNING id
+)
+SELECT set_config('test.customer_b', (SELECT id::text FROM inserted), true);
+
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001', true);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.customers),
+  1,
+  'direct customer reads are isolated to the active business'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.get_customer_account_balances(CURRENT_DATE, NULL)),
+  1,
+  'SECURITY DEFINER customer-balance RPCs are isolated by RLS'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.customers
+   WHERE id=current_setting('test.customer_b')::uuid),
+  0,
+  'a business member cannot read another business customer by ID'
+);
+
+SELECT extensions.lives_ok(
+  $tenant_write$
+  DO $cross_tenant_write$
+  BEGIN
+    BEGIN
+      INSERT INTO public.customers (code, name, business_id)
+      VALUES ('CROSS-TENANT', 'Must be rejected', current_setting('test.tenant_b')::uuid);
+      RAISE EXCEPTION 'cross-business write was not rejected';
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        NULL;
+    END;
+  END;
+  $cross_tenant_write$;
+  $tenant_write$,
+  'cross-business writes are rejected by the restrictive tenant policy'
+);
+
+SELECT set_config(
+  'test.tenant_a_second',
+  public.create_business('Tenant A Second Workspace', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  NULL::uuid,
+  'multiple memberships without an active claim fail closed'
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'b2000000-0000-4000-8000-000000000001',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object('active_business_id', current_setting('test.tenant_a'))
+  )::text,
+  true
+);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  current_setting('test.tenant_a')::uuid,
+  'a valid signed active-business claim selects exactly its membership'
+);
+
+RESET ROLE;
+SELECT * FROM extensions.finish();
+ROLLBACK;
