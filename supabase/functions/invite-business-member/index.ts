@@ -144,7 +144,7 @@ serve(async (req) => {
         business_invitation_id: invitation.id,
         business_name: business.name,
       },
-      redirectTo: appUrl,
+      redirectTo: `${appUrl}/accept-invitation?invitation_id=${encodeURIComponent(invitation.id)}`,
     });
 
     if (inviteError || !invited.user) {
