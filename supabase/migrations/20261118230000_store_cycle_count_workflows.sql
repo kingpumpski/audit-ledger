@@ -132,15 +132,19 @@ BEGIN
     RAISE EXCEPTION 'Inventory movement must resolve to a store location';
   END IF;
 
+  -- Shared advisory locks allow concurrent movements at the same location,
+  -- while count creation/cancellation takes an exclusive lock for a clean
+  -- snapshot boundary without serializing every sale.
   FOR v_locked_location IN
     SELECT sl.id
     FROM public.store_locations sl
     WHERE sl.business_id = NEW.business_id
       AND sl.id IN (NEW.location_id, NEW.destination_location_id)
     ORDER BY sl.id
-    FOR UPDATE
   LOOP
-    NULL;
+    PERFORM pg_advisory_xact_lock_shared(
+      hashtextextended(NEW.business_id::text || ':' || v_locked_location::text, 0)
+    );
   END LOOP;
 
   IF EXISTS (
@@ -210,10 +214,15 @@ BEGIN
     RETURN v_existing.id;
   END IF;
 
+  -- Exclusive location lock waits for all in-flight movements to finish and
+  -- prevents new ones from crossing the snapshot boundary.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(v_business_id::text || ':' || p_location_id::text, 0)
+  );
+
   SELECT * INTO v_location
   FROM public.store_locations
-  WHERE business_id = v_business_id AND id = p_location_id
-  FOR UPDATE;
+  WHERE business_id = v_business_id AND id = p_location_id;
   IF NOT FOUND OR NOT v_location.is_active
      OR v_location.location_type NOT IN ('store', 'warehouse', 'van') THEN
     RAISE EXCEPTION 'Choose an active physical store location for the count';
@@ -444,9 +453,9 @@ BEGIN
     RAISE EXCEPTION 'A posted stock count cannot be canceled; record a new count or adjustment';
   END IF;
 
-  PERFORM 1 FROM public.store_locations
-  WHERE business_id = v_business_id AND id = v_count.location_id
-  FOR UPDATE;
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(v_business_id::text || ':' || v_count.location_id::text, 0)
+  );
 
   UPDATE public.store_stock_counts
   SET status = 'canceled',
@@ -516,10 +525,10 @@ BEGIN
     RAISE EXCEPTION 'Only approved stock counts can be posted';
   END IF;
 
-  PERFORM 1 FROM public.store_locations
-  WHERE business_id = v_business_id AND id = v_count.location_id
-  FOR UPDATE;
-
+  -- The active count's exclusive snapshot boundary already prevents any
+  -- movement from committing. Do not take a location row lock here: existing
+  -- movement RPCs lock products/balances before the movement guard, and a
+  -- location row lock here would create a lock-order deadlock.
   -- Verify the freeze held: no stock movement may have changed the snapshot.
   FOR v_line IN
     SELECT * FROM public.store_stock_count_lines
