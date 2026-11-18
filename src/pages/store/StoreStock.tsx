@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useStoreInventoryData } from '@/hooks/useStoreInventoryData';
+import { isPhysicalStoreLocation } from '@/lib/store-stock-availability';
 
 const quantity = (value: number) => new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 3,
@@ -99,7 +100,7 @@ export default function StoreStock() {
                   <TableHead className="text-right">On hand</TableHead>
                   <TableHead className="text-right">Reserved</TableHead>
                   <TableHead className="text-right">Quarantined</TableHead>
-                  <TableHead className="text-right">Available</TableHead>
+                  <TableHead className="text-right">Available / transit</TableHead>
                   <TableHead className="text-right">Reorder point</TableHead>
                 </TableRow>
               </TableHeader>
@@ -112,7 +113,15 @@ export default function StoreStock() {
                     <TableCell className="text-right tabular-nums">{quantity(balance.on_hand)}</TableCell>
                     <TableCell className="text-right tabular-nums">{quantity(balance.reserved)}</TableCell>
                     <TableCell className="text-right tabular-nums">{quantity(balance.quarantined)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{quantity(balance.available_quantity)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {location?.location_type === 'virtual' ? (
+                        <span className="text-muted-foreground">In transit: {quantity(balance.on_hand)}</span>
+                      ) : isPhysicalStoreLocation(location?.location_type) && location.is_active ? (
+                        quantity(balance.available_quantity)
+                      ) : (
+                        <span className="text-muted-foreground">Unavailable</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {quantity(setting?.reorder_point ?? product?.min_stock_level ?? 0)}
                     </TableCell>
