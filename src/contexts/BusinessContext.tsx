@@ -113,7 +113,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     if (refreshError) throw refreshError;
 
     await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
-  }, [memberships, membershipsQuery, queryClient]);
+  }, [memberships, queryClient, user?.id]);
 
   const refreshMemberships = useCallback(async () => {
     await membershipsQuery.refetch();
