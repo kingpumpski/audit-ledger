@@ -13,13 +13,16 @@ export async function logDocumentEvent(kind: 'invoice' | 'receipt', id: string, 
     const { data } = await supabase.auth.getUser();
     const user = data.user;
     if (!user) return;
+    const { data: businessId, error: businessError } = await supabase.rpc('current_business_id');
+    if (businessError || !businessId) return;
     const { error } = await supabase.from('audit_logs').insert({
       user_id: user.id,
       user_email: user.email ?? null,
+      business_id: businessId,
       action: documentAuditAction(event),
       entity_type: kind === 'invoice' ? 'invoices' : 'receipts',
       entity_id: id,
-      metadata: { event, document_number: number, format: event === 'download' ? 'pdf' : 'screen' },
+      metadata: { event, document_number: number, format: event === 'download' ? 'pdf' : 'screen', business_id: businessId },
       user_agent: navigator.userAgent,
     });
     if (error) console.error('[document-audit] failed to log', event, error);
