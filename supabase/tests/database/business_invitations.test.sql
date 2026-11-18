@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(14);
+SELECT plan(16);
 
 SELECT ok(
   to_regclass('public.business_invitations') IS NOT NULL,
