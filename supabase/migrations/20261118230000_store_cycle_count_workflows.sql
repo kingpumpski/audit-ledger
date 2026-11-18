@@ -557,6 +557,7 @@ BEGIN
     SELECT * INTO v_product
     FROM public.products
     WHERE business_id = v_business_id AND id = v_line.product_id
+      AND deleted_at IS NULL AND is_active = true
     FOR UPDATE;
     IF NOT FOUND OR COALESCE(v_product.is_service, false) THEN
       RAISE EXCEPTION 'Counted product is no longer an active physical inventory product';
@@ -661,6 +662,10 @@ BEGIN
       RAISE EXCEPTION 'Stock-count journal is not balanced';
     END IF;
   END IF;
+
+  -- Scope privileged guard bypasses to this RPC's posting section only.
+  PERFORM set_config('app.store_stock_count_posting', 'off', true);
+  PERFORM set_config('app.inventory_adjustment_rpc', 'off', true);
 
   UPDATE public.store_stock_counts
   SET status = 'posted',
