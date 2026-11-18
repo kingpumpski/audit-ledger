@@ -72,7 +72,13 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   });
 
   const memberships = membershipsQuery.data ?? [];
-  const pendingInvitationId = String(user?.app_metadata?.pending_business_invitation_id ?? "");
+  // Metadata is only a navigation hint; the server-side acceptance RPC verifies
+  // the signed-in email and invitation ownership before granting membership.
+  const pendingInvitationId = String(
+    user?.app_metadata?.pending_business_invitation_id ??
+    user?.user_metadata?.business_invitation_id ??
+    "",
+  );
   const location = useLocation();
   const navigate = useNavigate();
 
