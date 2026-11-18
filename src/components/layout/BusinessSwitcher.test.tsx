@@ -71,11 +71,11 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(trigger);
 
-    expect(screen.getByText("Switch business")).toBeTruthy();
+    expect(await screen.findByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
-    fireEvent.click(screen.getByText("Market Stall"));
+    fireEvent.click(await screen.findByText("Market Stall"));
 
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
     expect(toastMock).toHaveBeenCalledWith({ title: "Business workspace changed" });
@@ -94,8 +94,8 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
-    fireEvent.click(screen.getByText("Market Stall"));
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByText("Market Stall"));
 
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith({
       title: "Unable to switch business",
@@ -118,10 +118,10 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Choose a business workspace",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.click(trigger);
 
-    expect(screen.getByText("Switch business")).toBeTruthy();
-    fireEvent.click(screen.getByText("Market Stall"));
+    expect(await screen.findByText("Switch business")).toBeTruthy();
+    fireEvent.click(await screen.findByText("Market Stall"));
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
   });
 
