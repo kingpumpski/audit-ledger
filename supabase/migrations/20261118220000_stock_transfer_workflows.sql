@@ -56,6 +56,7 @@ CREATE TABLE public.stock_transfers (
   notes text,
   idempotency_key uuid NOT NULL,
   request_fingerprint text NOT NULL,
+  line_snapshot jsonb NOT NULL CHECK (jsonb_typeof(line_snapshot) = 'array'),
   dispatch_idempotency_key uuid,
   created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   approved_by uuid REFERENCES auth.users(id) ON DELETE RESTRICT,
@@ -147,6 +148,7 @@ CREATE TABLE public.stock_transfer_receipts (
   receipt_reference text NOT NULL,
   idempotency_key uuid NOT NULL,
   request_fingerprint text NOT NULL,
+  line_snapshot jsonb NOT NULL CHECK (jsonb_typeof(line_snapshot) = 'array'),
   notes text,
   received_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   received_at timestamptz NOT NULL DEFAULT now(),
@@ -227,14 +229,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.stock_transfers, public.stock_tra
 CREATE TRIGGER audit_activity_stock_transfers
   AFTER INSERT OR UPDATE OR DELETE ON public.stock_transfers
   FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
-CREATE TRIGGER audit_activity_stock_transfer_lines
-  AFTER INSERT OR UPDATE OR DELETE ON public.stock_transfer_lines
-  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 CREATE TRIGGER audit_activity_stock_transfer_receipts
   AFTER INSERT OR UPDATE OR DELETE ON public.stock_transfer_receipts
-  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
-CREATE TRIGGER audit_activity_stock_transfer_receipt_lines
-  AFTER INSERT OR UPDATE OR DELETE ON public.stock_transfer_receipt_lines
   FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 
 CREATE OR REPLACE FUNCTION public.create_stock_transfer(
@@ -348,12 +344,12 @@ BEGIN
 
   INSERT INTO public.stock_transfers (
     business_id, reference_number, source_location_id, destination_location_id,
-    transit_location_id, notes, idempotency_key, request_fingerprint, created_by
+    transit_location_id, notes, idempotency_key, request_fingerprint, line_snapshot, created_by
   )
   VALUES (
     v_business_id, btrim(p_reference_number), p_source_location_id, p_destination_location_id,
     v_transit_location_id, NULLIF(btrim(p_notes), ''), p_idempotency_key,
-    v_fingerprint, auth.uid()
+    v_fingerprint, p_lines, auth.uid()
   )
   RETURNING id INTO v_transfer_id;
 
@@ -663,11 +659,11 @@ BEGIN
 
   INSERT INTO public.stock_transfer_receipts (
     business_id, transfer_id, receipt_reference, idempotency_key,
-    request_fingerprint, notes, received_by
+    request_fingerprint, line_snapshot, notes, received_by
   )
   VALUES (
     v_business_id, v_transfer.id, btrim(p_receipt_reference), p_idempotency_key,
-    v_fingerprint, NULLIF(btrim(p_notes), ''), auth.uid()
+    v_fingerprint, p_lines, NULLIF(btrim(p_notes), ''), auth.uid()
   )
   RETURNING id INTO v_receipt_id;
 
