@@ -3378,6 +3378,7 @@ export type Database = {
         }
         Returns: string
       }
+      current_business_id: { Args: never; Returns: string }
       create_invoice_draft: {
         Args: {
           p_customer_id: string
