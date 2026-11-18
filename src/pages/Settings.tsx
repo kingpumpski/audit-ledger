@@ -13,7 +13,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/useSettings';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { LogoUpload } from '@/components/settings/LogoUpload';
 import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings';
 import { SKUSettings } from '@/components/settings/SKUSettings';
@@ -72,9 +72,9 @@ type NotificationFormData = z.infer<typeof notificationSchema>;
 
 export default function Settings() {
   const { settings, isLoading, updateSettings, isUpdating } = useSettings();
-  const { hasRole } = useAuth();
+  const roles = useEffectiveRoles();
   const [reminderDays, setReminderDays] = useState<number[]>([7, 14, 30]);
-  const isAdmin = hasRole('admin');
+  const isAdmin = roles.includes('admin');
   const [newReminderDay, setNewReminderDay] = useState('');
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
