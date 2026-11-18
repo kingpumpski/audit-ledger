@@ -1,6 +1,14 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(29);
+SELECT extensions.plan(30);
+
+SELECT extensions.ok(
+  NOT has_table_privilege('authenticated', 'public.store_stock_counts', 'INSERT')
+  AND NOT has_table_privilege('service_role', 'public.store_stock_counts', 'INSERT')
+  AND NOT has_table_privilege('authenticated', 'public.store_stock_count_lines', 'UPDATE')
+  AND NOT has_table_privilege('service_role', 'public.store_stock_count_lines', 'UPDATE'),
+  'Clients and service-role sessions cannot bypass the guarded stock-count RPCs'
+);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
