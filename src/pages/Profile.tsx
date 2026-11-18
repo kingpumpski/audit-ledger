@@ -13,11 +13,13 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserPersona } from '@/config/sidebarConfig';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Loader2, User, Pen, Save } from 'lucide-react';
 
 export default function Profile() {
   const { profile, isLoading, updateProfile, updateSignature, isUpdating, isUpdatingSignature } = useProfile();
-  const { roles, userPersona, setUserPersona } = useAuth();
+  const { userPersona, setUserPersona } = useAuth();
+  const roles = useEffectiveRoles();
   const { toast } = useToast();
   const [isSavingPersona, setIsSavingPersona] = useState(false);
   

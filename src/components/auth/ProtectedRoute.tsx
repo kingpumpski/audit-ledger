@@ -1,6 +1,9 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
+import { BusinessSwitcher } from '@/components/layout/BusinessSwitcher';
 import { Loader2 } from 'lucide-react';
 
 type AppRole = 'admin' | 'accountant' | 'cashier' | 'auditor';
@@ -9,17 +12,22 @@ interface ProtectedRouteProps {
   children: ReactNode;
   requiredRoles?: AppRole[];
   requireAnyRole?: boolean;
+  globalRolesOnly?: boolean;
 }
 
 export function ProtectedRoute({ 
   children, 
   requiredRoles, 
-  requireAnyRole = true 
+  requireAnyRole = true,
+  globalRolesOnly = false,
 }: ProtectedRouteProps) {
-  const { user, roles, isLoading, hasAnyRole } = useAuth();
+  const { user, roles: globalRoles, isLoading } = useAuth();
+  const { memberships, activeMembership, isLoading: businessLoading } = useBusiness();
+  const effectiveRoles = useEffectiveRoles();
+  const roles = globalRolesOnly ? globalRoles : effectiveRoles;
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || (!globalRolesOnly && businessLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -34,8 +42,22 @@ export function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (!globalRolesOnly && memberships.length > 1 && !activeMembership) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4">
+        <section className="w-full max-w-lg space-y-4 rounded-xl border bg-card p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Choose a business workspace</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account belongs to more than one business. Select which business you want to work in before continuing.
+          </p>
+          <BusinessSwitcher />
+        </section>
+      </main>
+    );
+  }
+
   // Check if user has any role (is an employee)
-  if (requireAnyRole && !hasAnyRole()) {
+  if (requireAnyRole && roles.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center max-w-md mx-auto p-8">

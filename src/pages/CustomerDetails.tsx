@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useCustomerAccountBalances } from '@/hooks/useCustomerBalances';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { useSettings } from '@/hooks/useSettings';
 import { CustomerCreditManagement } from '@/components/customers/CustomerCreditManagement';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,7 +37,7 @@ export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { customers, updateCustomer, isUpdating } = useCustomers();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canViewCustomerCredits = roles.some((role) => ['admin', 'accountant', 'auditor'].includes(role));
   const { settings } = useSettings();
   const currencySymbol = settings?.currency_symbol || String.fromCharCode(36);

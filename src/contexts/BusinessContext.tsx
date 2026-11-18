@@ -83,15 +83,14 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || !pendingInvitationId || location.pathname === "/accept-invitation") return;
+    if (authLoading || membershipsQuery.isLoading || membershipsQuery.error || !user || !pendingInvitationId || memberships.length > 0 || location.pathname === "/accept-invitation") return;
     navigate(`/accept-invitation?invitation_id=${encodeURIComponent(pendingInvitationId)}`, { replace: true });
-  }, [user?.id, pendingInvitationId, location.pathname, navigate]);
+  }, [authLoading, membershipsQuery.isLoading, membershipsQuery.error, user?.id, pendingInvitationId, memberships.length, location.pathname, navigate]);
 
   const claimedBusinessId = user?.app_metadata?.active_business_id;
   const activeMembership =
     memberships.find((membership) => membership.business_id === claimedBusinessId) ??
-    memberships[0] ??
-    null;
+    (memberships.length === 1 ? memberships[0] : null);
   const activeBusiness = activeMembership?.business ?? null;
 
   const switchBusiness = useCallback(async (businessId: string) => {
@@ -114,7 +113,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     if (refreshError) throw refreshError;
 
     await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
-  }, [memberships, membershipsQuery, queryClient]);
+  }, [memberships, queryClient, user?.id]);
 
   const refreshMemberships = useCallback(async () => {
     await membershipsQuery.refetch();
