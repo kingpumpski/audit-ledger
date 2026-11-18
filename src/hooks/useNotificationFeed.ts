@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
@@ -15,18 +15,19 @@ export function useNotificationFeed() {
   const feedKey = ['notifications', user?.id, businessId] as const;
   const unreadKey = ['notifications-unread-count', user?.id, businessId] as const;
 
-  const notificationsQuery = useQuery({
+  const notificationsQuery = useInfiniteQuery({
     queryKey: feedKey,
     enabled: !!user && !businessLoading,
     staleTime: 15_000,
-    queryFn: async (): Promise<AppNotification[]> => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<AppNotification[]> => {
       if (!user) return [];
       let query = supabase
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .range(pageParam, pageParam + 49);
 
       query = businessId
         ? query.or(`business_id.eq.${businessId},business_id.is.null`)
@@ -36,6 +37,8 @@ export function useNotificationFeed() {
       if (error) throw error;
       return data ?? [];
     },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === 50 ? allPages.length * 50 : undefined,
   });
 
   const unreadQuery = useQuery({
@@ -133,9 +136,12 @@ export function useNotificationFeed() {
   }, [refresh, user]);
 
   return {
-    notifications: notificationsQuery.data ?? [],
+    notifications: notificationsQuery.data?.pages.flat() ?? [],
     unreadCount: unreadQuery.data ?? 0,
     isLoading: notificationsQuery.isLoading || unreadQuery.isLoading,
+    hasNextPage: notificationsQuery.hasNextPage,
+    isFetchingNextPage: notificationsQuery.isFetchingNextPage,
+    fetchNextPage: notificationsQuery.fetchNextPage,
     error: notificationsQuery.error ?? unreadQuery.error,
     markRead,
     markAllRead,
