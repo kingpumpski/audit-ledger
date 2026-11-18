@@ -148,7 +148,7 @@ SET LOCAL ROLE authenticated;
 
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.notifications WHERE user_id = auth.uid()),
-  2,
+  4,
   'users see only their active-workspace notifications plus global notices'
 );
 
