@@ -25,6 +25,7 @@ DECLARE
   v_inserted integer;
   v_previous_claim_sub text;
   v_previous_claims text;
+  v_set_claim boolean := false;
 BEGIN
   IF p_business_id IS NULL THEN
     RAISE EXCEPTION 'A business is required to seed its chart of accounts';
@@ -59,6 +60,7 @@ BEGIN
       jsonb_build_object('sub', p_created_by, 'role', 'authenticated')::text,
       true
     );
+    v_set_claim := true;
   END IF;
 
   PERFORM set_config('app.seed_business_chart_accounts', 'on', true);
@@ -124,7 +126,7 @@ BEGIN
 
   PERFORM set_config('app.seed_business_chart_accounts', 'off', true);
 
-  IF v_previous_claim_sub IS NOT NULL OR v_previous_claims IS NOT NULL THEN
+  IF v_set_claim THEN
     PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_claim_sub, ''), true);
     PERFORM set_config('request.jwt.claims', COALESCE(v_previous_claims, '{}'), true);
   END IF;
