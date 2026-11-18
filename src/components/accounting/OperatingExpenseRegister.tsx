@@ -83,22 +83,47 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   });
 
   useEffect(() => {
-    const channel = supabase.channel('operating-expense-register-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const refreshAccountingQueries = () => {
+      void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+    };
+    const subscribe = () => {
+      channel = supabase.channel('operating-expense-register-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, refreshAccountingQueries)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, refreshAccountingQueries)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, refreshAccountingQueries)
+        .subscribe();
+    };
+    const unsubscribe = async () => {
+      if (!channel) return;
+      const activeChannel = channel;
+      channel = null;
+      await supabase.removeChannel(activeChannel);
+    };
+
+    subscribe();
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) void unsubscribe();
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      void (async () => {
+        await unsubscribe();
+        subscribe();
+        refreshAccountingQueries();
+      })();
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+      void unsubscribe();
+    };
   }, [queryClient]);
 
   const refreshAccounting = () => {
