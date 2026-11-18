@@ -42,10 +42,29 @@ export default function AcceptInvitation() {
       const { error: passwordError } = await supabase.auth.updateUser({ password });
       if (passwordError) throw passwordError;
 
-      const { error: acceptError } = await supabase.functions.invoke("accept-business-invitation", {
+      const { data: acceptance, error: acceptError } = await supabase.functions.invoke("accept-business-invitation", {
         body: { invitationId },
       });
       if (acceptError) throw acceptError;
+
+      const acceptedBusinessId = typeof acceptance?.business_id === "string"
+        ? acceptance.business_id
+        : "";
+      if (!acceptedBusinessId) {
+        throw new Error("The invitation was accepted without a valid workspace response. Contact the business owner before continuing.");
+      }
+
+      // The Edge Function normally sets app_metadata itself. Retry through the
+      // dedicated workspace function if that metadata update was unavailable,
+      // so multi-business invitees never land in an ambiguous workspace.
+      if (acceptance?.active_business_set !== true) {
+        const { error: workspaceError } = await supabase.functions.invoke("set-active-business", {
+          body: { businessId: acceptedBusinessId },
+        });
+        if (workspaceError) {
+          throw new Error("Your invitation was accepted, but your active workspace could not be selected. Please sign in again or contact the business owner.");
+        }
+      }
 
       await queryClient.cancelQueries();
       queryClient.clear();
