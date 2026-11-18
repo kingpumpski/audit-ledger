@@ -553,6 +553,19 @@ BEGIN
 END;
 $rpc_policies$;
 
+-- The constrained owner inherits authenticated privileges to call Supabase
+-- Auth helpers. Prevent authenticated membership policies from recursively
+-- re-entering is_business_member() when the RPC owner queries membership data.
+DROP POLICY IF EXISTS businesses_select_members ON public.businesses;
+CREATE POLICY businesses_select_members
+  ON public.businesses FOR SELECT TO authenticated
+  USING (current_user <> 'audit_ledger_rpc_owner' AND public.is_business_member(id));
+
+DROP POLICY IF EXISTS business_members_select_members ON public.business_members;
+CREATE POLICY business_members_select_members
+  ON public.business_members FOR SELECT TO authenticated
+  USING (current_user <> 'audit_ledger_rpc_owner' AND public.is_business_member(business_id));
+
 -- The event trigger continues to enable RLS on future public tables and also
 -- provisions the RPC-owner policy plus a tenant guard whenever business_id is
 -- part of the table definition. business_members is deliberately excluded
