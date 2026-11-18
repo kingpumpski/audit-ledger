@@ -107,10 +107,10 @@ SELECT extensions.lives_ok(
 RESET ROLE;
 
 SELECT extensions.is(
-  (SELECT count(DISTINCT user_id)::integer FROM public.notifications
+  (SELECT count(*)::integer FROM public.notifications
    WHERE business_id IS NULL AND type = 'project_activity'),
-  3,
-  'global notifications still fan out once per user after the role assignment'
+  9,
+  'role assignment creates one project notification per member without a duplicate audit event'
 );
 
 SELECT extensions.ok(
