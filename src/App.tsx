@@ -96,7 +96,7 @@ const App = () => (
                 <Route path="/reports" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Reports /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute requiredRoles={['admin']} globalRolesOnly><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/business-members" element={<BusinessManagerRoute><BusinessMembers /></BusinessManagerRoute>} />
-                <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AdminPasswordResets /></ProtectedRoute>} />
+                <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin']} globalRolesOnly><AdminPasswordResets /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute requiredRoles={['admin']}><Settings /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
