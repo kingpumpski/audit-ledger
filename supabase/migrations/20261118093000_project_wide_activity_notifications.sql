@@ -94,7 +94,7 @@ BEGIN
 
   IF v_business_id IS NOT NULL THEN
     v_title := v_entity_label || ' ' || v_action;
-    v_message := pg_catalog.coalesce(NEW.user_email, 'A team member') || ' ' ||
+    v_message := COALESCE(NEW.user_email, 'A team member') || ' ' ||
       v_action || ' a ' || pg_catalog.lower(v_entity_label) || ' record.';
     INSERT INTO public.notifications (user_id, business_id, title, message, type, link)
     SELECT DISTINCT bm.user_id, v_business_id, v_title, v_message, 'project_activity', v_link
