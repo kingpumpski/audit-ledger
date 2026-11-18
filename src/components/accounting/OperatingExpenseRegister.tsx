@@ -84,16 +84,19 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
 
   useEffect(() => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
-    const refreshAccountingQueries = () => {
+    const refreshExpenses = () => {
       void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+    };
+    const refreshFinancialReports = () => {
+      refreshExpenses();
       void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
       void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
     };
     const subscribe = () => {
       channel = supabase.channel('operating-expense-register-live')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, refreshAccountingQueries)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, refreshAccountingQueries)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, refreshAccountingQueries)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, refreshExpenses)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, refreshFinancialReports)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, refreshFinancialReports)
         .subscribe();
     };
     const unsubscribe = async () => {
@@ -113,7 +116,7 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
       void (async () => {
         await unsubscribe();
         subscribe();
-        refreshAccountingQueries();
+        refreshFinancialReports();
       })();
     };
 
