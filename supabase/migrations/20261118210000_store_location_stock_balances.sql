@@ -414,5 +414,41 @@ REVOKE ALL ON FUNCTION public.assign_inventory_transaction_location() FROM PUBLI
 REVOKE ALL ON FUNCTION public.sync_inventory_transaction_stock_balance() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.initialize_product_store_stock() FROM PUBLIC, anon, authenticated, service_role;
 
+
+-- New businesses must receive a default location in the same transaction as
+-- business creation. Keep this internal trigger outside public so the global
+-- public SECURITY DEFINER owner event trigger does not reassign it to the
+-- constrained RPC owner before the creator has an active membership claim.
+CREATE SCHEMA IF NOT EXISTS app_private AUTHORIZATION postgres;
+REVOKE ALL ON SCHEMA app_private FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION app_private.create_default_store_location()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $create_default_store_location$
+BEGIN
+  INSERT INTO public.store_locations (
+    business_id, code, name, location_type, timezone, is_default
+  )
+  VALUES (
+    NEW.id, 'MAIN', COALESCE(NULLIF(btrim(NEW.name), ''), 'Main Store'),
+    'store', COALESCE(NULLIF(btrim(NEW.timezone), ''), 'Africa/Accra'), true
+  )
+  ON CONFLICT (business_id, code) DO NOTHING;
+
+  RETURN NEW;
+END;
+$create_default_store_location$;
+
+REVOKE ALL ON FUNCTION app_private.create_default_store_location()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER businesses_create_default_store_location
+  AFTER INSERT ON public.businesses
+  FOR EACH ROW
+  EXECUTE FUNCTION app_private.create_default_store_location();
+
 NOTIFY pgrst, 'reload schema';
 COMMIT;
