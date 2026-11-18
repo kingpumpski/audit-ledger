@@ -64,11 +64,33 @@ AS $rpc_auth_user_email$
   SELECT u.email::text FROM auth.users u WHERE u.id = p_user_id;
 $rpc_auth_user_email$;
 
+CREATE OR REPLACE FUNCTION public.rpc_auth_user_email_confirmed(p_user_id uuid, p_email text)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $rpc_auth_user_email_confirmed$
+  SELECT EXISTS (
+    SELECT 1 FROM auth.users u
+    WHERE u.id = p_user_id
+      AND lower(u.email) = lower(p_email)
+      AND u.email_confirmed_at IS NOT NULL
+  );
+$rpc_auth_user_email_confirmed$;
+
+CREATE OR REPLACE FUNCTION public.rpc_auth_user_full_name(p_user_id uuid)
+RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $rpc_auth_user_full_name$
+  SELECT nullif(pg_catalog.btrim(u.raw_user_meta_data ->> 'full_name'), '')
+  FROM auth.users u WHERE u.id = p_user_id;
+$rpc_auth_user_full_name$;
+
 -- These SECURITY DEFINER helpers are internal capabilities, not public RPCs.
 REVOKE ALL ON FUNCTION public.rpc_auth_user_exists(uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.rpc_auth_user_email(uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rpc_auth_user_email_confirmed(uuid, text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rpc_auth_user_full_name(uuid) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.rpc_auth_user_exists(uuid) TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON FUNCTION public.rpc_auth_user_email(uuid) TO audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION public.rpc_auth_user_email_confirmed(uuid, text) TO audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION public.rpc_auth_user_full_name(uuid) TO audit_ledger_rpc_owner;
 
 CREATE OR REPLACE FUNCTION public.set_business_member_access(
   p_business_id uuid,
@@ -609,7 +631,7 @@ BEGIN
     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email')
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email','rpc_auth_user_email_confirmed','rpc_auth_user_full_name')
   LOOP
     EXECUTE pg_catalog.format(
       'ALTER FUNCTION %s OWNER TO audit_ledger_rpc_owner',
