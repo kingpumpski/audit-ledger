@@ -23,6 +23,8 @@ DECLARE
   v_source_business_id uuid := public.legacy_business_id();
   v_currency text;
   v_inserted integer;
+  v_previous_claim_sub text;
+  v_previous_claims text;
 BEGIN
   IF p_business_id IS NULL THEN
     RAISE EXCEPTION 'A business is required to seed its chart of accounts';
@@ -42,6 +44,19 @@ BEGIN
   WHERE id = p_business_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Business was not found while seeding its chart of accounts';
+  END IF;
+
+  -- Attribute migration backfill audit entries to the workspace creator when
+  -- no authenticated request identity is present.
+  IF auth.uid() IS NULL AND p_created_by IS NOT NULL THEN
+    v_previous_claim_sub := current_setting('request.jwt.claim.sub', true);
+    v_previous_claims := current_setting('request.jwt.claims', true);
+    PERFORM set_config('request.jwt.claim.sub', p_created_by::text, true);
+    PERFORM set_config(
+      'request.jwt.claims',
+      jsonb_build_object('sub', p_created_by, 'role', 'authenticated')::text,
+      true
+    );
   END IF;
 
   PERFORM set_config('app.seed_business_chart_accounts', 'on', true);
@@ -106,6 +121,11 @@ BEGIN
   END IF;
 
   PERFORM set_config('app.seed_business_chart_accounts', 'off', true);
+
+  IF v_previous_claim_sub IS NOT NULL OR v_previous_claims IS NOT NULL THEN
+    PERFORM set_config('request.jwt.claim.sub', COALESCE(v_previous_claim_sub, ''), true);
+    PERFORM set_config('request.jwt.claims', COALESCE(v_previous_claims, '{}'), true);
+  END IF;
 END;
 $seed_business_chart_of_accounts$;
 
