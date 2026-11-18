@@ -11,13 +11,25 @@ export function useNotificationFeed() {
   const { user } = useAuth();
   const { activeBusiness, isLoading: businessLoading } = useBusiness();
   const queryClient = useQueryClient();
-  const businessId = activeBusiness?.id;
+  const activeBusinessId = activeBusiness?.id;
+  const businessResolutionQuery = useQuery({
+    queryKey: ['notification-active-business', user?.id],
+    enabled: !!user && !businessLoading && !activeBusinessId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase.rpc('current_business_id');
+      if (error) throw error;
+      return data ?? null;
+    },
+  });
+  const businessId = activeBusinessId ?? businessResolutionQuery.data ?? undefined;
+  const businessResolutionLoading = !activeBusinessId && businessResolutionQuery.isLoading;
   const feedKey = ['notifications', user?.id, businessId] as const;
   const unreadKey = ['notifications-unread-count', user?.id, businessId] as const;
 
   const notificationsQuery = useInfiniteQuery({
     queryKey: feedKey,
-    enabled: !!user && !businessLoading,
+    enabled: !!user && !businessLoading && !businessResolutionLoading,
     staleTime: 15_000,
     initialPageParam: 0,
     queryFn: async ({ pageParam }): Promise<AppNotification[]> => {
@@ -150,7 +162,7 @@ export function useNotificationFeed() {
     hasNextPage: notificationsQuery.hasNextPage,
     isFetchingNextPage: notificationsQuery.isFetchingNextPage,
     fetchNextPage: notificationsQuery.fetchNextPage,
-    error: notificationsQuery.error ?? unreadQuery.error,
+    error: notificationsQuery.error ?? unreadQuery.error ?? businessResolutionQuery.error,
     markRead,
     markAllRead,
     refresh,
