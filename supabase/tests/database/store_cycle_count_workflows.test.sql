@@ -152,6 +152,19 @@ SELECT extensions.throws_ok(
   'Inventory movements are frozen while a blind count is open'
 );
 
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'e4000000-0000-4000-8000-000000000002',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', 'e4000000-0000-4000-8000-000000000010'
+    )
+  )::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'e4000000-0000-4000-8000-000000000002', true);
+
 UPDATE store_cycle_count_test_state state
 SET count_line_id = public.record_store_stock_count_line(
   state.count_id,
@@ -171,19 +184,6 @@ SELECT extensions.is(
   (SELECT count_id FROM store_cycle_count_test_state LIMIT 1),
   'A complete blind count can be submitted for independent approval'
 );
-
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object(
-    'sub', 'e4000000-0000-4000-8000-000000000002',
-    'role', 'authenticated',
-    'app_metadata', jsonb_build_object(
-      'active_business_id', 'e4000000-0000-4000-8000-000000000010'
-    )
-  )::text,
-  true
-);
-SELECT set_config('request.jwt.claim.sub', 'e4000000-0000-4000-8000-000000000002', true);
 
 SELECT extensions.throws_ok(
   format(
