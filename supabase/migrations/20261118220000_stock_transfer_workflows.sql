@@ -148,6 +148,7 @@ CREATE TABLE public.stock_transfer_receipts (
   CONSTRAINT stock_transfer_receipts_reference_nonblank CHECK (length(btrim(receipt_reference)) > 0),
   CONSTRAINT stock_transfer_receipts_business_id_key UNIQUE (business_id, id),
   CONSTRAINT stock_transfer_receipts_idempotency_key UNIQUE (business_id, idempotency_key),
+  CONSTRAINT stock_transfer_receipts_reference_key UNIQUE (business_id, receipt_reference),
   CONSTRAINT stock_transfer_receipts_transfer_fk
     FOREIGN KEY (business_id, transfer_id)
     REFERENCES public.stock_transfers (business_id, id) ON DELETE RESTRICT
@@ -263,8 +264,11 @@ BEGIN
   IF NULLIF(btrim(p_reference_number), '') IS NULL THEN
     RAISE EXCEPTION 'A transfer reference is required' USING ERRCODE = '22023';
   END IF;
-  IF jsonb_typeof(p_lines) IS DISTINCT FROM 'array' OR jsonb_array_length(p_lines) = 0 THEN
-    RAISE EXCEPTION 'At least one stock transfer line is required' USING ERRCODE = '22023';
+  IF jsonb_typeof(p_lines) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Stock transfer lines must be supplied as a JSON array' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(p_lines) = 0 OR jsonb_array_length(p_lines) > 500 THEN
+    RAISE EXCEPTION 'A stock transfer must contain between 1 and 500 lines' USING ERRCODE = '22023';
   END IF;
   IF p_source_location_id IS NULL OR p_destination_location_id IS NULL
      OR p_source_location_id = p_destination_location_id THEN
@@ -435,6 +439,16 @@ BEGIN
   IF v_transfer.status <> 'approved' THEN
     RAISE EXCEPTION 'Only approved stock transfers can be dispatched';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.store_locations sl
+    WHERE sl.business_id = v_business_id
+      AND sl.id IN (v_transfer.source_location_id, v_transfer.destination_location_id, v_transfer.transit_location_id)
+      AND sl.is_active
+    GROUP BY sl.business_id
+    HAVING count(*) = 3
+  ) THEN
+    RAISE EXCEPTION 'All source, destination and transit locations must remain active before dispatch';
+  END IF;
 
   FOR v_line IN
     SELECT * FROM public.stock_transfer_lines
@@ -455,9 +469,9 @@ BEGIN
 
     SELECT * INTO v_product
     FROM public.products
-    WHERE business_id = v_business_id AND id = v_line.product_id
+    WHERE business_id = v_business_id AND id = v_line.product_id AND deleted_at IS NULL
     FOR UPDATE;
-    IF NOT FOUND OR COALESCE(v_product.is_service, false) THEN
+    IF NOT FOUND OR COALESCE(v_product.is_service, false) OR NOT COALESCE(v_product.is_active, true) THEN
       RAISE EXCEPTION 'Transfer product is no longer an active physical product';
     END IF;
 
@@ -527,8 +541,11 @@ BEGIN
   IF p_idempotency_key IS NULL OR NULLIF(btrim(p_receipt_reference), '') IS NULL THEN
     RAISE EXCEPTION 'A receipt reference and idempotency key are required' USING ERRCODE = '22023';
   END IF;
-  IF jsonb_typeof(p_lines) IS DISTINCT FROM 'array' OR jsonb_array_length(p_lines) = 0 THEN
-    RAISE EXCEPTION 'At least one received transfer line is required' USING ERRCODE = '22023';
+  IF jsonb_typeof(p_lines) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'Received transfer lines must be supplied as a JSON array' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(p_lines) = 0 OR jsonb_array_length(p_lines) > 500 THEN
+    RAISE EXCEPTION 'A transfer receipt must contain between 1 and 500 lines' USING ERRCODE = '22023';
   END IF;
 
   v_fingerprint := md5(jsonb_build_object(
@@ -557,6 +574,16 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND OR v_transfer.status NOT IN ('in_transit', 'partially_received') THEN
     RAISE EXCEPTION 'Only stock transfers in transit can be received';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.store_locations sl
+    WHERE sl.business_id = v_business_id
+      AND sl.id IN (v_transfer.transit_location_id, v_transfer.destination_location_id)
+      AND sl.is_active
+    GROUP BY sl.business_id
+    HAVING count(*) = 2
+  ) THEN
+    RAISE EXCEPTION 'Transit and destination locations must remain active before receipt';
   END IF;
 
   SELECT count(*)::integer, count(DISTINCT x.transfer_line_id)::integer
@@ -599,7 +626,7 @@ BEGIN
      AND tl.business_id = v_business_id
      AND tl.transfer_id = v_transfer.id
     ORDER BY tl.product_id
-    FOR UPDATE
+    FOR UPDATE OF tl
   LOOP
     SELECT x.quantity INTO v_quantity
     FROM jsonb_to_recordset(p_lines) AS x(transfer_line_id uuid, quantity integer)
