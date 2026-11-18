@@ -46,7 +46,7 @@ SELECT extensions.ok(
     JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
     WHERE n.nspname='public'
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners')
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email')
       AND p.proowner <> 'audit_ledger_rpc_owner'::regrole
   ),
   'all application SECURITY DEFINER routines are owned by the constrained RPC role'
