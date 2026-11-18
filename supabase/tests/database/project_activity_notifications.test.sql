@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(8);
+SELECT extensions.plan(9);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -84,8 +84,22 @@ SELECT extensions.ok(
   'notification read state is non-null and safe for unread counting'
 );
 
+-- A user-owned row from another business must still be hidden by active-workspace RLS.
+INSERT INTO public.notifications (user_id, business_id, title, message, type)
+VALUES (
+  'e2000000-0000-4000-8000-000000000001',
+  'e2000000-0000-4000-8000-000000000020',
+  'Cross-workspace notice', 'Must remain hidden in workspace A', 'project_activity'
+);
+
 SELECT set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.notifications WHERE user_id = auth.uid()),
+  2,
+  'users see only their active-workspace notifications plus global notices'
+);
 
 SELECT extensions.lives_ok(
   $global_audit_rejection$
