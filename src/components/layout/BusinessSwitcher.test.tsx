@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 
@@ -18,13 +19,13 @@ vi.mock("@/hooks/use-toast", () => ({
 vi.mock("@/components/ui/dropdown-menu", async () => {
   const React = await import("react");
   return {
-    DropdownMenu: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenu: ({ children }: { children: ReactNode }) =>
       React.createElement("div", null, children),
-    DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuTrigger: ({ children }: { children: ReactNode }) =>
       React.createElement(React.Fragment, null, children),
-    DropdownMenuContent: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuContent: ({ children }: { children: ReactNode }) =>
       React.createElement("div", null, children),
-    DropdownMenuLabel: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuLabel: ({ children }: { children: ReactNode }) =>
       React.createElement("div", null, children),
     DropdownMenuSeparator: () => React.createElement("hr"),
     DropdownMenuItem: ({
@@ -33,7 +34,7 @@ vi.mock("@/components/ui/dropdown-menu", async () => {
       disabled,
       className,
     }: {
-      children: React.ReactNode;
+      children: ReactNode;
       onSelect?: () => void;
       disabled?: boolean;
       className?: string;
