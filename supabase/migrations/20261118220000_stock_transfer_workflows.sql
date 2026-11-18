@@ -336,7 +336,7 @@ BEGIN
   IF (
     SELECT count(*) FROM jsonb_to_recordset(p_lines) AS x(product_id uuid, quantity integer)
     JOIN public.products p ON p.id = x.product_id AND p.business_id = v_business_id
-    WHERE p.deleted_at IS NULL AND COALESCE(p.is_service, false) = false
+    WHERE p.deleted_at IS NULL AND COALESCE(p.is_service, false) = false AND COALESCE(p.is_active, true)
   ) <> v_line_count THEN
     RAISE EXCEPTION 'Every transfer product must be an active physical product in this business';
   END IF;
