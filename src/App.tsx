@@ -37,6 +37,10 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Accounting = lazy(() => import("./pages/Accounting"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const StoreLayout = lazy(() => import("./components/store/StoreLayout"));
+const StoreDashboard = lazy(() => import("./pages/store/StoreDashboard"));
+const StoreStock = lazy(() => import("./pages/store/StoreStock"));
+const StoreLocations = lazy(() => import("./pages/store/StoreLocations"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminPasswordResets = lazy(() => import("./pages/AdminPasswordResets"));
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -89,6 +93,11 @@ const App = () => (
                 <Route path="/customers/:id" element={<ProtectedRoute><CustomerDetails /></ProtectedRoute>} />
                 <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
                 <Route path="/inventory" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'cashier']}><Inventory /></ProtectedRoute>} />
+                <Route path="/store" element={<ProtectedRoute requireAnyRole={false}><StoreLayout /></ProtectedRoute>}>
+                  <Route index element={<StoreDashboard />} />
+                  <Route path="stock" element={<StoreStock />} />
+                  <Route path="locations" element={<StoreLocations />} />
+                </Route>
                 <Route path="/accounting/*" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Accounting /></ProtectedRoute>} />
                 <Route path="/taxes" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Taxes /></ProtectedRoute>} />
                 <Route path="/discounts" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Discounts /></ProtectedRoute>} />
