@@ -109,7 +109,7 @@ CREATE POLICY store_stock_count_lines_select_members
 
 GRANT SELECT ON public.store_stock_counts, public.store_stock_count_lines TO authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.store_stock_counts, public.store_stock_count_lines
-  FROM anon, authenticated, service_role;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.store_stock_counts, public.store_stock_count_lines
   TO audit_ledger_rpc_owner;
 
