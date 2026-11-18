@@ -59,7 +59,7 @@ export default function AcceptInvitation() {
       // so multi-business invitees never land in an ambiguous workspace.
       if (acceptance?.active_business_set !== true) {
         const { error: workspaceError } = await supabase.functions.invoke("set-active-business", {
-          body: { businessId: acceptedBusinessId },
+          body: { businessId: acceptedBusinessId, clearPendingInvitation: true },
         });
         if (workspaceError) {
           throw new Error("Your invitation was accepted, but your active workspace could not be selected. Please sign in again or contact the business owner.");
