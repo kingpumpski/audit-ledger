@@ -38,8 +38,12 @@ export default function StoreDashboard() {
     setting,
   ]));
   const physicalProducts = data.products.filter(product => product.is_service !== true && product.is_active !== false);
-  const totalOnHand = data.balances.reduce((sum, balance) => sum + balance.on_hand, 0);
-  const totalAvailable = data.balances.reduce((sum, balance) => sum + balance.available_quantity, 0);
+  const activePhysicalBalances = data.balances.filter(balance => {
+    const product = productById.get(balance.product_id);
+    return product && product.is_service !== true && product.is_active !== false;
+  });
+  const totalOnHand = activePhysicalBalances.reduce((sum, balance) => sum + balance.on_hand, 0);
+  const totalAvailable = activePhysicalBalances.reduce((sum, balance) => sum + balance.available_quantity, 0);
   const lowStock = data.balances
     .map(balance => {
       const product = productById.get(balance.product_id);
@@ -47,7 +51,7 @@ export default function StoreDashboard() {
       const setting = settingByKey.get(`${balance.location_id}:${balance.product_id}`);
       return { balance, product, location, reorderPoint: setting?.reorder_point ?? product?.min_stock_level ?? 0 };
     })
-    .filter(item => item.product && item.product.is_service !== true && item.balance.available_quantity <= item.reorderPoint)
+    .filter(item => item.product && item.product.is_service !== true && item.product.is_active !== false && item.balance.available_quantity <= item.reorderPoint)
     .sort((a, b) => a.balance.available_quantity - b.balance.available_quantity)
     .slice(0, 8);
 
