@@ -1299,6 +1299,8 @@ export type Database = {
           created_at: string
           id: string
           idempotency_key: string | null
+          location_id: string
+          destination_location_id: string | null
           new_quantity: number | null
           notes: string | null
           opening_unit_cost: number | null
@@ -1323,6 +1325,8 @@ export type Database = {
           created_at?: string
           id?: string
           idempotency_key?: string | null
+          location_id: string
+          destination_location_id?: string | null
           new_quantity?: number | null
           notes?: string | null
           opening_unit_cost?: number | null
@@ -1347,6 +1351,8 @@ export type Database = {
           created_at?: string
           id?: string
           idempotency_key?: string | null
+          location_id?: string
+          destination_location_id?: string | null
           new_quantity?: number | null
           notes?: string | null
           opening_unit_cost?: number | null
@@ -1379,6 +1385,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_location_fk"
+            columns: ["business_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "inventory_transactions_destination_location_fk"
+            columns: ["business_id", "destination_location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
           },
           {
             foreignKeyName: "tenant_fk_fb3e3e3589eb856d"
@@ -3027,6 +3047,177 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "products_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_location_settings: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          lead_time_days: number
+          location_id: string
+          minimum_quantity: number
+          product_id: string
+          replenishment_method: string
+          reorder_point: number
+          safety_stock: number
+          target_quantity: number | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lead_time_days?: number
+          location_id: string
+          minimum_quantity?: number
+          product_id: string
+          replenishment_method?: string
+          reorder_point?: number
+          safety_stock?: number
+          target_quantity?: number | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          lead_time_days?: number
+          location_id?: string
+          minimum_quantity?: number
+          product_id?: string
+          replenishment_method?: string
+          reorder_point?: number
+          safety_stock?: number
+          target_quantity?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_location_settings_location_fk"
+            columns: ["business_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "product_location_settings_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      }
+      stock_balances: {
+        Row: {
+          available_quantity: number
+          business_id: string
+          id: string
+          location_id: string
+          on_hand: number
+          opening_quantity: number
+          opening_snapshot_at: string
+          product_id: string
+          quarantined: number
+          reserved: number
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          id?: string
+          location_id: string
+          on_hand?: number
+          opening_quantity?: number
+          opening_snapshot_at?: string
+          product_id: string
+          quarantined?: number
+          reserved?: number
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          id?: string
+          location_id?: string
+          on_hand?: number
+          opening_quantity?: number
+          opening_snapshot_at?: string
+          product_id?: string
+          quarantined?: number
+          reserved?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_balances_location_fk"
+            columns: ["business_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_balances_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      }
+      store_locations: {
+        Row: {
+          address: string | null
+          business_id: string
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          location_type: string
+          name: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          business_id: string
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          location_type?: string
+          name: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          business_id?: string
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          location_type?: string
+          name?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_locations_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
