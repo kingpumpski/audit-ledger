@@ -39,25 +39,11 @@ VALUES
 
 INSERT INTO public.chart_of_accounts (
   business_id, code, name, account_type, currency, is_system, is_active
-)
-SELECT
-  'e4000000-0000-4000-8000-000000000010',
-  account.code,
-  account.name,
-  account.account_type,
-  'GHS',
-  true,
-  true
-FROM (VALUES
-  ('1200', 'Inventory', 'asset'),
-  ('4900', 'Inventory Count Variance Gain', 'revenue'),
-  ('6500', 'Inventory Shrinkage', 'expense')
-) AS account(code, name, account_type)
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.chart_of_accounts existing
-  WHERE existing.business_id = 'e4000000-0000-4000-8000-000000000010'
-    AND existing.code = account.code
-);
+) VALUES
+  ('e4000000-0000-4000-8000-000000000010', '1200', 'Inventory', 'asset', 'GHS', true, true),
+  ('e4000000-0000-4000-8000-000000000010', '4900', 'Inventory Count Variance Gain', 'revenue', 'GHS', true, true),
+  ('e4000000-0000-4000-8000-000000000010', '6500', 'Inventory Shrinkage', 'expense', 'GHS', true, true)
+ON CONFLICT DO NOTHING;
 
 SELECT set_config(
   'request.jwt.claims',
