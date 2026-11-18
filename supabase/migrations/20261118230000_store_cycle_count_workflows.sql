@@ -430,6 +430,9 @@ BEGIN
   IF v_count.status <> 'submitted' THEN
     RAISE EXCEPTION 'Only submitted stock counts can be approved';
   END IF;
+  IF v_count.submitted_by = auth.uid() THEN
+    RAISE EXCEPTION 'A different authorized user must approve a submitted stock count';
+  END IF;
 
   UPDATE public.store_stock_counts
   SET status = 'approved', approved_by = auth.uid(), approved_at = now()
