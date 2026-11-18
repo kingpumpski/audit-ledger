@@ -126,12 +126,16 @@ SELECT extensions.is(
   'acceptance applies only the role approved by the business owner'
 );
 
+RESET ROLE;
+
 SELECT extensions.is(
   (SELECT status FROM public.business_invitations
    WHERE id='c1000000-0000-4000-8000-000000000020'),
   'accepted',
   'successful acceptance consumes the pending invitation'
 );
+
+SET LOCAL ROLE authenticated;
 
 SELECT extensions.is(
   public.accept_business_invitation('c1000000-0000-4000-8000-000000000020'),
@@ -162,14 +166,14 @@ SELECT extensions.is(
   'an expired invitation does not activate membership'
 );
 
+RESET ROLE;
+
 SELECT extensions.is(
   (SELECT status FROM public.business_invitations
    WHERE id='c1000000-0000-4000-8000-000000000022'),
   'expired',
   'an expired invitation is marked expired without rolling back the status change'
 );
-
-RESET ROLE;
 
 SELECT * FROM finish();
 ROLLBACK;
