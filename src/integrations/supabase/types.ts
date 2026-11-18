@@ -3342,7 +3342,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       stock_transfer_lines: {
         Row: {
           business_id: string
@@ -3407,7 +3407,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       stock_transfer_receipts: {
         Row: {
           business_id: string
@@ -3461,7 +3461,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       stock_transfer_receipt_lines: {
         Row: {
           business_id: string
@@ -3530,7 +3530,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       store_stock_counts: {
         Row: {
           approved_at: string | null
@@ -3630,7 +3630,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       store_stock_count_lines: {
         Row: {
           adjustment_value: number
@@ -3710,7 +3710,7 @@ export type Database = {
             referencedColumns: ["business_id", "id"]
           },
         ]
-      }
+      },
       profiles: {
         Row: {
           avatar_url: string | null
@@ -4135,7 +4135,7 @@ export type Database = {
       post_store_stock_count: {
         Args: { p_count_id: string; p_idempotency_key: string }
         Returns: string
-      }
+      },
       accept_business_invitation: {
         Args: { p_invitation_id: string }
         Returns: string
