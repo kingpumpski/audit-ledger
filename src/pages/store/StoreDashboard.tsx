@@ -38,12 +38,24 @@ export default function StoreDashboard() {
     setting,
   ]));
   const physicalProducts = data.products.filter(product => product.is_service !== true && product.is_active !== false);
+  const physicalLocationIds = new Set(
+    data.locations.filter(location => location.location_type !== 'virtual').map(location => location.id),
+  );
+  const transitLocationIds = new Set(
+    data.locations.filter(location => location.location_type === 'virtual').map(location => location.id),
+  );
   const activePhysicalBalances = data.balances.filter(balance => {
     const product = productById.get(balance.product_id);
-    return product && product.is_service !== true && product.is_active !== false;
+    return product && product.is_service !== true && product.is_active !== false
+      && physicalLocationIds.has(balance.location_id);
   });
-  const totalOnHand = activePhysicalBalances.reduce((sum, balance) => sum + balance.on_hand, 0);
+  const transitBalances = data.balances.filter(balance => {
+    const product = productById.get(balance.product_id);
+    return product && product.is_service !== true && product.is_active !== false
+      && transitLocationIds.has(balance.location_id);
+  });
   const totalAvailable = activePhysicalBalances.reduce((sum, balance) => sum + balance.available_quantity, 0);
+  const totalInTransit = transitBalances.reduce((sum, balance) => sum + balance.on_hand, 0);
   const lowStock = data.balances
     .map(balance => {
       const product = productById.get(balance.product_id);
@@ -51,15 +63,16 @@ export default function StoreDashboard() {
       const setting = settingByKey.get(`${balance.location_id}:${balance.product_id}`);
       return { balance, product, location, reorderPoint: setting?.reorder_point ?? product?.min_stock_level ?? 0 };
     })
-    .filter(item => item.product && item.product.is_service !== true && item.product.is_active !== false && item.balance.available_quantity <= item.reorderPoint)
+    .filter(item => item.product && item.product.is_service !== true && item.product.is_active !== false
+      && item.location?.location_type !== 'virtual' && item.balance.available_quantity <= item.reorderPoint)
     .sort((a, b) => a.balance.available_quantity - b.balance.available_quantity)
     .slice(0, 8);
 
   const metrics = [
-    { label: 'Active locations', value: quantity(data.locations.filter(location => location.is_active).length), icon: MapPin },
+    { label: 'Active store locations', value: quantity(data.locations.filter(location => location.is_active && location.location_type !== 'virtual').length), icon: MapPin },
     { label: 'Stocked products', value: quantity(physicalProducts.length), icon: Boxes },
-    { label: 'Units on hand', value: quantity(totalOnHand), icon: PackageCheck },
-    { label: 'Units available', value: quantity(totalAvailable), icon: AlertTriangle },
+    { label: 'Available in stores', value: quantity(totalAvailable), icon: PackageCheck },
+    { label: 'Units in transit', value: quantity(totalInTransit), icon: AlertTriangle },
   ];
 
   return (
