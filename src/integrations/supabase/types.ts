@@ -4078,19 +4078,19 @@ export type Database = {
           p_source_location_id: string
         }
         Returns: string
-      }
+      },
       approve_stock_transfer: {
         Args: { p_transfer_id: string }
         Returns: string
-      }
+      },
       cancel_stock_transfer: {
         Args: { p_reason: string; p_transfer_id: string }
         Returns: string
-      }
+      },
       dispatch_stock_transfer: {
         Args: { p_idempotency_key: string; p_transfer_id: string }
         Returns: string
-      }
+      },
       receive_stock_transfer: {
         Args: {
           p_idempotency_key: string
@@ -4100,7 +4100,7 @@ export type Database = {
           p_transfer_id: string
         }
         Returns: string
-      }
+      },
       create_store_stock_count: {
         Args: {
           p_idempotency_key: string
@@ -4110,7 +4110,7 @@ export type Database = {
           p_reference_number: string
         }
         Returns: string
-      }
+      },
       record_store_stock_count_line: {
         Args: {
           p_count_id: string
@@ -4119,19 +4119,19 @@ export type Database = {
           p_reason?: string | null
         }
         Returns: string
-      }
+      },
       submit_store_stock_count: {
         Args: { p_count_id: string }
         Returns: string
-      }
+      },
       approve_store_stock_count: {
         Args: { p_count_id: string }
         Returns: string
-      }
+      },
       cancel_store_stock_count: {
         Args: { p_count_id: string; p_reason: string }
         Returns: string
-      }
+      },
       post_store_stock_count: {
         Args: { p_count_id: string; p_idempotency_key: string }
         Returns: string
