@@ -83,47 +83,49 @@ export function useNotificationFeed() {
   useEffect(() => {
     if (!user || businessLoading) return;
 
-    let channel = supabase
-      .channel(`user-notifications-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        refresh,
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const subscribe = () => {
+      channel = supabase
+        .channel(`user-notifications-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          refresh,
+        )
+        .subscribe();
+    };
+    const unsubscribe = async () => {
+      if (!channel) return;
+      const activeChannel = channel;
+      channel = null;
+      await supabase.removeChannel(activeChannel);
+    };
 
+    subscribe();
+
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) void unsubscribe();
+    };
     const handlePageShow = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
-      // A page restored from the browser Back-Forward Cache may have had its
-      // WebSocket suspended. Recreate the user-scoped channel and refresh state.
       void (async () => {
-        await supabase.removeChannel(channel);
-        channel = supabase
-          .channel(`user-notifications-${user.id}`)
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'notifications',
-              filter: `user_id=eq.${user.id}`,
-            },
-            refresh,
-          )
-          .subscribe();
+        await unsubscribe();
+        subscribe();
         refresh();
       })();
     };
 
+    window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('pageshow', handlePageShow);
     return () => {
+      window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('pageshow', handlePageShow);
-      void supabase.removeChannel(channel);
+      void unsubscribe();
     };
   }, [businessLoading, refresh, user]);
 
