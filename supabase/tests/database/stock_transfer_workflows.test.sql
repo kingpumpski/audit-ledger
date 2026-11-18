@@ -164,7 +164,7 @@ SELECT extensions.throws_ok(
   ),
   '42501',
   'Only a business owner, administrator or accountant can approve stock transfers',
-  'A cashier can create/dispatch an approved transfer but cannot approve it'
+  'A cashier cannot approve a transfer; owner approval remains required'
 );
 
 SELECT set_config(
