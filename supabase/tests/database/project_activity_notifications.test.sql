@@ -181,6 +181,9 @@ SELECT extensions.ok(
   'users can update read state only, not notification content or ownership'
 );
 
+-- Derived stock balance and transfer detail tables are intentionally excluded:
+-- their authoritative movements are audited by inventory_transactions, while
+-- transfer header line_snapshot JSON records requested/received line evidence.
 SELECT extensions.ok(
   NOT EXISTS (
     SELECT 1
