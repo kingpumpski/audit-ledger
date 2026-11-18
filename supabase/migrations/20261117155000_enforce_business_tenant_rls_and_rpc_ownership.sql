@@ -671,7 +671,18 @@ AS $secure_definer_function_owners$
 DECLARE
   cmd record;
   v_signature text;
+  v_previous_guard text;
 BEGIN
+  -- ALTER FUNCTION statements issued below fire this same event trigger.
+  -- A transaction-local guard prevents recursive re-entry while the owner and
+  -- row_security attributes are being set.
+  IF pg_catalog.current_setting('app.secure_definer_function_owners_active', true) = 'on' THEN
+    RETURN;
+  END IF;
+
+  v_previous_guard := pg_catalog.current_setting('app.secure_definer_function_owners_active', true);
+  PERFORM pg_catalog.set_config('app.secure_definer_function_owners_active', 'on', true);
+
   FOR cmd IN
     SELECT *
     FROM pg_catalog.pg_event_trigger_ddl_commands()
@@ -684,7 +695,15 @@ BEGIN
     FROM pg_catalog.pg_proc p
     WHERE p.oid = cmd.objid
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email');
+      AND p.proname NOT IN (
+        'rls_auto_enable',
+        'revoke_public_schema_anon_grants',
+        'secure_definer_function_owners',
+        'rpc_auth_user_exists',
+        'rpc_auth_user_email',
+        'rpc_auth_user_email_confirmed',
+        'rpc_auth_user_full_name'
+      );
 
     IF v_signature IS NOT NULL THEN
       EXECUTE pg_catalog.format(
@@ -697,6 +716,12 @@ BEGIN
       );
     END IF;
   END LOOP;
+
+  PERFORM pg_catalog.set_config(
+    'app.secure_definer_function_owners_active',
+    COALESCE(v_previous_guard, ''),
+    true
+  );
 END;
 $secure_definer_function_owners$;
 
