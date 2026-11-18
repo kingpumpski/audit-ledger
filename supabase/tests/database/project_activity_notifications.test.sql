@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(7);
+SELECT extensions.plan(8);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -106,6 +106,13 @@ SELECT extensions.lives_ok(
 );
 
 RESET ROLE;
+
+SELECT extensions.ok(
+  NOT has_table_privilege('authenticated', 'public.notifications', 'UPDATE')
+  AND has_column_privilege('authenticated', 'public.notifications', 'is_read', 'UPDATE')
+  AND has_column_privilege('authenticated', 'public.notifications', 'read_at', 'UPDATE'),
+  'users can update read state only, not notification content or ownership'
+);
 
 SELECT extensions.ok(
   NOT EXISTS (
