@@ -47,7 +47,7 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
   const { profile, roles: globalRoles, signOut, userPersona } = useAuth();
-  const { activeMembership } = useBusiness();
+  const { activeMembership, isSwitching } = useBusiness();
   const roles = useEffectiveRoles();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
@@ -86,6 +86,19 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
 
   return (
     <div className="relative min-h-screen w-full overflow-x-clip bg-background">
+      {isSwitching && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="rounded-lg border bg-card px-6 py-5 text-center shadow-lg">
+            <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-sm font-medium">Switching business workspace…</p>
+            <p className="mt-1 text-xs text-muted-foreground">Refreshing your secure business session</p>
+          </div>
+        </div>
+      )}
       <AppSidebar />
       {mobileOpen && (
         <button
