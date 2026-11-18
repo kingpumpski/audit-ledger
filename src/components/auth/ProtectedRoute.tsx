@@ -12,19 +12,22 @@ interface ProtectedRouteProps {
   children: ReactNode;
   requiredRoles?: AppRole[];
   requireAnyRole?: boolean;
+  globalRolesOnly?: boolean;
 }
 
 export function ProtectedRoute({ 
   children, 
   requiredRoles, 
-  requireAnyRole = true 
+  requireAnyRole = true,
+  globalRolesOnly = false,
 }: ProtectedRouteProps) {
-  const { user, isLoading } = useAuth();
+  const { user, roles: globalRoles, isLoading } = useAuth();
   const { memberships, activeMembership, isLoading: businessLoading } = useBusiness();
-  const roles = useEffectiveRoles();
+  const effectiveRoles = useEffectiveRoles();
+  const roles = globalRolesOnly ? globalRoles : effectiveRoles;
   const location = useLocation();
 
-  if (isLoading || businessLoading) {
+  if (isLoading || (!globalRolesOnly && businessLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -39,7 +42,7 @@ export function ProtectedRoute({
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (memberships.length > 1 && !activeMembership) {
+  if (!globalRolesOnly && memberships.length > 1 && !activeMembership) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-4">
         <section className="w-full max-w-lg space-y-4 rounded-xl border bg-card p-6 shadow-sm">
