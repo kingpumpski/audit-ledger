@@ -18,12 +18,14 @@ CREATE POLICY tenant_business_scope
     )
   )
   WITH CHECK (
-    current_user = 'audit_ledger_rpc_owner'
-    OR business_id IS NULL
-    OR (
-      business_id = public.current_business_id()
-      AND public.can_access_business(business_id)
-    )
+    CASE
+      WHEN current_user = 'audit_ledger_rpc_owner' THEN true
+      ELSE business_id IS NULL
+        OR (
+          business_id = public.current_business_id()
+          AND public.can_access_business(business_id)
+        )
+    END
   );
 
 NOTIFY pgrst, 'reload schema';
