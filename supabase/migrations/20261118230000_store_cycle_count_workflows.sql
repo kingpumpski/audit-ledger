@@ -67,6 +67,8 @@ CREATE TABLE public.store_stock_count_lines (
   product_id uuid NOT NULL,
   system_quantity_snapshot integer NOT NULL CHECK (system_quantity_snapshot >= 0),
   counted_quantity integer CHECK (counted_quantity IS NULL OR counted_quantity >= 0),
+  counted_by uuid REFERENCES auth.users(id) ON DELETE RESTRICT,
+  counted_at timestamptz,
   variance_quantity integer NOT NULL DEFAULT 0,
   unit_cost_snapshot numeric(14,4),
   adjustment_value numeric(14,2) NOT NULL DEFAULT 0 CHECK (adjustment_value >= 0),
@@ -90,6 +92,8 @@ CREATE INDEX idx_store_stock_count_lines_business_count
   ON public.store_stock_count_lines (business_id, count_id);
 CREATE INDEX idx_store_stock_count_lines_business_product
   ON public.store_stock_count_lines (business_id, product_id);
+CREATE INDEX idx_store_stock_count_lines_counted_by
+  ON public.store_stock_count_lines (counted_by);
 CREATE INDEX idx_store_stock_count_lines_inventory_transaction
   ON public.store_stock_count_lines (business_id, inventory_transaction_id);
 
@@ -341,6 +345,8 @@ BEGIN
 
   UPDATE public.store_stock_count_lines
   SET counted_quantity = p_counted_quantity,
+      counted_by = auth.uid(),
+      counted_at = now(),
       reason = NULLIF(btrim(p_reason), '')
   WHERE id = v_line.id;
 
@@ -379,6 +385,8 @@ BEGIN
            'product_id', product_id,
            'system_quantity', system_quantity_snapshot,
            'counted_quantity', counted_quantity,
+           'counted_by', counted_by,
+           'counted_at', counted_at,
            'unit_cost', unit_cost_snapshot,
            'reason', reason
          ) ORDER BY product_id), '[]'::jsonb)
@@ -715,6 +723,8 @@ BEGIN
           'product_id', product_id,
           'system_quantity', system_quantity_snapshot,
           'counted_quantity', counted_quantity,
+          'counted_by', counted_by,
+          'counted_at', counted_at,
           'variance_quantity', variance_quantity,
           'unit_cost', unit_cost_snapshot,
           'adjustment_value', adjustment_value,
