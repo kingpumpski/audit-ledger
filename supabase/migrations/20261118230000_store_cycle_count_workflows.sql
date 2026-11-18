@@ -550,10 +550,10 @@ BEGIN
     RAISE EXCEPTION 'Only approved stock counts can be posted';
   END IF;
 
-  -- The active count's exclusive snapshot boundary already prevents any
-  -- movement from committing. Do not take a location row lock here: existing
-  -- movement RPCs lock products/balances before the movement guard, and a
-  -- location row lock here would create a lock-order deadlock.
+  -- The active count's movement guard prevents any new movement from
+  -- committing. Do not take a location row lock here: existing movement RPCs
+  -- lock products/balances before the movement guard, and a location lock here
+  -- would create a lock-order deadlock.
   -- Verify the freeze held: no stock movement may have changed the snapshot.
   FOR v_line IN
     SELECT * FROM public.store_stock_count_lines
