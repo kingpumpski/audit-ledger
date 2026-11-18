@@ -147,16 +147,22 @@ BEGIN
     ORDER BY sl.id
   LOOP
     PERFORM pg_advisory_xact_lock_shared(
-      hashtextextended(NEW.business_id::text || ':' || v_locked_location::text, 0)
+      hashtextextended(
+        NEW.business_id::text || ':' || v_locked_location::text || ':' || NEW.product_id::text,
+        0
+      )
     );
   END LOOP;
 
   IF EXISTS (
     SELECT 1
     FROM public.store_stock_counts c
+    JOIN public.store_stock_count_lines l
+      ON l.business_id = c.business_id AND l.count_id = c.id
     WHERE c.business_id = NEW.business_id
       AND c.status IN ('counting', 'submitted', 'approved')
       AND c.location_id IN (NEW.location_id, NEW.destination_location_id)
+      AND l.product_id = NEW.product_id
   ) THEN
     RAISE EXCEPTION 'Inventory movement is paused for a location while a stock count is active'
       USING ERRCODE = 'P0001';
@@ -177,7 +183,8 @@ CREATE OR REPLACE FUNCTION public.create_store_stock_count(
   p_location_id uuid,
   p_reference_number text,
   p_notes text,
-  p_idempotency_key uuid
+  p_idempotency_key uuid,
+  p_product_ids uuid[] DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -191,6 +198,8 @@ DECLARE
   v_count_id uuid;
   v_fingerprint text;
   v_initial_snapshot jsonb;
+  v_product_ids uuid[];
+  v_product_id uuid;
 BEGIN
   IF auth.uid() IS NULL OR v_business_id IS NULL
      OR NOT public.has_business_role(v_business_id, ARRAY['owner', 'admin', 'accountant', 'cashier']) THEN
@@ -204,7 +213,8 @@ BEGIN
   v_fingerprint := md5(jsonb_build_object(
     'location_id', p_location_id,
     'reference_number', btrim(p_reference_number),
-    'notes', NULLIF(btrim(p_notes), '')
+    'notes', NULLIF(btrim(p_notes), ''),
+    'product_ids', p_product_ids
   )::text);
 
   PERFORM pg_advisory_xact_lock(hashtextextended(p_idempotency_key::text, 0));
@@ -242,6 +252,57 @@ BEGIN
     RAISE EXCEPTION 'A stock count is already active for this location';
   END IF;
 
+  IF p_product_ids IS NOT NULL AND cardinality(p_product_ids) > 0 THEN
+    IF cardinality(p_product_ids) <> (
+      SELECT count(DISTINCT selected_product_id)::integer
+      FROM unnest(p_product_ids) AS selected_product_id
+    ) THEN
+      RAISE EXCEPTION 'Cycle-count product selection contains duplicate IDs';
+    END IF;
+
+    SELECT array_agg(p.id ORDER BY p.id)
+    INTO v_product_ids
+    FROM public.products p
+    WHERE p.business_id = v_business_id
+      AND p.id = ANY(p_product_ids)
+      AND p.deleted_at IS NULL
+      AND p.is_active = true
+      AND COALESCE(p.is_service, false) = false;
+
+    IF COALESCE(cardinality(v_product_ids), 0) <> cardinality(p_product_ids) THEN
+      RAISE EXCEPTION 'Every selected cycle-count product must be an active physical product in this business';
+    END IF;
+  ELSE
+    SELECT array_agg(p.id ORDER BY p.id)
+    INTO v_product_ids
+    FROM public.products p
+    WHERE p.business_id = v_business_id
+      AND p.deleted_at IS NULL
+      AND p.is_active = true
+      AND COALESCE(p.is_service, false) = false;
+  END IF;
+
+  IF COALESCE(cardinality(v_product_ids), 0) = 0 THEN
+    RAISE EXCEPTION 'The selected location has no active physical products to count';
+  END IF;
+
+  -- Lock only the selected location/product pairs. Uncounted SKUs remain
+  -- available for normal sales and receipts during a cycle count.
+  FOREACH v_product_id IN ARRAY v_product_ids LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended(v_business_id::text || ':' || p_location_id::text || ':' || v_product_id::text, 0)
+    );
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1 FROM public.store_stock_counts
+    WHERE business_id = v_business_id
+      AND location_id = p_location_id
+      AND status IN ('counting', 'submitted', 'approved')
+  ) THEN
+    RAISE EXCEPTION 'A stock count is already active for this location';
+  END IF;
+
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'product_id', p.id,
     'system_quantity', COALESCE(sb.on_hand, 0),
@@ -258,6 +319,7 @@ BEGIN
    AND sb.location_id = p_location_id
    AND sb.product_id = p.id
   WHERE p.business_id = v_business_id
+    AND p.id = ANY(v_product_ids)
     AND p.deleted_at IS NULL
     AND p.is_active = true
     AND COALESCE(p.is_service, false) = false;
@@ -292,6 +354,7 @@ BEGIN
    AND sb.location_id = p_location_id
    AND sb.product_id = p.id
   WHERE p.business_id = v_business_id
+    AND p.id = ANY(v_product_ids)
     AND p.deleted_at IS NULL
     AND p.is_active = true
     AND COALESCE(p.is_service, false) = false
@@ -462,6 +525,7 @@ AS $cancel_store_stock_count$
 DECLARE
   v_business_id uuid := public.current_business_id();
   v_count public.store_stock_counts%ROWTYPE;
+  v_product_id uuid;
 BEGIN
   IF auth.uid() IS NULL OR v_business_id IS NULL
      OR NOT public.has_business_role(v_business_id, ARRAY['owner', 'admin', 'accountant']) THEN
@@ -486,9 +550,15 @@ BEGIN
     RAISE EXCEPTION 'A posted stock count cannot be canceled; record a new count or adjustment';
   END IF;
 
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended(v_business_id::text || ':' || v_count.location_id::text, 0)
-  );
+  FOR v_product_id IN
+    SELECT product_id FROM public.store_stock_count_lines
+    WHERE business_id = v_business_id AND count_id = v_count.id
+    ORDER BY product_id
+  LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended(v_business_id::text || ':' || v_count.location_id::text || ':' || v_product_id::text, 0)
+    );
+  END LOOP;
 
   UPDATE public.store_stock_counts
   SET status = 'canceled',
@@ -740,9 +810,9 @@ BEGIN
 END;
 $post_store_stock_count$;
 
-REVOKE ALL ON FUNCTION public.create_store_stock_count(uuid, text, text, uuid)
+REVOKE ALL ON FUNCTION public.create_store_stock_count(uuid, text, text, uuid, uuid[])
   FROM PUBLIC, anon, service_role;
-GRANT EXECUTE ON FUNCTION public.create_store_stock_count(uuid, text, text, uuid)
+GRANT EXECUTE ON FUNCTION public.create_store_stock_count(uuid, text, text, uuid, uuid[])
   TO authenticated;
 REVOKE ALL ON FUNCTION public.record_store_stock_count_line(uuid, uuid, integer, text)
   FROM PUBLIC, anon, service_role;
