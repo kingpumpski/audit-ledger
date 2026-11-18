@@ -52,6 +52,7 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => null);
     const businessId = typeof body?.businessId === "string" ? body.businessId.trim() : "";
+    const clearPendingInvitation = body?.clearPendingInvitation === true;
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(businessId)) {
       return jsonResponse({ error: "A valid business ID is required" }, 400);
     }
@@ -78,9 +79,19 @@ serve(async (req) => {
       return jsonResponse({ error: "Unable to update your workspace session" }, 500);
     }
 
-    const appMetadata = adminUser.user.app_metadata ?? {};
+    const appMetadata = {
+      ...(adminUser.user.app_metadata ?? {}),
+      active_business_id: businessId,
+    } as typeof adminUser.user.app_metadata & { pending_business_invitation_id?: string };
+    const userMetadata = { ...(adminUser.user.user_metadata ?? {}) };
+    if (clearPendingInvitation) {
+      delete appMetadata.pending_business_invitation_id;
+      delete userMetadata.business_invitation_id;
+    }
+
     const { error: updateError } = await adminClient.auth.admin.updateUserById(authData.user.id, {
-      app_metadata: { ...appMetadata, active_business_id: businessId },
+      app_metadata: appMetadata,
+      ...(clearPendingInvitation ? { user_metadata: userMetadata } : {}),
     });
     if (updateError) {
       console.error("Unable to update active business claim", updateError);

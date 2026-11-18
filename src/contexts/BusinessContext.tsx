@@ -1,8 +1,9 @@
-import React, { createContext, useCallback, useContext, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocation, useNavigate } from "react-router-dom";
 
 type BusinessRow = Tables<"businesses">;
 type BusinessMemberRow = Tables<"business_members">;
@@ -71,6 +72,21 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   });
 
   const memberships = membershipsQuery.data ?? [];
+  // Metadata is only a navigation hint; the server-side acceptance RPC verifies
+  // the signed-in email and invitation ownership before granting membership.
+  const pendingInvitationId = String(
+    user?.app_metadata?.pending_business_invitation_id ??
+    user?.user_metadata?.business_invitation_id ??
+    "",
+  );
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user || !pendingInvitationId || location.pathname === "/accept-invitation") return;
+    navigate(`/accept-invitation?invitation_id=${encodeURIComponent(pendingInvitationId)}`, { replace: true });
+  }, [user?.id, pendingInvitationId, location.pathname, navigate]);
+
   const claimedBusinessId = user?.app_metadata?.active_business_id;
   const activeMembership =
     memberships.find((membership) => membership.business_id === claimedBusinessId) ??

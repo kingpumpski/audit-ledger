@@ -9,9 +9,12 @@ import { BusinessProvider } from "@/contexts/BusinessContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { InitialAdminSetup } from "@/components/auth/InitialAdminSetup";
+import { BusinessManagerRoute } from "@/components/auth/BusinessManagerRoute";
 import { DocumentsPage } from "./components/documents/DocumentsPage";
 
 const Login = lazy(() => import("./pages/Login"));
+const AcceptInvitation = lazy(() => import("./pages/AcceptInvitation"));
+const BusinessMembers = lazy(() => import("./pages/BusinessMembers"));
 const Signup = lazy(() => import("./pages/Signup"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -65,6 +68,7 @@ const App = () => (
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/accept-invitation" element={<AcceptInvitation />} />
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
@@ -91,6 +95,7 @@ const App = () => (
                 <Route path="/audit-logs" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AuditLogs /></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Reports /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute requiredRoles={['admin']}><AdminUsers /></ProtectedRoute>} />
+                <Route path="/admin/business-members" element={<BusinessManagerRoute><BusinessMembers /></BusinessManagerRoute>} />
                 <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin', 'auditor']}><AdminPasswordResets /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute requiredRoles={['admin']}><Settings /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
