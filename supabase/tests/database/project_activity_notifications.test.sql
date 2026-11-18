@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(4);
+SELECT extensions.plan(6);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -59,6 +59,42 @@ SELECT extensions.is(
   3,
   'Context-free project activity creates generic notifications for all active project members'
 );
+
+INSERT INTO public.audit_logs (user_id, action, entity_type, entity_id)
+VALUES (
+  'e2000000-0000-4000-8000-000000000001',
+  'update', 'auth.password', 'e2000000-0000-4000-8000-000000000001'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.notifications
+   WHERE business_id IS NULL AND type = 'project_activity'),
+  3,
+  'sensitive authentication activity does not broadcast to other project members'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001', true);
+SET LOCAL ROLE authenticated;
+
+SELECT extensions.lives_ok(
+  $global_audit_rejection$
+  DO $reject_global_audit$
+  BEGIN
+    BEGIN
+      INSERT INTO public.audit_logs (user_id, action, entity_type, entity_id)
+      VALUES (auth.uid(), 'create', 'user_roles', 'e2000000-0000-4000-8000-000000000099');
+      RAISE EXCEPTION 'client unexpectedly inserted a context-free audit event';
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        NULL;
+    END;
+  END;
+  $reject_global_audit$;
+  $global_audit_rejection$,
+  'authenticated clients cannot spoof context-free project activity'
+);
+
+RESET ROLE;
 
 SELECT extensions.ok(
   NOT EXISTS (
