@@ -17,13 +17,14 @@ $role$;
 ALTER ROLE audit_ledger_rpc_owner NOLOGIN NOBYPASSRLS;
 GRANT audit_ledger_rpc_owner TO postgres;
 GRANT USAGE, CREATE ON SCHEMA public TO audit_ledger_rpc_owner;
-GRANT USAGE ON SCHEMA auth, extensions TO audit_ledger_rpc_owner;
+GRANT USAGE ON SCHEMA extensions TO audit_ledger_rpc_owner;
+-- Supabase owns the auth schema; postgres cannot grant its ACL directly.
+-- Inherit the existing authenticated schema/function grants instead.
+GRANT authenticated TO audit_ledger_rpc_owner;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO audit_ledger_rpc_owner;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO audit_ledger_rpc_owner;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA extensions TO audit_ledger_rpc_owner;
-GRANT SELECT ON auth.users TO audit_ledger_rpc_owner;
 DO $grant_public_types$
 DECLARE
   v_type record;
@@ -49,6 +50,186 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO audit_ledger_rpc_owner;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   GRANT EXECUTE ON FUNCTIONS TO audit_ledger_rpc_owner;
+-- Narrow access to auth.users through postgres-owned helpers. The Supabase
+-- auth schema/table are platform-owned and postgres cannot grant their ACLs.
+CREATE OR REPLACE FUNCTION public.rpc_auth_user_exists(p_user_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $rpc_auth_user_exists$
+  SELECT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = p_user_id);
+$rpc_auth_user_exists$;
+
+CREATE OR REPLACE FUNCTION public.rpc_auth_user_email(p_user_id uuid)
+RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $rpc_auth_user_email$
+  SELECT u.email::text FROM auth.users u WHERE u.id = p_user_id;
+$rpc_auth_user_email$;
+
+GRANT EXECUTE ON FUNCTION public.rpc_auth_user_exists(uuid) TO audit_ledger_rpc_owner;
+GRANT EXECUTE ON FUNCTION public.rpc_auth_user_email(uuid) TO audit_ledger_rpc_owner;
+
+CREATE OR REPLACE FUNCTION public.set_business_member_access(
+  p_business_id uuid,
+  p_user_id uuid,
+  p_role text,
+  p_status text DEFAULT 'active'
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $set_business_member_access$
+DECLARE
+  v_actor_id uuid := auth.uid();
+  v_actor_role text;
+  v_business_status text;
+  v_existing public.business_members%ROWTYPE;
+  v_member_id uuid;
+  v_old_data jsonb;
+  v_new_data jsonb;
+  v_action public.audit_action;
+  v_target_email text;
+  v_active_owner_count integer;
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication is required'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF p_business_id IS NULL OR p_user_id IS NULL THEN
+    RAISE EXCEPTION 'Business and user are required'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF p_role IS NULL OR p_role NOT IN ('owner', 'admin', 'accountant', 'cashier', 'auditor') THEN
+    RAISE EXCEPTION 'Unsupported business role'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF p_status IS NULL OR p_status NOT IN ('active', 'suspended') THEN
+    RAISE EXCEPTION 'Membership status must be active or suspended'
+      USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_business_id::text, 0)
+  );
+
+  SELECT b.status INTO v_business_status
+  FROM public.businesses b
+  WHERE b.id = p_business_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_business_status <> 'active' THEN
+    RAISE EXCEPTION 'Business is unavailable for membership changes'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT bm.role INTO v_actor_role
+  FROM public.business_members bm
+  WHERE bm.business_id = p_business_id
+    AND bm.user_id = v_actor_id
+    AND bm.status = 'active'
+  FOR UPDATE;
+
+  IF v_actor_role IS NULL OR v_actor_role NOT IN ('owner', 'admin') THEN
+    RAISE EXCEPTION 'Only an active business owner or administrator may manage members'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_actor_role = 'admin'
+     AND (p_role IN ('owner', 'admin') OR p_user_id = v_actor_id) THEN
+    RAISE EXCEPTION 'Administrators cannot grant owner/admin access or change their own membership'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT public.rpc_auth_user_exists(p_user_id) THEN
+    RAISE EXCEPTION 'The selected user does not have an account'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_target_email := public.rpc_auth_user_email(p_user_id);
+
+  SELECT bm.* INTO v_existing
+  FROM public.business_members bm
+  WHERE bm.business_id = p_business_id
+    AND bm.user_id = p_user_id
+  FOR UPDATE;
+
+  IF FOUND THEN
+    v_member_id := v_existing.id;
+    v_old_data := pg_catalog.jsonb_build_object('role', v_existing.role, 'status', v_existing.status);
+  ELSE
+    v_old_data := NULL;
+  END IF;
+
+  IF v_actor_role = 'admin'
+     AND v_existing.id IS NOT NULL
+     AND v_existing.role IN ('owner', 'admin') THEN
+    RAISE EXCEPTION 'Administrators cannot modify owner/admin memberships'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF v_existing.id IS NOT NULL
+     AND v_existing.role = 'owner'
+     AND (p_role <> 'owner' OR p_status <> 'active') THEN
+    SELECT count(*) INTO v_active_owner_count
+    FROM public.business_members bm
+    WHERE bm.business_id = p_business_id
+      AND bm.role = 'owner'
+      AND bm.status = 'active';
+
+    IF v_active_owner_count <= 1 THEN
+      RAISE EXCEPTION 'Cannot remove or suspend the final active owner'
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  IF v_existing.id IS NULL THEN
+    INSERT INTO public.business_members (
+      business_id, user_id, role, status, invited_by, joined_at
+    )
+    VALUES (
+      p_business_id, p_user_id, p_role, p_status, v_actor_id,
+      CASE WHEN p_status = 'active' THEN pg_catalog.now() ELSE NULL END
+    )
+    RETURNING id INTO v_member_id;
+    v_action := 'create';
+  ELSE
+    UPDATE public.business_members
+    SET role = p_role,
+        status = p_status,
+        invited_by = CASE
+          WHEN p_status = 'active' AND v_existing.status <> 'active' THEN v_actor_id
+          ELSE invited_by
+        END,
+        joined_at = CASE
+          WHEN p_status = 'active' AND joined_at IS NULL THEN pg_catalog.now()
+          ELSE joined_at
+        END
+    WHERE id = v_existing.id
+    RETURNING id INTO v_member_id;
+    v_action := 'update';
+  END IF;
+
+  v_new_data := pg_catalog.jsonb_build_object(
+    'role', p_role, 'status', p_status,
+    'target_user_id', p_user_id, 'target_email', v_target_email
+  );
+
+  INSERT INTO public.audit_logs (
+    user_id, user_email, action, entity_type, entity_id, old_data, new_data, metadata
+  )
+  VALUES (
+    v_actor_id, public.rpc_auth_user_email(v_actor_id), v_action,
+    'business_member', v_member_id, v_old_data, v_new_data,
+    pg_catalog.jsonb_build_object('business_id', p_business_id)
+  );
+
+  RETURN v_member_id;
+END;
+$set_business_member_access$;
+
+
 
 CREATE OR REPLACE FUNCTION public.current_business_id()
 RETURNS uuid
@@ -425,7 +606,7 @@ BEGIN
     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners')
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email')
   LOOP
     EXECUTE pg_catalog.format(
       'ALTER FUNCTION %s OWNER TO audit_ledger_rpc_owner',
@@ -470,7 +651,7 @@ BEGIN
     FROM pg_catalog.pg_proc p
     WHERE p.oid = cmd.objid
       AND p.prosecdef
-      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners');
+      AND p.proname NOT IN ('rls_auto_enable','revoke_public_schema_anon_grants','secure_definer_function_owners','rpc_auth_user_exists','rpc_auth_user_email');
 
     IF v_signature IS NOT NULL THEN
       EXECUTE pg_catalog.format(
@@ -500,10 +681,6 @@ REVOKE ALL ON FUNCTION public.secure_definer_function_owners() FROM PUBLIC, anon
 GRANT EXECUTE ON FUNCTION public.can_access_business(uuid) TO authenticated, audit_ledger_rpc_owner;
 REVOKE ALL ON FUNCTION public.can_access_business(uuid) FROM PUBLIC, anon;
 
--- Reassert the Auth API privileges after all function-owner transfers and DDL hooks.
-GRANT USAGE ON SCHEMA auth TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.jwt() TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.role() TO authenticated, service_role, audit_ledger_rpc_owner;
+-- Auth schema access is inherited from authenticated membership above.
 
 NOTIFY pgrst, 'reload schema';
