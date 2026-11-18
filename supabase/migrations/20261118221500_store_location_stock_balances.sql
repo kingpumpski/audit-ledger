@@ -383,7 +383,11 @@ BEGIN
   INSERT INTO public.stock_balances (
     business_id, location_id, product_id, on_hand, opening_quantity, opening_snapshot_at
   )
-  VALUES (NEW.business_id, v_location_id, NEW.id, 0, 0, now())
+  VALUES (
+    NEW.business_id, v_location_id, NEW.id,
+    COALESCE(NEW.stock_quantity, 0)::numeric(15,3),
+    COALESCE(NEW.stock_quantity, 0)::numeric(15,3), now()
+  )
   ON CONFLICT (business_id, location_id, product_id) DO NOTHING;
 
   INSERT INTO public.product_location_settings (
