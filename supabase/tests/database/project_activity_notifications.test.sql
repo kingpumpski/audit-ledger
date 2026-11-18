@@ -92,6 +92,17 @@ VALUES (
   'Cross-workspace notice', 'Must remain hidden in workspace A', 'project_activity'
 );
 
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'e2000000-0000-4000-8000-000000000001',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', 'e2000000-0000-4000-8000-000000000010'
+    )
+  )::text,
+  true
+);
 SELECT set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001', true);
 SET LOCAL ROLE authenticated;
 
