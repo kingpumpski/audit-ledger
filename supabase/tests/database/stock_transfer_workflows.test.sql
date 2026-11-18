@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(17);
+SELECT extensions.plan(19);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -74,6 +74,7 @@ SELECT extensions.is(
 
 CREATE TEMP TABLE store_transfer_test_state (
   transfer_id uuid,
+  first_transfer_id uuid,
   receipt_one_id uuid,
   transfer_line_id uuid,
   source_location_id uuid,
@@ -112,6 +113,7 @@ SET transfer_id = public.create_stock_transfer(
   )),
   'e3000000-0000-4000-8000-000000000101'::uuid
 );
+UPDATE store_transfer_test_state SET first_transfer_id = transfer_id;
 
 SELECT extensions.is(
   (SELECT public.create_stock_transfer(
@@ -300,6 +302,34 @@ SELECT extensions.is(
      AND sb.product_id = (SELECT product_id FROM store_transfer_test_state)),
   6::numeric,
   'A failed over-capacity dispatch leaves source stock unchanged'
+);
+
+
+SELECT extensions.throws_ok(
+  format(
+    'SELECT public.cancel_stock_transfer(%L::uuid, %L)',
+    (SELECT first_transfer_id FROM store_transfer_test_state LIMIT 1),
+    'Attempt to cancel completed transfer'
+  ),
+  'P0001',
+  'A dispatched stock transfer cannot be canceled; reconcile its in-transit stock first',
+  'A completed transfer cannot be canceled or used to erase its movement history'
+);
+
+SELECT extensions.is(
+  public.cancel_stock_transfer(
+    (SELECT transfer_id FROM store_transfer_test_state LIMIT 1),
+    'Approved transfer no longer required'
+  ),
+  (SELECT transfer_id FROM store_transfer_test_state LIMIT 1),
+  'An approved but undispatched transfer can be canceled with a reason'
+);
+
+SELECT extensions.is(
+  (SELECT status FROM public.stock_transfers
+   WHERE id = (SELECT transfer_id FROM store_transfer_test_state LIMIT 1)),
+  'canceled',
+  'Cancellation is recorded as an auditable transfer status'
 );
 
 SELECT * FROM extensions.finish();
