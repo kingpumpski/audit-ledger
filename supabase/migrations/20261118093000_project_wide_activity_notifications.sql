@@ -206,7 +206,9 @@ CREATE POLICY "Authenticated users can insert own audit logs"
     AND business_id = (SELECT public.current_business_id())
   );
 
-GRANT SELECT, UPDATE ON public.notifications TO authenticated;
+GRANT SELECT ON public.notifications TO authenticated;
+REVOKE UPDATE ON public.notifications FROM authenticated;
+GRANT UPDATE (is_read, read_at) ON public.notifications TO authenticated;
 
 -- Normalize legacy rows so the unread counter has one unambiguous state.
 UPDATE public.notifications SET is_read = false WHERE is_read IS NULL;
