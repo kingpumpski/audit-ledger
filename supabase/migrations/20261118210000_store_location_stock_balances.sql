@@ -465,7 +465,7 @@ CREATE TRIGGER audit_activity_store_locations
   FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 
 CREATE TRIGGER audit_activity_product_location_settings
-  AFTER INSERT OR UPDATE OR DELETE ON public.product_location_settings
+  AFTER UPDATE OR DELETE ON public.product_location_settings
   FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 
 NOTIFY pgrst, 'reload schema';
