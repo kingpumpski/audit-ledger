@@ -1,6 +1,20 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(6);
+SELECT extensions.plan(7);
+
+-- New business creation must provision its first store location atomically.
+INSERT INTO public.businesses (name, business_type, country, base_currency, timezone)
+VALUES ('Store location new business test', 'small_business', 'Ghana', 'GHS', 'Africa/Accra');
+
+SELECT extensions.is(
+  (SELECT count(*)::integer
+   FROM public.store_locations sl
+   JOIN public.businesses b ON b.id = sl.business_id
+   WHERE b.name = 'Store location new business test'
+     AND sl.code = 'MAIN' AND sl.is_default AND sl.is_active),
+  1,
+  'New businesses receive a default store location in the business-creation transaction'
+);
 
 -- Product fixtures use the legacy/default business scope used by the existing
 -- inventory integration tests. The product insert trigger creates its default
