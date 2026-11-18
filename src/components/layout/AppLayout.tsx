@@ -38,6 +38,7 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
   '/products': { description: 'Manage what your business sells', terms: 'catalog goods items services' },
   '/accounting': { description: 'Detailed accounting tools for finance staff', terms: 'ledger chart accounts journals' },
   '/inventory': { description: 'See what you have and what needs restocking', terms: 'inventory warehouse quantity' },
+  '/store': { description: 'Manage store locations and review stock levels', terms: 'store warehouse stock levels locations' },
   '/taxes': { description: 'Tax configuration and records', terms: 'vat tax' },
   '/discounts': { description: 'Manage discounts', terms: 'offers promotions' },
   '/reports': { description: 'Understand sales, spending and business performance', terms: 'analytics statements profit loss' },

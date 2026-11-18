@@ -8,6 +8,7 @@ import {
   Percent,
   Receipt,
   Shield,
+  Store,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ export interface SidebarItem {
 const sharedAccess = {
   accounting: ['admin', 'accountant', 'auditor'],
   inventory: ['admin', 'accountant', 'cashier'],
+  store: ['admin', 'accountant', 'cashier', 'auditor'],
   finance: ['admin', 'accountant'],
   reports: ['admin', 'accountant', 'auditor'],
   audit: ['admin', 'auditor'],
@@ -36,7 +38,7 @@ export const expertSidebarItems: SidebarItem[] = [
   { name: 'Customers', icon: Users, path: '/customers' },
   { name: 'Products', icon: Package, path: '/products' },
   { name: 'Accounting', icon: BookOpen, path: '/accounting', roles: sharedAccess.accounting },
-  { name: 'Inventory', icon: Package, path: '/inventory', roles: sharedAccess.inventory },
+  { name: 'Store & Inventory', icon: Store, path: '/store', roles: sharedAccess.store },
   { name: 'Taxes', icon: Calculator, path: '/taxes', roles: sharedAccess.finance },
   { name: 'Discounts', icon: Percent, path: '/discounts', roles: sharedAccess.finance },
   { name: 'Reports', icon: ClipboardList, path: '/reports', roles: sharedAccess.reports },
@@ -51,7 +53,7 @@ export const simplifiedSidebarItems: SidebarItem[] = [
   { name: 'Customers', icon: Users, path: '/customers' },
   { name: 'Products & Services', icon: Package, path: '/products' },
   { name: 'Accounting Tools', icon: BookOpen, path: '/accounting', roles: sharedAccess.accounting },
-  { name: 'Stock', icon: Package, path: '/inventory', roles: sharedAccess.inventory },
+  { name: 'Store & Stock', icon: Store, path: '/store', roles: sharedAccess.store },
   { name: 'Taxes', icon: Calculator, path: '/taxes', roles: sharedAccess.finance },
   { name: 'Discounts', icon: Percent, path: '/discounts', roles: sharedAccess.finance },
   { name: 'Business Reports', icon: ClipboardList, path: '/reports', roles: sharedAccess.reports },
