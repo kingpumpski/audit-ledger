@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(6);
+SELECT extensions.plan(7);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -71,6 +71,17 @@ SELECT extensions.is(
    WHERE business_id IS NULL AND type = 'project_activity'),
   3,
   'sensitive authentication activity does not broadcast to other project members'
+);
+
+SELECT extensions.ok(
+  NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'notifications'
+      AND column_name = 'is_read'
+      AND is_nullable <> 'NO'
+  ),
+  'notification read state is non-null and safe for unread counting'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-000000000001', true);
