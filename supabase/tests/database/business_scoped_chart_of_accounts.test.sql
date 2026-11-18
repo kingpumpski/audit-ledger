@@ -72,6 +72,13 @@ SELECT extensions.is(
   'A second new business receives the same default account codes independently'
 );
 
+SELECT extensions.ok(
+  (SELECT count(*) > 0 FROM public.chart_of_accounts
+   WHERE business_id = 'e5000000-0000-4000-8000-000000000010'
+     AND is_system = true),
+  'The new business receives the standard system chart, not only the three inventory accounts'
+);
+
 SELECT extensions.is(
   (SELECT count(DISTINCT id)::integer FROM public.chart_of_accounts
    WHERE code = '1200'
