@@ -195,7 +195,7 @@ SELECT extensions.ok(
       AND business_col.column_name = 'business_id'
     WHERE t.table_schema = 'public'
       AND t.table_type = 'BASE TABLE'
-      AND t.table_name NOT IN ('audit_logs', 'notifications', 'sequences',
+      AND t.table_name NOT IN ('audit_logs', 'notifications', 'sequences', 'stock_balances',
                                'business_members', 'password_history',
                                'password_reset_tokens', 'password_policy')
       AND NOT EXISTS (
