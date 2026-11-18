@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 
@@ -71,7 +72,7 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.click(trigger);
+    await userEvent.click(trigger);
 
     expect(await screen.findByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
