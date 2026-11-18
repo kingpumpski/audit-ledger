@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,22 +84,23 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   });
 
   useEffect(() => {
-    const channel = supabase.channel('operating-expense-register-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      })
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    const refreshExpenses = () => {
+      void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
+    };
+    const refreshFinancialReports = () => {
+      refreshExpenses();
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+    };
+
+    return subscribeRealtimeWithPageLifecycle(
+      () => supabase.channel('operating-expense-register-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, refreshExpenses)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, refreshFinancialReports)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, refreshFinancialReports)
+        .subscribe(),
+      refreshFinancialReports,
+    );
   }, [queryClient]);
 
   const refreshAccounting = () => {

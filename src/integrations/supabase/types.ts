@@ -1955,7 +1955,7 @@ export type Database = {
           business_id: string | null
           created_at: string
           id: string
-          is_read: boolean | null
+          is_read: boolean
           link: string | null
           message: string
           read_at: string | null
@@ -1967,7 +1967,7 @@ export type Database = {
           business_id?: string | null
           created_at?: string
           id?: string
-          is_read?: boolean | null
+          is_read?: boolean
           link?: string | null
           message: string
           read_at?: string | null
@@ -1979,7 +1979,7 @@ export type Database = {
           business_id?: string | null
           created_at?: string
           id?: string
-          is_read?: boolean | null
+          is_read?: boolean
           link?: string | null
           message?: string
           read_at?: string | null
@@ -3378,6 +3378,7 @@ export type Database = {
         }
         Returns: string
       }
+      current_business_id: { Args: never; Returns: string }
       create_invoice_draft: {
         Args: {
           p_customer_id: string

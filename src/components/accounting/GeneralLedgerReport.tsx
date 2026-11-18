@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -60,20 +61,21 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
   });
 
   useEffect(() => {
-    const channel = supabase
-      .channel('journal-ledger-live-updates')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'journal_entries' },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
+    const refreshLedger = () => {
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
     };
+
+    return subscribeRealtimeWithPageLifecycle(
+      () => supabase
+        .channel('journal-ledger-live-updates')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'journal_entries' },
+          refreshLedger,
+        )
+        .subscribe(),
+      refreshLedger,
+    );
   }, [queryClient]);
 
   const trialBalance = useMemo<TrialBalanceRow[]>(() => {

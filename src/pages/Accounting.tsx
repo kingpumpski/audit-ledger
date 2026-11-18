@@ -21,6 +21,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useSettings } from '@/hooks/useSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -93,39 +94,51 @@ export default function Accounting() {
   const canReversePettyCash = roles.includes('admin') || roles.includes('accountant');
 
   useEffect(() => {
-    const channel = supabase
-      .channel('accounting-cash-flow-live-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['payments'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'receipts' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['receipts'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_entries' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
-        void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_items' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_transactions' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_expense_reversals' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
-        void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
-        void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
-        void queryClient.invalidateQueries({ queryKey: ['operating-expenses-summary'] });
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
+    const refreshAccountingQueries = () => {
+      void queryClient.invalidateQueries({ queryKey: ['payments'] });
+      void queryClient.invalidateQueries({ queryKey: ['receipts'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+      void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+      void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
+      void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
+      void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+      void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+      void queryClient.invalidateQueries({ queryKey: ['operating-expenses-summary'] });
     };
+
+    return subscribeRealtimeWithPageLifecycle(
+      () => supabase
+        .channel('accounting-cash-flow-live-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['payments'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'receipts' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['receipts'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'journal_entries' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+          void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+          void queryClient.invalidateQueries({ queryKey: ['payment-clearing-balances'] });
+          void queryClient.invalidateQueries({ queryKey: ['payment-clearing-settlements'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'invoice_items' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['profit-loss-cost-coverage'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_transactions' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['petty-cash'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'petty_cash_expense_reversals' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['petty-cash-reversals'] });
+          void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
+          void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, () => {
+          void queryClient.invalidateQueries({ queryKey: ['operating-expenses-summary'] });
+        })
+        .subscribe(),
+      refreshAccountingQueries,
+    );
   }, [queryClient]);
 
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('monthly');
