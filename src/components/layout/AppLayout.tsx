@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight, Building2 } from 'lucide-react';
+import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight, Building2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
