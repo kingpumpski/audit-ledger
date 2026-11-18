@@ -312,7 +312,7 @@ SELECT extensions.throws_ok(
     'Attempt to cancel completed transfer'
   ),
   'P0001',
-  'A dispatched stock transfer cannot be canceled; reconcile its in-transit stock first',
+  'A dispatched or completed stock transfer cannot be canceled; reconcile outstanding transit stock first',
   'A completed transfer cannot be canceled or used to erase its movement history'
 );
 
