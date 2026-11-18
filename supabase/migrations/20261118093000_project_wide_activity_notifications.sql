@@ -169,8 +169,9 @@ BEGIN
     FROM public.business_members bm
     WHERE bm.business_id = v_business_id
       AND bm.status = 'active';
-  ELSE
-    -- No tenant context: send a deliberately generic project-level notice.
+  ELSIF NEW.entity_type IN ('user_roles', 'businesses') THEN
+    -- Only trusted, global administrative events may fan out without a tenant.
+    -- Sensitive authentication events and arbitrary client audit rows stay private.
     INSERT INTO public.notifications (user_id, business_id, title, message, type, link)
     SELECT DISTINCT bm.user_id, NULL::uuid, 'Project activity',
       'A project activity was recorded. Open the notification centre for details.',
@@ -191,6 +192,19 @@ FOR EACH ROW EXECUTE FUNCTION public.notify_members_of_audit_activity();
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated users can insert own notifications" ON public.notifications;
+
+-- Client-created audit rows must belong to the caller's active workspace.
+-- Global events are emitted by trusted database triggers or service-role functions.
+DROP POLICY IF EXISTS "Authenticated users can insert own audit logs" ON public.audit_logs;
+CREATE POLICY "Authenticated users can insert own audit logs"
+  ON public.audit_logs
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    user_id = (SELECT auth.uid())
+    AND business_id IS NOT NULL
+    AND business_id = (SELECT public.current_business_id())
+  );
 
 GRANT SELECT, UPDATE ON public.notifications TO authenticated;
 
