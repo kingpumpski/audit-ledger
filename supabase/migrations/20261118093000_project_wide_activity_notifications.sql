@@ -29,7 +29,7 @@ BEGIN
   )
   VALUES (
     auth.uid(),
-    (SELECT u.email FROM auth.users u WHERE u.id = auth.uid()),
+    public.rpc_auth_user_email(auth.uid()),
     CASE TG_OP
       WHEN 'INSERT' THEN 'create'::public.audit_action
       WHEN 'UPDATE' THEN 'update'::public.audit_action
