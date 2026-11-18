@@ -120,6 +120,8 @@ CREATE TABLE public.product_location_settings (
 
 CREATE INDEX idx_product_location_settings_replenishment
   ON public.product_location_settings (business_id, location_id, is_active, replenishment_method);
+CREATE INDEX idx_product_location_settings_business_product
+  ON public.product_location_settings (business_id, product_id);
 
 -- New movement rows must identify a location. The trigger resolves omitted
 -- locations to the business default to keep existing stock RPCs compatible.
@@ -145,6 +147,10 @@ ALTER TABLE public.inventory_transactions
 
 CREATE INDEX idx_inventory_transactions_business_location_created
   ON public.inventory_transactions (business_id, location_id, created_at DESC);
+CREATE INDEX idx_inventory_transactions_business_destination_location
+  ON public.inventory_transactions (business_id, destination_location_id);
+CREATE INDEX idx_store_locations_created_by
+  ON public.store_locations (created_by);
 
 -- Baseline the new projection from the current aggregate stock. This is a
 -- snapshot, not a replay of the legacy movement history.
@@ -449,6 +455,18 @@ CREATE TRIGGER businesses_create_default_store_location
   AFTER INSERT ON public.businesses
   FOR EACH ROW
   EXECUTE FUNCTION app_private.create_default_store_location();
+
+
+-- Store configuration changes are auditable. stock_balances is intentionally
+-- excluded: it is a derived projection whose source inventory_transactions
+-- rows already emit the authoritative audit event for every stock movement.
+CREATE TRIGGER audit_activity_store_locations
+  AFTER INSERT OR UPDATE OR DELETE ON public.store_locations
+  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
+CREATE TRIGGER audit_activity_product_location_settings
+  AFTER INSERT OR UPDATE OR DELETE ON public.product_location_settings
+  FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;
