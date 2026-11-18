@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/BusinessContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Loader2 } from 'lucide-react';
 
 type AppRole = 'admin' | 'accountant' | 'cashier' | 'auditor';
@@ -16,10 +18,12 @@ export function ProtectedRoute({
   requiredRoles, 
   requireAnyRole = true 
 }: ProtectedRouteProps) {
-  const { user, roles, isLoading, hasAnyRole } = useAuth();
+  const { user, isLoading } = useAuth();
+  const { isLoading: businessLoading } = useBusiness();
+  const roles = useEffectiveRoles();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || businessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -35,7 +39,7 @@ export function ProtectedRoute({
   }
 
   // Check if user has any role (is an employee)
-  if (requireAnyRole && !hasAnyRole()) {
+  if (requireAnyRole && roles.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center max-w-md mx-auto p-8">
