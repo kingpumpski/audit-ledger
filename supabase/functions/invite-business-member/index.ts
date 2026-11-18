@@ -139,36 +139,77 @@ serve(async (req) => {
     if (invitationError) throw invitationError;
 
     const appUrl = (Deno.env.get("APP_URL") || "https://kingpumpski.github.io/audit-ledger").replace(/\/$/, "");
-    const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-      data: {
-        business_invitation_id: invitation.id,
-        business_name: business.name,
-      },
-      redirectTo: `${appUrl}/accept-invitation?invitation_id=${encodeURIComponent(invitation.id)}`,
-    });
+    const redirectTo = `${appUrl}/accept-invitation?invitation_id=${encodeURIComponent(invitation.id)}`;
+    let invitedUserId: string;
 
-    if (inviteError || !invited.user) {
-      await adminClient.from("business_invitations")
-        .update({ status: "failed", updated_at: new Date().toISOString() })
-        .eq("id", invitation.id);
-      console.error("Supabase Auth invitation failed", inviteError);
-      return respond({ error: "The invitation email could not be sent. Check the Auth email configuration and try again." }, 502);
-    }
+    if (existingUser) {
+      // Existing but unconfirmed accounts cannot be invited a second time.
+      // Attach the invitation to that account and resend its signup confirmation.
+      const { error: metadataError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
+        app_metadata: {
+          ...(existingUser.app_metadata ?? {}),
+          pending_business_invitation_id: invitation.id,
+        },
+        user_metadata: {
+          ...(existingUser.user_metadata ?? {}),
+          business_invitation_id: invitation.id,
+          business_name: business.name,
+        },
+      });
+      if (metadataError) {
+        await adminClient.from("business_invitations")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", invitation.id);
+        console.error("Unable to attach invitation to existing unconfirmed user", metadataError);
+        return respond({ error: "The invitation could not be attached to this account. Please try again." }, 502);
+      }
 
-    const appMetadata = invited.user.app_metadata ?? {};
-    const { error: metadataError } = await adminClient.auth.admin.updateUserById(invited.user.id, {
-      app_metadata: { ...appMetadata, pending_business_invitation_id: invitation.id },
-    });
-    if (metadataError) {
-      console.error("Unable to attach pending invitation metadata", metadataError);
-      // The invitation metadata is also present in user_metadata, and the
-      // acceptance RPC independently verifies the signed-in email address.
+      const { error: resendError } = await adminClient.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (resendError) {
+        await adminClient.from("business_invitations")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", invitation.id);
+        console.error("Supabase signup confirmation resend failed", resendError);
+        return respond({ error: "The confirmation email could not be resent. Wait before trying again or ask the user to complete signup." }, 502);
+      }
+      invitedUserId = existingUser.id;
+    } else {
+      const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: {
+          business_invitation_id: invitation.id,
+          business_name: business.name,
+        },
+        redirectTo,
+      });
+
+      if (inviteError || !invited.user) {
+        await adminClient.from("business_invitations")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", invitation.id);
+        console.error("Supabase Auth invitation failed", inviteError);
+        return respond({ error: "The invitation email could not be sent. Check the Auth email configuration and try again." }, 502);
+      }
+
+      invitedUserId = invited.user.id;
+      const appMetadata = invited.user.app_metadata ?? {};
+      const { error: metadataError } = await adminClient.auth.admin.updateUserById(invitedUserId, {
+        app_metadata: { ...appMetadata, pending_business_invitation_id: invitation.id },
+      });
+      if (metadataError) {
+        console.error("Unable to attach pending invitation metadata", metadataError);
+        // The redirect URL also carries the invitation ID. The acceptance RPC
+        // independently verifies the authenticated and confirmed email address.
+      }
     }
 
     const { error: updateError } = await adminClient
       .from("business_invitations")
       .update({
-        auth_user_id: invited.user.id,
+        auth_user_id: invitedUserId,
         last_sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
