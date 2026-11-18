@@ -193,6 +193,42 @@ FOR EACH ROW EXECUTE FUNCTION public.notify_members_of_audit_activity();
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Authenticated users can insert own notifications" ON public.notifications;
 
+-- A user's notification history is scoped to their active workspace, plus
+-- context-free project notices. Old notices from a removed/switched workspace
+-- are not readable merely because the row still belongs to the same user.
+DROP POLICY IF EXISTS "Authenticated users can view own notifications" ON public.notifications;
+CREATE POLICY "Authenticated users can view own notifications"
+  ON public.notifications
+  FOR SELECT
+  TO authenticated
+  USING (
+    user_id = (SELECT auth.uid())
+    AND (
+      business_id IS NULL
+      OR business_id = (SELECT public.current_business_id())
+    )
+  );
+
+DROP POLICY IF EXISTS "Authenticated users can update own notifications" ON public.notifications;
+CREATE POLICY "Authenticated users can update own notifications"
+  ON public.notifications
+  FOR UPDATE
+  TO authenticated
+  USING (
+    user_id = (SELECT auth.uid())
+    AND (
+      business_id IS NULL
+      OR business_id = (SELECT public.current_business_id())
+    )
+  )
+  WITH CHECK (
+    user_id = (SELECT auth.uid())
+    AND (
+      business_id IS NULL
+      OR business_id = (SELECT public.current_business_id())
+    )
+  );
+
 -- Client-created audit rows must belong to the caller's active workspace.
 -- Global events are emitted by trusted database triggers or service-role functions.
 DROP POLICY IF EXISTS "Authenticated users can insert own audit logs" ON public.audit_logs;
