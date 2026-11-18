@@ -207,7 +207,7 @@ CREATE POLICY "Authenticated users can insert own audit logs"
   );
 
 GRANT SELECT ON public.notifications TO authenticated;
-REVOKE UPDATE ON public.notifications FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.notifications FROM authenticated;
 GRANT UPDATE (is_read, read_at) ON public.notifications TO authenticated;
 
 -- Normalize legacy rows so the unread counter has one unambiguous state.
