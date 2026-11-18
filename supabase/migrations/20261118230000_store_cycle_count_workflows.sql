@@ -603,13 +603,13 @@ BEGIN
   IF v_total_gain > 0 OR v_total_loss > 0 THEN
     SELECT id INTO v_inventory_account
     FROM public.chart_of_accounts
-    WHERE code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
+    WHERE business_id = v_business_id AND code = '1200' AND account_type = 'asset' AND is_active LIMIT 1;
     SELECT id INTO v_gain_account
     FROM public.chart_of_accounts
-    WHERE code = '4900' AND account_type = 'revenue' AND is_active LIMIT 1;
+    WHERE business_id = v_business_id AND code = '4900' AND account_type = 'revenue' AND is_active LIMIT 1;
     SELECT id INTO v_loss_account
     FROM public.chart_of_accounts
-    WHERE code = '6500' AND account_type = 'expense' AND is_active LIMIT 1;
+    WHERE business_id = v_business_id AND code = '6500' AND account_type = 'expense' AND is_active LIMIT 1;
 
     IF v_inventory_account IS NULL OR (v_total_gain > 0 AND v_gain_account IS NULL)
        OR (v_total_loss > 0 AND v_loss_account IS NULL) THEN
@@ -617,9 +617,12 @@ BEGIN
     END IF;
 
     v_entry_number := public.get_next_sequence('journal');
-    SELECT COALESCE(currency_code, 'USD') INTO v_currency
-    FROM public.company_settings ORDER BY created_at LIMIT 1;
-    v_currency := COALESCE(v_currency, 'USD');
+    SELECT COALESCE(
+      (SELECT cs.currency_code FROM public.company_settings cs
+       WHERE cs.business_id = v_business_id ORDER BY cs.created_at LIMIT 1),
+      (SELECT b.base_currency FROM public.businesses b WHERE b.id = v_business_id),
+      'USD'
+    ) INTO v_currency;
 
     INSERT INTO public.journal_entries (
       entry_number, entry_date, description, source_type, source_id, currency, created_by
