@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(7);
+SELECT extensions.plan(8);
 
 -- New business creation must provision its first store location atomically.
 INSERT INTO public.businesses (name, business_type, country, base_currency, timezone)
@@ -122,6 +122,31 @@ SELECT extensions.is(
    WHERE p.sku = 'TEST-STORE-LOCATION-001' AND sl.code = 'TEST-SECONDARY'),
   2::numeric,
   'A transfer adds the same quantity to the destination location'
+);
+
+
+SELECT extensions.throws_ok(
+  format(
+    $sql$
+      INSERT INTO public.inventory_transactions (
+        product_id, type, quantity, previous_quantity, new_quantity,
+        reference_type, reference_number
+      )
+      SELECT id, 'sale', 10, 9, -1,
+             'store_location_test', 'STORE-LOCATION-NEGATIVE-001'
+      FROM public.products
+      WHERE sku = %L
+    $sql$,
+    'TEST-STORE-LOCATION-001'
+  ),
+  'P0001',
+  format(
+    'Stock movement would make available stock negative for product %s at location %s',
+    (SELECT id FROM public.products WHERE sku = 'TEST-STORE-LOCATION-001'),
+    (SELECT id FROM public.store_locations
+     WHERE business_id = public.legacy_business_id() AND is_default)
+  ),
+  'The location projection rejects movements that would create negative available stock'
 );
 
 SELECT * FROM extensions.finish();
