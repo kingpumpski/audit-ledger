@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(3);
+SELECT extensions.plan(4);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -58,6 +58,34 @@ SELECT extensions.is(
    WHERE business_id IS NULL AND type = 'project_activity'),
   3,
   'Context-free project activity creates generic notifications for all active project members'
+);
+
+SELECT extensions.ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM information_schema.tables t
+    JOIN information_schema.columns id_col
+      ON id_col.table_schema = t.table_schema
+      AND id_col.table_name = t.table_name
+      AND id_col.column_name = 'id'
+    JOIN information_schema.columns business_col
+      ON business_col.table_schema = t.table_schema
+      AND business_col.table_name = t.table_name
+      AND business_col.column_name = 'business_id'
+    WHERE t.table_schema = 'public'
+      AND t.table_type = 'BASE TABLE'
+      AND t.table_name NOT IN ('audit_logs', 'notifications', 'sequences',
+                               'business_members', 'password_history',
+                               'password_reset_tokens', 'password_policy')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger tr
+        WHERE tr.tgrelid = pg_catalog.format('public.%I', t.table_name)::regclass
+          AND tr.tgfoid = 'public.audit_trigger_func()'::regprocedure
+          AND NOT tr.tgisinternal
+      )
+  ),
+  'Every business-owned operational table is covered by the audit trigger'
 );
 
 SELECT * FROM extensions.finish();
