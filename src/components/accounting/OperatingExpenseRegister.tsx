@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -83,7 +84,6 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   });
 
   useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null;
     const refreshExpenses = () => {
       void queryClient.invalidateQueries({ queryKey: ['operating-expenses'] });
     };
@@ -92,41 +92,15 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
       void queryClient.invalidateQueries({ queryKey: ['profit-loss-journal'] });
       void queryClient.invalidateQueries({ queryKey: ['journal-ledger-entries'] });
     };
-    const subscribe = () => {
-      channel = supabase.channel('operating-expense-register-live')
+
+    return subscribeRealtimeWithPageLifecycle(
+      () => supabase.channel('operating-expense-register-live')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expenses' }, refreshExpenses)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_refunds' }, refreshFinancialReports)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'operating_expense_payments' }, refreshFinancialReports)
-        .subscribe();
-    };
-    const unsubscribe = async () => {
-      if (!channel) return;
-      const activeChannel = channel;
-      channel = null;
-      await supabase.removeChannel(activeChannel);
-    };
-
-    subscribe();
-
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) void unsubscribe();
-    };
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      void (async () => {
-        await unsubscribe();
-        subscribe();
-        refreshFinancialReports();
-      })();
-    };
-
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('pageshow', handlePageShow);
-    return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('pageshow', handlePageShow);
-      void unsubscribe();
-    };
+        .subscribe(),
+      refreshFinancialReports,
+    );
   }, [queryClient]);
 
   const refreshAccounting = () => {
