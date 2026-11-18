@@ -45,6 +45,10 @@ CREATE UNIQUE INDEX idx_store_stock_counts_one_active_per_location
   WHERE status IN ('counting', 'submitted', 'approved');
 CREATE INDEX idx_store_stock_counts_business_created
   ON public.store_stock_counts (business_id, created_at DESC);
+CREATE INDEX idx_store_stock_counts_business_location
+  ON public.store_stock_counts (business_id, location_id);
+CREATE INDEX idx_store_stock_counts_business_journal
+  ON public.store_stock_counts (business_id, journal_entry_id);
 CREATE INDEX idx_store_stock_counts_created_by
   ON public.store_stock_counts (created_by);
 CREATE INDEX idx_store_stock_counts_submitted_by
