@@ -20,7 +20,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $seed_business_chart_of_accounts$
 DECLARE
-  v_source_business_id uuid := public.legacy_business_id();
+  v_source_business_id uuid;
   v_currency text;
   v_inserted integer;
   v_previous_claim_sub text;
@@ -29,13 +29,15 @@ BEGIN
   IF p_business_id IS NULL THEN
     RAISE EXCEPTION 'A business is required to seed its chart of accounts';
   END IF;
-  IF p_business_id = v_source_business_id THEN
-    RETURN;
-  END IF;
   IF EXISTS (
     SELECT 1 FROM public.chart_of_accounts
     WHERE business_id = p_business_id
   ) THEN
+    RETURN;
+  END IF;
+
+  v_source_business_id := public.legacy_business_id();
+  IF p_business_id = v_source_business_id THEN
     RETURN;
   END IF;
 
