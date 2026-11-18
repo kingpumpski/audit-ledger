@@ -4,8 +4,8 @@ import { getEffectiveRoles } from "@/lib/business-roles";
 
 export function useEffectiveRoles() {
   const { roles: globalRoles } = useAuth();
-  const { activeMembership, memberships, isLoading } = useBusiness();
+  const { activeMembership, memberships, isLoading, error } = useBusiness();
 
-  if (isLoading || (memberships.length > 1 && !activeMembership)) return [];
+  if (isLoading || error || (memberships.length > 1 && !activeMembership)) return [];
   return getEffectiveRoles(globalRoles, activeMembership?.role);
 }
