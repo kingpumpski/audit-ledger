@@ -186,6 +186,7 @@ DECLARE
   v_location public.store_locations%ROWTYPE;
   v_count_id uuid;
   v_fingerprint text;
+  v_initial_snapshot jsonb;
 BEGIN
   IF auth.uid() IS NULL OR v_business_id IS NULL
      OR NOT public.has_business_role(v_business_id, ARRAY['owner', 'admin', 'accountant', 'cashier']) THEN
@@ -237,13 +238,34 @@ BEGIN
     RAISE EXCEPTION 'A stock count is already active for this location';
   END IF;
 
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'product_id', p.id,
+    'system_quantity', COALESCE(sb.on_hand, 0),
+    'unit_cost', CASE
+      WHEN COALESCE(p.cost_price_verified, false) AND p.cost_price IS NOT NULL AND p.cost_price >= 0
+        THEN p.cost_price
+      ELSE NULL
+    END
+  ) ORDER BY p.id), '[]'::jsonb)
+  INTO v_initial_snapshot
+  FROM public.products p
+  LEFT JOIN public.stock_balances sb
+    ON sb.business_id = v_business_id
+   AND sb.location_id = p_location_id
+   AND sb.product_id = p.id
+  WHERE p.business_id = v_business_id
+    AND p.deleted_at IS NULL
+    AND p.is_active = true
+    AND COALESCE(p.is_service, false) = false;
+
   INSERT INTO public.store_stock_counts (
     business_id, location_id, reference_number, notes,
-    idempotency_key, request_fingerprint, created_by
+    idempotency_key, request_fingerprint, line_snapshot, created_by
   )
   VALUES (
     v_business_id, p_location_id, btrim(p_reference_number),
-    NULLIF(btrim(p_notes), ''), p_idempotency_key, v_fingerprint, auth.uid()
+    NULLIF(btrim(p_notes), ''), p_idempotency_key, v_fingerprint,
+    v_initial_snapshot, auth.uid()
   )
   RETURNING id INTO v_count_id;
 
