@@ -229,12 +229,6 @@ BEGIN
     RETURN v_existing.id;
   END IF;
 
-  -- Exclusive location lock waits for all in-flight movements to finish and
-  -- prevents new ones from crossing the snapshot boundary.
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended(v_business_id::text || ':' || p_location_id::text, 0)
-  );
-
   SELECT * INTO v_location
   FROM public.store_locations
   WHERE business_id = v_business_id AND id = p_location_id;
@@ -254,8 +248,8 @@ BEGIN
 
   IF p_product_ids IS NOT NULL AND cardinality(p_product_ids) > 0 THEN
     IF cardinality(p_product_ids) <> (
-      SELECT count(DISTINCT selected_product_id)::integer
-      FROM unnest(p_product_ids) AS selected_product_id
+      SELECT count(DISTINCT selected.product_id)::integer
+      FROM unnest(p_product_ids) AS selected(product_id)
     ) THEN
       RAISE EXCEPTION 'Cycle-count product selection contains duplicate IDs';
     END IF;
