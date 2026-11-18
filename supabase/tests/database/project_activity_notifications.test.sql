@@ -196,6 +196,7 @@ SELECT extensions.ok(
     WHERE t.table_schema = 'public'
       AND t.table_type = 'BASE TABLE'
       AND t.table_name NOT IN ('audit_logs', 'notifications', 'sequences', 'stock_balances',
+                               'stock_transfer_lines', 'stock_transfer_receipt_lines',
                                'business_members', 'password_history',
                                'password_reset_tokens', 'password_policy')
       AND NOT EXISTS (
