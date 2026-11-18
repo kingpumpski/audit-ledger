@@ -437,7 +437,7 @@ BEGIN
     RETURN v_transfer.id;
   END IF;
   IF v_transfer.status NOT IN ('draft', 'approved') THEN
-    RAISE EXCEPTION 'A dispatched stock transfer cannot be canceled; reconcile its in-transit stock first';
+    RAISE EXCEPTION 'A dispatched or completed stock transfer cannot be canceled; reconcile outstanding transit stock first';
   END IF;
 
   UPDATE public.stock_transfers
