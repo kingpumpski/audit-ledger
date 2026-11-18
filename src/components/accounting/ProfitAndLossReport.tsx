@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, TrendingUp, TrendingDown, CircleAlert, CircleCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -97,7 +97,7 @@ const financialAttestationApi = supabase as unknown as FinancialAttestationApi;
 export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canAttestCompleteness = roles.includes('admin') || roles.includes('accountant');
   const [costInputs, setCostInputs] = useState<Record<string, CostInput>>({});
   const [attestationOpen, setAttestationOpen] = useState(false);
