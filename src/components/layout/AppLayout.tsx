@@ -47,7 +47,7 @@ const featureDetails: Record<string, { description: string; terms: string }> = {
 function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) {
   const { collapsed, mobileOpen, setMobileOpen } = useSidebarState();
   const { profile, roles: globalRoles, signOut, userPersona } = useAuth();
-  const { activeMembership, isSwitching } = useBusiness();
+  const { activeMembership, isSwitching, switchError } = useBusiness();
   const roles = useEffectiveRoles();
   const navigate = useNavigate();
   const [featureQuery, setFeatureQuery] = useState('');
@@ -92,10 +92,20 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
           role="status"
           aria-live="polite"
         >
-          <div className="rounded-lg border bg-card px-6 py-5 text-center shadow-lg">
-            <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <p className="text-sm font-medium">Switching business workspace…</p>
-            <p className="mt-1 text-xs text-muted-foreground">Refreshing your secure business session</p>
+          <div className="max-w-md rounded-lg border bg-card px-6 py-5 text-center shadow-lg">
+            {switchError ? (
+              <>
+                <p className="text-sm font-semibold text-destructive">Workspace session needs attention</p>
+                <p className="mt-2 text-sm text-muted-foreground">{switchError}</p>
+                <Button className="mt-4" onClick={() => void signOut()}>Sign out securely</Button>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="text-sm font-medium">Switching business workspace…</p>
+                <p className="mt-1 text-xs text-muted-foreground">Refreshing your secure business session</p>
+              </>
+            )}
           </div>
         </div>
       )}
