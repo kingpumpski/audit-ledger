@@ -172,7 +172,7 @@ BEGIN
   ELSE
     -- No tenant context: send a deliberately generic project-level notice.
     INSERT INTO public.notifications (user_id, business_id, title, message, type, link)
-    SELECT DISTINCT bm.user_id, NULL, 'Project activity',
+    SELECT DISTINCT bm.user_id, NULL::uuid, 'Project activity',
       'A project activity was recorded. Open the notification centre for details.',
       'project_activity', '/notifications'
     FROM public.business_members bm
