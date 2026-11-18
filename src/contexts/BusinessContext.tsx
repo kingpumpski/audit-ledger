@@ -83,9 +83,9 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || !pendingInvitationId || memberships.length > 0 || location.pathname === "/accept-invitation") return;
+    if (authLoading || membershipsQuery.isLoading || membershipsQuery.error || !user || !pendingInvitationId || memberships.length > 0 || location.pathname === "/accept-invitation") return;
     navigate(`/accept-invitation?invitation_id=${encodeURIComponent(pendingInvitationId)}`, { replace: true });
-  }, [user?.id, pendingInvitationId, memberships.length, location.pathname, navigate]);
+  }, [authLoading, membershipsQuery.isLoading, membershipsQuery.error, user?.id, pendingInvitationId, memberships.length, location.pathname, navigate]);
 
   const claimedBusinessId = user?.app_metadata?.active_business_id;
   const activeMembership =
