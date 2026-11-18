@@ -99,7 +99,7 @@ export default function StoreStock() {
                   <TableHead className="text-right">On hand</TableHead>
                   <TableHead className="text-right">Reserved</TableHead>
                   <TableHead className="text-right">Quarantined</TableHead>
-                  <TableHead className="text-right">Available</TableHead>
+                  <TableHead className="text-right">Available / transit</TableHead>
                   <TableHead className="text-right">Reorder point</TableHead>
                 </TableRow>
               </TableHeader>
@@ -112,7 +112,11 @@ export default function StoreStock() {
                     <TableCell className="text-right tabular-nums">{quantity(balance.on_hand)}</TableCell>
                     <TableCell className="text-right tabular-nums">{quantity(balance.reserved)}</TableCell>
                     <TableCell className="text-right tabular-nums">{quantity(balance.quarantined)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{quantity(balance.available_quantity)}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {location?.location_type === 'virtual' ? (
+                        <span className="text-muted-foreground">In transit: {quantity(balance.on_hand)}</span>
+                      ) : quantity(balance.available_quantity)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {quantity(setting?.reorder_point ?? product?.min_stock_level ?? 0)}
                     </TableCell>
