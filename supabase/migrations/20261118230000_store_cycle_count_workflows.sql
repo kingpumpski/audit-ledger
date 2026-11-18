@@ -684,7 +684,21 @@ BEGIN
       posted_by = auth.uid(),
       posted_at = now(),
       posting_idempotency_key = p_idempotency_key,
-      journal_entry_id = v_journal_id
+      journal_entry_id = v_journal_id,
+      line_snapshot = COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'product_id', product_id,
+          'system_quantity', system_quantity_snapshot,
+          'counted_quantity', counted_quantity,
+          'variance_quantity', variance_quantity,
+          'unit_cost', unit_cost_snapshot,
+          'adjustment_value', adjustment_value,
+          'reason', reason,
+          'inventory_transaction_id', inventory_transaction_id
+        ) ORDER BY product_id)
+        FROM public.store_stock_count_lines
+        WHERE business_id = v_business_id AND count_id = v_count.id
+      ), '[]'::jsonb)
   WHERE id = v_count.id;
 
   RETURN v_count.id;
