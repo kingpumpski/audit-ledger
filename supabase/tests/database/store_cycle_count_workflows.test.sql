@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(25);
+SELECT extensions.plan(26);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -185,6 +185,13 @@ SET count_line_id = public.record_store_stock_count_line(
 SELECT extensions.ok(
   (SELECT count_line_id IS NOT NULL FROM store_cycle_count_test_state LIMIT 1),
   'The blind-count entry is recorded against the snapshotted product'
+);
+
+SELECT extensions.is(
+  (SELECT counted_by FROM public.store_stock_count_lines
+   WHERE id = (SELECT count_line_id FROM store_cycle_count_test_state LIMIT 1)),
+  'e4000000-0000-4000-8000-000000000002'::uuid,
+  'The system records the user who physically counted each line'
 );
 
 SELECT extensions.is(
