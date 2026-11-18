@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { getErrorMessage } from '@/lib/error-message';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { supabase } from '@/integrations/supabase/client';
 import { Key, Mail, MessageSquare, Shield, ExternalLink, CheckCircle, XCircle, Loader2, Save, Eye, EyeOff } from 'lucide-react';
 
@@ -21,7 +21,7 @@ interface SecretInput {
 }
 
 export function IntegrationsSettings() {
-  const { hasRole } = useAuth();
+  const roles = useEffectiveRoles();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
@@ -34,7 +34,7 @@ export function IntegrationsSettings() {
   const [twilioAuthToken, setTwilioAuthToken] = useState('');
   const [twilioPhoneNumber, setTwilioPhoneNumber] = useState('');
 
-  const isAdmin = hasRole('admin');
+  const isAdmin = roles.includes('admin');
 
   const toggleShowSecret = (name: string) => {
     setShowSecrets(prev => ({ ...prev, [name]: !prev[name] }));
