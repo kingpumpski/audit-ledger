@@ -29,6 +29,15 @@ VALUES
   ('e4000000-0000-4000-8000-000000000010',
    'e4000000-0000-4000-8000-000000000002', 'cashier', 'active', now());
 
+INSERT INTO public.chart_of_accounts (
+  business_id, code, name, account_type, currency, is_system, is_active
+) VALUES
+  ('e4000000-0000-4000-8000-000000000010', '1200', 'Inventory', 'asset', 'GHS', true, true),
+  ('e4000000-0000-4000-8000-000000000010', '4900', 'Inventory Count Variance Gain', 'revenue', 'GHS', true, true),
+  ('e4000000-0000-4000-8000-000000000010', '6500', 'Inventory Shrinkage', 'expense', 'GHS', true, true)
+ON CONFLICT (business_id, code) DO UPDATE
+SET is_active = true;
+
 SELECT set_config(
   'request.jwt.claims',
   jsonb_build_object(
