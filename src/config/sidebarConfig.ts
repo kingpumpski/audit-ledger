@@ -41,6 +41,7 @@ export const expertSidebarItems: SidebarItem[] = [
   { name: 'Discounts', icon: Percent, path: '/discounts', roles: sharedAccess.finance },
   { name: 'Reports', icon: ClipboardList, path: '/reports', roles: sharedAccess.reports },
   { name: 'Audit Logs', icon: Shield, path: '/audit-logs', roles: sharedAccess.audit },
+  { name: 'Business Members', icon: Users, path: '/admin/business-members', roles: ['admin'] },
 ];
 
 export const simplifiedSidebarItems: SidebarItem[] = [
@@ -55,6 +56,7 @@ export const simplifiedSidebarItems: SidebarItem[] = [
   { name: 'Discounts', icon: Percent, path: '/discounts', roles: sharedAccess.finance },
   { name: 'Business Reports', icon: ClipboardList, path: '/reports', roles: sharedAccess.reports },
   { name: 'Activity History', icon: Shield, path: '/audit-logs', roles: sharedAccess.audit },
+  { name: 'Business Members', icon: Users, path: '/admin/business-members', roles: ['admin'] },
 ];
 
 export function getSidebarItems(persona: UserPersona): SidebarItem[] {
