@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
+import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import type { Tables } from '@/integrations/supabase/types';
 
 export type AppNotification = Tables<'notifications'>;
@@ -83,9 +84,8 @@ export function useNotificationFeed() {
   useEffect(() => {
     if (!user || businessLoading) return;
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    const subscribe = () => {
-      channel = supabase
+    return subscribeRealtimeWithPageLifecycle(
+      () => supabase
         .channel(`user-notifications-${user.id}`)
         .on(
           'postgres_changes',
@@ -97,36 +97,9 @@ export function useNotificationFeed() {
           },
           refresh,
         )
-        .subscribe();
-    };
-    const unsubscribe = async () => {
-      if (!channel) return;
-      const activeChannel = channel;
-      channel = null;
-      await supabase.removeChannel(activeChannel);
-    };
-
-    subscribe();
-
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) void unsubscribe();
-    };
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      void (async () => {
-        await unsubscribe();
-        subscribe();
-        refresh();
-      })();
-    };
-
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('pageshow', handlePageShow);
-    return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('pageshow', handlePageShow);
-      void unsubscribe();
-    };
+        .subscribe(),
+      refresh,
+    );
   }, [businessLoading, refresh, user]);
 
   const markRead = useCallback(async (notificationId: string) => {
