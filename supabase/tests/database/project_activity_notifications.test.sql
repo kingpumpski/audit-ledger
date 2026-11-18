@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(9);
+SELECT extensions.plan(11);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -71,6 +71,46 @@ SELECT extensions.is(
    WHERE business_id IS NULL AND type = 'project_activity'),
   3,
   'sensitive authentication activity does not broadcast to other project members'
+);
+
+-- user_roles already has an audit trigger; the assignment RPC must not write a
+-- second manual audit row for the same change.
+INSERT INTO public.user_roles (id, user_id, role, granted_by, granted_at)
+VALUES (
+  'e2000000-0000-4000-8000-000000000030',
+  'e2000000-0000-4000-8000-000000000001',
+  'admin', 'e2000000-0000-4000-8000-000000000001', now()
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'e2000000-0000-4000-8000-000000000001',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', 'e2000000-0000-4000-8000-000000000010'
+    )
+  )::text,
+  true
+);
+SET LOCAL ROLE authenticated;
+
+SELECT extensions.lives_ok(
+  $ SELECT public.assign_user_role(
+    'e2000000-0000-4000-8000-000000000002',
+    'accountant'::public.app_role,
+    'e2000000-0000-4000-8000-000000000001'
+  ); $,
+  'administrator role assignment succeeds through the guarded RPC'
+);
+
+RESET ROLE;
+
+SELECT extensions.is(
+  (SELECT count(DISTINCT user_id)::integer FROM public.notifications
+   WHERE business_id IS NULL AND type = 'project_activity'),
+  3,
+  'global notifications still fan out once per user after the role assignment'
 );
 
 SELECT extensions.ok(
