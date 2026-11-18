@@ -162,7 +162,6 @@ FROM public.products p
 JOIN public.store_locations sl
   ON sl.business_id = p.business_id AND sl.is_default
 WHERE NOT COALESCE(p.is_service, false)
-  AND p.deleted_at IS NULL
 ON CONFLICT (business_id, location_id, product_id) DO NOTHING;
 
 INSERT INTO public.product_location_settings (
@@ -177,7 +176,7 @@ SELECT
   GREATEST(COALESCE(p.min_stock_level, 0), 0)::numeric(15,3),
   CASE
     WHEN COALESCE(p.min_stock_level, 0) > 0
-      THEN GREATEST(COALESCE(p.min_stock_level, 0) * 2, p.min_stock_level)
+      THEN GREATEST(COALESCE(p.min_stock_level, 0), 0) * 2
     ELSE NULL
   END::numeric(15,3),
   'min_max'
