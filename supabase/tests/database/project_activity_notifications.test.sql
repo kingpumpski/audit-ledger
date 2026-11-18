@@ -108,7 +108,9 @@ SELECT extensions.lives_ok(
 RESET ROLE;
 
 SELECT extensions.ok(
-  NOT has_table_privilege('authenticated', 'public.notifications', 'UPDATE')
+  NOT has_table_privilege('authenticated', 'public.notifications', 'INSERT')
+  AND NOT has_table_privilege('authenticated', 'public.notifications', 'DELETE')
+  AND NOT has_table_privilege('authenticated', 'public.notifications', 'UPDATE')
   AND has_column_privilege('authenticated', 'public.notifications', 'is_read', 'UPDATE')
   AND has_column_privilege('authenticated', 'public.notifications', 'read_at', 'UPDATE'),
   'users can update read state only, not notification content or ownership'
