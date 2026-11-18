@@ -64,9 +64,9 @@ export function useNotificationFeed() {
   });
 
   const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: feedKey });
-    void queryClient.invalidateQueries({ queryKey: unreadKey });
-  }, [feedKey, queryClient, unreadKey]);
+    void queryClient.invalidateQueries({ queryKey: ['notifications', user?.id, businessId] });
+    void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count', user?.id, businessId] });
+  }, [businessId, queryClient, user?.id]);
 
   useEffect(() => {
     if (!user || businessLoading) return;
@@ -89,21 +89,23 @@ export function useNotificationFeed() {
       if (!event.persisted) return;
       // A page restored from the browser Back-Forward Cache may have had its
       // WebSocket suspended. Recreate the user-scoped channel and refresh state.
-      void supabase.removeChannel(channel);
-      channel = supabase
-        .channel(`user-notifications-${user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
-          },
-          refresh,
-        )
-        .subscribe();
-      refresh();
+      void (async () => {
+        await supabase.removeChannel(channel);
+        channel = supabase
+          .channel(`user-notifications-${user.id}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'notifications',
+              filter: `user_id=eq.${user.id}`,
+            },
+            refresh,
+          )
+          .subscribe();
+        refresh();
+      })();
     };
 
     window.addEventListener('pageshow', handlePageShow);
