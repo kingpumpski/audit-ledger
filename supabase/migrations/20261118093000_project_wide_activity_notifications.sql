@@ -5,6 +5,7 @@
 CREATE OR REPLACE FUNCTION public.audit_trigger_func()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = ''
 AS $audit$
 DECLARE
@@ -43,7 +44,7 @@ BEGIN
     v_business_id
   );
 
-  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  RETURN COALESCE(NEW, OLD);
 END;
 $audit$;
 
