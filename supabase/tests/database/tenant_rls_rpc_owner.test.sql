@@ -42,10 +42,16 @@ SELECT extensions.ok(
 SELECT extensions.ok(
   has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
   AND has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_email(uuid)', 'EXECUTE')
+  AND has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_email_confirmed(uuid,text)', 'EXECUTE')
+  AND has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_full_name(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_email(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_email_confirmed(uuid,text)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_full_name(uuid)', 'EXECUTE')
   AND NOT has_function_privilege('anon', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
-  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_email(uuid)', 'EXECUTE'),
+  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_email(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_email_confirmed(uuid,text)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_full_name(uuid)', 'EXECUTE'),
   'Auth lookup helpers are executable only by the constrained RPC owner'
 );
 
