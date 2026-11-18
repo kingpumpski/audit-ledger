@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(26);
+SELECT extensions.plan(29);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -61,6 +61,16 @@ INSERT INTO public.products (
   2, false, true
 );
 
+INSERT INTO public.products (
+  id, business_id, sku, name, current_price, stock_quantity,
+  min_stock_level, is_service, is_active
+) VALUES (
+  'e4000000-0000-4000-8000-000000000021',
+  'e4000000-0000-4000-8000-000000000010',
+  'COUNT-TEST-002', 'Uncounted SKU Test Item', 10.00, 0,
+  2, false, true
+);
+
 -- Seed starting stock through an evidenced inventory movement.
 SELECT set_config('app.stock_purchase_rpc', 'on', true);
 UPDATE public.products
@@ -78,6 +88,23 @@ INSERT INTO public.inventory_transactions (
   'store_cycle_count_test', 'COUNT-OPENING-001',
   'e4000000-0000-4000-8000-000000000001',
   'e4000000-0000-4000-8000-000000000101'
+);
+SELECT set_config('app.stock_purchase_rpc', 'on', true);
+UPDATE public.products
+SET stock_quantity = 5, cost_price = 5.00, cost_price_verified = true
+WHERE id = 'e4000000-0000-4000-8000-000000000021';
+SELECT set_config('app.stock_purchase_rpc', 'off', true);
+
+INSERT INTO public.inventory_transactions (
+  product_id, type, quantity, previous_quantity, new_quantity,
+  unit_cost, total_cost, reference_type, reference_number,
+  performed_by, idempotency_key
+) VALUES (
+  'e4000000-0000-4000-8000-000000000021',
+  'purchase', 5, 0, 5, 5.00, 25.00,
+  'store_cycle_count_test', 'COUNT-OPENING-002',
+  'e4000000-0000-4000-8000-000000000001',
+  'e4000000-0000-4000-8000-000000000109'
 );
 
 CREATE TEMP TABLE store_cycle_count_test_state (
@@ -107,7 +134,8 @@ SELECT extensions.is(
     location_id,
     'COUNT-TEST-001',
     'Blind cycle count test',
-    'e4000000-0000-4000-8000-000000000102'::uuid
+    'e4000000-0000-4000-8000-000000000102'::uuid,
+    ARRAY['e4000000-0000-4000-8000-000000000020'::uuid]
   ) FROM store_cycle_count_test_state LIMIT 1),
   (SELECT count_id FROM store_cycle_count_test_state LIMIT 1),
   'Creating a count twice with the same idempotency key returns the original session'
@@ -159,6 +187,39 @@ SELECT extensions.throws_ok(
   'P0001',
   'Inventory movement is paused for a location while a stock count is active',
   'Inventory movements are frozen while a blind count is open'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.store_stock_count_lines
+   WHERE count_id = (SELECT count_id FROM store_cycle_count_test_state LIMIT 1)),
+  1,
+  'A SKU-scoped cycle count snapshots only the selected product'
+);
+
+SELECT set_config('app.stock_purchase_rpc', 'on', true);
+UPDATE public.products SET stock_quantity = 6
+WHERE id = 'e4000000-0000-4000-8000-000000000021';
+SELECT set_config('app.stock_purchase_rpc', 'off', true);
+INSERT INTO public.inventory_transactions (
+  product_id, type, quantity, previous_quantity, new_quantity,
+  unit_cost, total_cost, reference_type, reference_number,
+  location_id, performed_by, idempotency_key
+) VALUES (
+  'e4000000-0000-4000-8000-000000000021',
+  'purchase', 1, 5, 6, 5.00, 5.00,
+  'cycle_count_unselected_sku', 'COUNT-UNCOUNTED-SKU',
+  (SELECT location_id FROM store_cycle_count_test_state LIMIT 1),
+  'e4000000-0000-4000-8000-000000000001',
+  'e4000000-0000-4000-8000-000000000110'
+);
+
+SELECT extensions.is(
+  (SELECT on_hand FROM public.stock_balances
+   WHERE business_id = 'e4000000-0000-4000-8000-000000000010'
+     AND location_id = (SELECT location_id FROM store_cycle_count_test_state LIMIT 1)
+     AND product_id = 'e4000000-0000-4000-8000-000000000021'),
+  6::numeric,
+  'Uncounted SKUs remain available for normal stock movements during a cycle count'
 );
 
 SELECT set_config(
