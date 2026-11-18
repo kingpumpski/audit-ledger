@@ -48,6 +48,73 @@ BEGIN
 END;
 $audit$;
 
+-- Ensure all business-owned operational records emit audit events. Existing
+-- audited tables are recreated with one AFTER trigger covering all mutations.
+DO $audit_triggers$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT c.relname AS table_name, t.tgname AS trigger_name
+    FROM pg_catalog.pg_trigger t
+    JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND NOT t.tgisinternal
+      AND t.tgfoid = 'public.audit_trigger_func()'::regprocedure
+      AND c.relname NOT IN ('audit_logs', 'notifications', 'sequences',
+                            'business_members', 'password_history',
+                            'password_reset_tokens', 'password_policy')
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns col
+        WHERE col.table_schema = 'public' AND col.table_name = c.relname
+          AND col.column_name = 'id'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns col
+        WHERE col.table_schema = 'public' AND col.table_name = c.relname
+          AND col.column_name = 'business_id'
+      )
+  LOOP
+    EXECUTE pg_catalog.format('DROP TRIGGER %I ON public.%I', r.trigger_name, r.table_name);
+  END LOOP;
+
+  FOR r IN
+    SELECT DISTINCT t.table_name
+    FROM information_schema.tables t
+    JOIN information_schema.columns id_col
+      ON id_col.table_schema = t.table_schema
+      AND id_col.table_name = t.table_name
+      AND id_col.column_name = 'id'
+    JOIN information_schema.columns business_col
+      ON business_col.table_schema = t.table_schema
+      AND business_col.table_name = t.table_name
+      AND business_col.column_name = 'business_id'
+    WHERE t.table_schema = 'public'
+      AND t.table_type = 'BASE TABLE'
+      AND t.table_name NOT IN ('audit_logs', 'notifications', 'sequences',
+                               'business_members', 'password_history',
+                               'password_reset_tokens', 'password_policy')
+  LOOP
+    EXECUTE pg_catalog.format(
+      'DROP TRIGGER IF EXISTS %I ON public.%I',
+      'audit_activity_' || r.table_name, r.table_name
+    );
+    EXECUTE pg_catalog.format(
+      'CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON public.%I ' ||
+      'FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func()',
+      'audit_activity_' || r.table_name, r.table_name
+    );
+  END LOOP;
+END;
+$audit_triggers$;
+
+-- Workspace creation is a project-level event and has no parent business_id.
+DROP TRIGGER IF EXISTS audit_activity_businesses ON public.businesses;
+CREATE TRIGGER audit_activity_businesses
+AFTER INSERT OR UPDATE OR DELETE ON public.businesses
+FOR EACH ROW EXECUTE FUNCTION public.audit_trigger_func();
+
 CREATE OR REPLACE FUNCTION public.notify_members_of_audit_activity()
 RETURNS trigger
 LANGUAGE plpgsql
