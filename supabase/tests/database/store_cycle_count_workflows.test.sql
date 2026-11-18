@@ -126,7 +126,8 @@ SET count_id = public.create_store_stock_count(
   state.location_id,
   'COUNT-TEST-001',
   'Blind cycle count test',
-  'e4000000-0000-4000-8000-000000000102'::uuid
+  'e4000000-0000-4000-8000-000000000102'::uuid,
+  ARRAY['e4000000-0000-4000-8000-000000000020'::uuid]
 );
 
 SELECT extensions.is(
@@ -220,6 +221,13 @@ SELECT extensions.is(
      AND product_id = 'e4000000-0000-4000-8000-000000000021'),
   6::numeric,
   'Uncounted SKUs remain available for normal stock movements during a cycle count'
+);
+
+SELECT extensions.is(
+  (SELECT stock_quantity FROM public.products
+   WHERE id = 'e4000000-0000-4000-8000-000000000021'),
+  6,
+  'Uncounted SKU business-wide stock is updated normally during the cycle count'
 );
 
 SELECT set_config(
