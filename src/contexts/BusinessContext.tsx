@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,7 @@ interface BusinessContextValue {
   activeBusiness: BusinessSummary | null;
   activeMembership: BusinessMembership | null;
   isLoading: boolean;
+  isSwitching: boolean;
   error: Error | null;
   switchBusiness: (businessId: string) => Promise<void>;
   refreshMemberships: () => Promise<void>;
@@ -34,6 +35,7 @@ const BusinessContext = createContext<BusinessContextValue | undefined>(undefine
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const membershipsQuery = useQuery({
     queryKey: ["business-memberships", user?.id],
@@ -99,20 +101,25 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       throw new Error("You are not an active member of that business.");
     }
 
-    const { error } = await supabase.functions.invoke("set-active-business", {
-      body: { businessId },
-    });
-    if (error) throw error;
+    setIsSwitching(true);
+    try {
+      const { error } = await supabase.functions.invoke("set-active-business", {
+        body: { businessId },
+      });
+      if (error) throw error;
 
-    // Cancel and clear all cached records before accepting the refreshed token.
-    // This prevents a previous business's query results from flashing after a switch.
-    await queryClient.cancelQueries();
-    queryClient.clear();
+      // Refresh the JWT before allowing any cached business query to run again.
+      // The layout remains covered while this happens, so old-business data cannot
+      // be displayed during the token transition.
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) throw refreshError;
 
-    const { error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError) throw refreshError;
-
-    await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
+    } finally {
+      setIsSwitching(false);
+    }
   }, [memberships, queryClient, user?.id]);
 
   const refreshMemberships = useCallback(async () => {
@@ -124,6 +131,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     activeBusiness,
     activeMembership,
     isLoading: authLoading || membershipsQuery.isLoading,
+    isSwitching,
     error: membershipsQuery.error instanceof Error ? membershipsQuery.error : null,
     switchBusiness,
     refreshMemberships,
@@ -132,6 +140,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     activeBusiness,
     activeMembership,
     authLoading,
+    isSwitching,
     membershipsQuery.isLoading,
     membershipsQuery.error,
     switchBusiness,
