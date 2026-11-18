@@ -32,12 +32,14 @@ jobs:
 
       - name: Assign isolated database ports
         run: |
-          # Avoid collisions with services prebound on GitHub-hosted runners.
-          cat >> supabase/config.toml <<'EOF'
+          # Select two currently free host ports instead of relying on fixed
+          # ports that may already be occupied by runner services.
+          read -r DB_PORT SHADOW_PORT < <(python -c 'import socket; sockets=[]; ports=[]; exec("for _ in range(2):\n s=socket.socket(); s.bind((\"127.0.0.1\", 0)); sockets.append(s); ports.append(s.getsockname()[1])"); print(*ports); [s.close() for s in sockets]')
+          cat >> supabase/config.toml <<EOF
 
           [db]
-          port = 55432
-          shadow_port = 55430
+          port = ${DB_PORT}
+          shadow_port = ${SHADOW_PORT}
           EOF
 
       - name: Start isolated local Supabase stack
