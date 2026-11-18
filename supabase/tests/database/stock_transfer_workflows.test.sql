@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(16);
+SELECT extensions.plan(17);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -56,6 +56,22 @@ INSERT INTO public.products (
   2, false, true
 );
 
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.store_locations
+   WHERE business_id = 'e3000000-0000-4000-8000-000000000010'
+     AND code IN ('MAIN', 'IN-TRANSIT')),
+  2,
+  'Every business has a main location and a dedicated in-transit location'
+);
+
+SELECT extensions.is(
+  (SELECT location_type FROM public.store_locations
+   WHERE business_id = 'e3000000-0000-4000-8000-000000000010'
+     AND code = 'IN-TRANSIT'),
+  'virtual',
+  'The in-transit location is virtual and cannot be selected as a physical source or destination'
+);
+
 CREATE TEMP TABLE store_transfer_test_state (
   transfer_id uuid,
   receipt_one_id uuid,
@@ -84,20 +100,18 @@ JOIN public.store_locations transit
 WHERE source.business_id = 'e3000000-0000-4000-8000-000000000010'
   AND source.is_default;
 
-INSERT INTO store_transfer_test_state (transfer_id)
-SELECT public.create_stock_transfer(
-  source_location_id,
-  destination_location_id,
+UPDATE store_transfer_test_state state
+SET transfer_id = public.create_stock_transfer(
+  state.source_location_id,
+  state.destination_location_id,
   'TR-TEST-001',
   'Transfer test with two-stage custody',
   jsonb_build_array(jsonb_build_object(
-    'product_id', product_id,
+    'product_id', state.product_id,
     'quantity', 4
   )),
   'e3000000-0000-4000-8000-000000000101'::uuid
-)
-FROM store_transfer_test_state
-LIMIT 1;
+);
 
 SELECT extensions.is(
   (SELECT public.create_stock_transfer(
@@ -161,16 +175,14 @@ SET transfer_line_id = (
   WHERE transfer_id = store_transfer_test_state.transfer_id
 );
 
-INSERT INTO store_transfer_test_state (receipt_one_id)
-SELECT public.receive_stock_transfer(
-  transfer_id,
+UPDATE store_transfer_test_state state
+SET receipt_one_id = public.receive_stock_transfer(
+  state.transfer_id,
   'TR-RECEIPT-001',
-  jsonb_build_array(jsonb_build_object('transfer_line_id', transfer_line_id, 'quantity', 2)),
+  jsonb_build_array(jsonb_build_object('transfer_line_id', state.transfer_line_id, 'quantity', 2)),
   'e3000000-0000-4000-8000-000000000103'::uuid,
   'First partial receipt'
-)
-FROM store_transfer_test_state
-LIMIT 1;
+);
 
 SELECT extensions.is(
   (SELECT public.receive_stock_transfer(
@@ -252,20 +264,18 @@ SELECT extensions.is(
   'Inter-location transfers do not change the business-wide product stock total'
 );
 
-INSERT INTO store_transfer_test_state (transfer_id)
-SELECT public.create_stock_transfer(
-  source_location_id,
-  destination_location_id,
+UPDATE store_transfer_test_state state
+SET transfer_id = public.create_stock_transfer(
+  state.source_location_id,
+  state.destination_location_id,
   'TR-TEST-002',
   'Insufficient stock test',
-  jsonb_build_array(jsonb_build_object('product_id', product_id, 'quantity', 7)),
+  jsonb_build_array(jsonb_build_object('product_id', state.product_id, 'quantity', 7)),
   'e3000000-0000-4000-8000-000000000105'::uuid
-)
-FROM store_transfer_test_state
-LIMIT 1;
+);
 
 SELECT public.approve_stock_transfer(
-  (SELECT transfer_id FROM store_transfer_test_state ORDER BY transfer_id DESC LIMIT 1)
+  (SELECT transfer_id FROM store_transfer_test_state LIMIT 1)
 );
 
 SELECT extensions.throws_ok(
@@ -278,9 +288,18 @@ SELECT extensions.throws_ok(
   format(
     'Insufficient available stock for transfer line %s',
     (SELECT id FROM public.stock_transfer_lines
-     WHERE transfer_id = (SELECT transfer_id FROM store_transfer_test_state ORDER BY transfer_id DESC LIMIT 1))
+     WHERE transfer_id = (SELECT transfer_id FROM store_transfer_test_state LIMIT 1))
   ),
   'Dispatch rejects a transfer that exceeds source available stock'
+);
+
+SELECT extensions.is(
+  (SELECT sb.on_hand FROM public.stock_balances sb
+   WHERE sb.business_id = 'e3000000-0000-4000-8000-000000000010'
+     AND sb.location_id = (SELECT source_location_id FROM store_transfer_test_state)
+     AND sb.product_id = (SELECT product_id FROM store_transfer_test_state)),
+  6::numeric,
+  'A failed over-capacity dispatch leaves source stock unchanged'
 );
 
 SELECT * FROM extensions.finish();
