@@ -208,6 +208,11 @@ CREATE POLICY "Authenticated users can insert own audit logs"
 
 GRANT SELECT, UPDATE ON public.notifications TO authenticated;
 
+-- Normalize legacy rows so the unread counter has one unambiguous state.
+UPDATE public.notifications SET is_read = false WHERE is_read IS NULL;
+ALTER TABLE public.notifications ALTER COLUMN is_read SET DEFAULT false;
+ALTER TABLE public.notifications ALTER COLUMN is_read SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_notifications_user_created_at
   ON public.notifications (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread_created_at
