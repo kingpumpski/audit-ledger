@@ -3,12 +3,14 @@ import { useSidebarState } from '@/contexts/SidebarContext';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSidebarItems } from '@/config/sidebarConfig';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Button } from '@/components/ui/button';
 import { FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export function AppSidebar() {
   const { collapsed: isCollapsed, setCollapsed: setIsCollapsed, mobileOpen, setMobileOpen } = useSidebarState();
-  const { roles, userPersona } = useAuth();
+  const { userPersona } = useAuth();
+  const roles = useEffectiveRoles();
 
   const handleToggle = () => {
     setIsCollapsed(!isCollapsed);
