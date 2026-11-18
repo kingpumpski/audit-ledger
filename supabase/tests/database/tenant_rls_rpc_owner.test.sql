@@ -1,7 +1,26 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(22);
+SELECT extensions.plan(23);
+
+CREATE OR REPLACE FUNCTION public.test_rpc_owner_event_trigger_guard()
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $test_rpc_owner_event_trigger_guard$
+  SELECT 1;
+$test_rpc_owner_event_trigger_guard$;
+
+SELECT extensions.ok(
+  (SELECT p.proowner = 'audit_ledger_rpc_owner'::regrole
+          AND p.proconfig @> ARRAY['row_security=on']
+   FROM pg_catalog.pg_proc p
+   WHERE p.oid = 'public.test_rpc_owner_event_trigger_guard()'::regprocedure),
+  'future SECURITY DEFINER functions are safely reassigned with row security enabled'
+);
+
+DROP FUNCTION public.test_rpc_owner_event_trigger_guard();
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
