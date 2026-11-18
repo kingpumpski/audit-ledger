@@ -620,12 +620,7 @@ BEGIN
 END;
 $transfer_definers$;
 
--- The function-owner role must be able to resolve the signed JWT helpers.
--- Keep auth schema usage explicit rather than relying on platform defaults.
-GRANT USAGE ON SCHEMA auth TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.jwt() TO authenticated, service_role, audit_ledger_rpc_owner;
-GRANT EXECUTE ON FUNCTION auth.role() TO authenticated, service_role, audit_ledger_rpc_owner;
+-- Auth schema/function privileges are inherited from authenticated membership.
 
 -- Future SECURITY DEFINER routines are automatically assigned the same
 -- constrained owner after creation/replacement.
