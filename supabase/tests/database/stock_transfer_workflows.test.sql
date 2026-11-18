@@ -60,8 +60,27 @@ INSERT INTO public.products (
 ) VALUES (
   'e3000000-0000-4000-8000-000000000020',
   'e3000000-0000-4000-8000-000000000010',
-  'TRANSFER-TEST-001', 'Transfer Test Item', 10.00, 10,
+  'TRANSFER-TEST-001', 'Transfer Test Item', 10.00, 0,
   2, false, true
+);
+
+-- Seed the fixture through the same audited purchase movement contract used
+-- by the application; the product opening-stock guard remains enabled.
+SELECT set_config('app.stock_purchase_rpc', 'on', true);
+UPDATE public.products
+SET stock_quantity = 10, cost_price = 5.00, cost_price_verified = true
+WHERE id = 'e3000000-0000-4000-8000-000000000020';
+
+INSERT INTO public.inventory_transactions (
+  product_id, type, quantity, previous_quantity, new_quantity,
+  unit_cost, total_cost, reference_type, reference_number,
+  performed_by, idempotency_key
+) VALUES (
+  'e3000000-0000-4000-8000-000000000020',
+  'purchase', 10, 0, 10, 5.00, 50.00,
+  'stock_transfer_test', 'TR-OPENING-001',
+  'e3000000-0000-4000-8000-000000000001',
+  'e3000000-0000-4000-8000-000000000107'
 );
 
 SELECT extensions.is(
