@@ -85,9 +85,8 @@ All new business-owned tables carry business_id NOT NULL, use tenant-consistent 
 
 ### Stock ledger and balances
 
-- stock_movements: immutable event header with business, movement type, source document, effective date, idempotency key, actor, approval, reason, and reversal link.
-- stock_movement_lines: product, from/to location/bin, signed quantity, unit cost snapshot, lot/serial references, and source line.
-- stock_balances: transactionally maintained projection keyed by business + location + product + optional lot/bin. Include on-hand, reserved, and available quantities.
+- Canonical movement ledger: first evaluate extending the existing append-only inventory_transactions table with location, source document, movement group, from/to location, lot/bin, signed quantity, approval, and reversal references. Do not create a second independent movement ledger. If a normalized movement header/lines model is required for transfers and multi-line documents, inventory_transactions must remain a compatibility view or be migrated with a reconciled, one-way source-of-truth cutover.
+- stock_balances: transactionally maintained projection keyed by business + location + product + optional lot/bin. Include on-hand, reserved, and available quantities. Reconcile this projection against the existing product stock_quantity before switching reads or writes.
 - stock_reservations: order/sale allocation, quantity, expiry, release/consume state.
 - stock_lots and stock_serials: optional traceability records with supplier lot, manufacture/expiry dates, serial state, and recall status.
 - stock_cost_layers or equivalent cost-history records: immutable receipts/cost layers to support weighted average initially and FIFO where explicitly enabled.
@@ -126,7 +125,7 @@ For each product and location:
 - On order = approved PO quantity not yet received.
 - In transit = dispatched transfer quantity not yet received.
 
-All quantities use fixed precision suitable for fractional units; do not assume integer units.
+All new quantity calculations use fixed precision suitable for fractional units. The existing products.stock_quantity and inventory_transactions.quantity are integer-based in the current schema, and existing stock RPCs accept integer quantities; a deliberate compatibility migration and RPC/test update is required before fractional units can be enabled. Do not mix integer and decimal paths.
 
 ### Replenishment and reorder calculation
 
@@ -196,7 +195,7 @@ Every posted operation must produce a balanced, source-linked journal where fina
 - No production schema or data changes.
 
 ### Phase 1 — location-aware stock foundation
-- Add locations, bins, product-location settings, movement ledger, balance projection, and safe backfill from current product stock/movement history.
+- Add locations, bins, product-location settings, extend or formally replace the existing inventory_transactions ledger, and add a balance projection. Backfill must start from an explicitly evidenced opening balance and reconcile all existing movement history; never replay historical stock changes into a second ledger without deduplication.
 - Provide reconciliation report proving legacy product stock equals sum of new location balances before enabling the new source of truth.
 - Add concurrency, tenant isolation, idempotency, fractional quantity, and migration replay tests.
 - Keep one default location per existing business for compatibility.
