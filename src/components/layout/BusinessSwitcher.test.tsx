@@ -71,7 +71,7 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
     expect(await screen.findByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
     fireEvent.click(await screen.findByText("Market Stall"));
@@ -93,7 +93,7 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
     await screen.findByText("Switch business");
     fireEvent.click(await screen.findByText("Market Stall"));
 
@@ -118,7 +118,7 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Choose a business workspace",
     });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
     expect(await screen.findByText("Switch business")).toBeTruthy();
     fireEvent.click(await screen.findByText("Market Stall"));
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
