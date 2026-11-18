@@ -91,7 +91,7 @@ $assign_user_role$;
 REVOKE ALL ON FUNCTION public.assign_user_role(uuid, public.app_role, uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.assign_user_role(uuid, public.app_role, uuid)
-  TO authenticated;
+  TO authenticated, service_role;
 
 -- Ensure all business-owned operational records emit audit events. Existing
 -- audited tables are recreated with one AFTER trigger covering all mutations.
