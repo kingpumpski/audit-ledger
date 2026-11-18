@@ -19,6 +19,7 @@ describe('persona sidebar configuration', () => {
       'Discounts',
       'Reports',
       'Audit Logs',
+      'Business Members',
     ]);
 
     expect(simplifiedSidebarItems.map((item) => item.name)).toEqual([
@@ -33,6 +34,7 @@ describe('persona sidebar configuration', () => {
       'Discounts',
       'Business Reports',
       'Activity History',
+      'Business Members',
     ]);
   });
 
