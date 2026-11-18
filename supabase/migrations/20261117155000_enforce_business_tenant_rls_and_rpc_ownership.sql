@@ -64,6 +64,9 @@ AS $rpc_auth_user_email$
   SELECT u.email::text FROM auth.users u WHERE u.id = p_user_id;
 $rpc_auth_user_email$;
 
+-- These SECURITY DEFINER helpers are internal capabilities, not public RPCs.
+REVOKE ALL ON FUNCTION public.rpc_auth_user_exists(uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.rpc_auth_user_email(uuid) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.rpc_auth_user_exists(uuid) TO audit_ledger_rpc_owner;
 GRANT EXECUTE ON FUNCTION public.rpc_auth_user_email(uuid) TO audit_ledger_rpc_owner;
 
