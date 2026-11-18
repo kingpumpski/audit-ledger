@@ -3,6 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
+import { BusinessSwitcher } from '@/components/layout/BusinessSwitcher';
 import { Loader2 } from 'lucide-react';
 
 type AppRole = 'admin' | 'accountant' | 'cashier' | 'auditor';
@@ -19,7 +20,7 @@ export function ProtectedRoute({
   requireAnyRole = true 
 }: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
-  const { isLoading: businessLoading } = useBusiness();
+  const { memberships, activeMembership, isLoading: businessLoading } = useBusiness();
   const roles = useEffectiveRoles();
   const location = useLocation();
 
@@ -36,6 +37,20 @@ export function ProtectedRoute({
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (memberships.length > 1 && !activeMembership) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4">
+        <section className="w-full max-w-lg space-y-4 rounded-xl border bg-card p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Choose a business workspace</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account belongs to more than one business. Select which business you want to work in before continuing.
+          </p>
+          <BusinessSwitcher />
+        </section>
+      </main>
+    );
   }
 
   // Check if user has any role (is an employee)
