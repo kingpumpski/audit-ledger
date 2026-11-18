@@ -1,7 +1,7 @@
 import { csvCell } from '@/lib/reset-monitoring';
 import { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,7 +90,7 @@ export default function Accounting() {
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canReversePettyCash = roles.includes('admin') || roles.includes('accountant');
 
   useEffect(() => {
