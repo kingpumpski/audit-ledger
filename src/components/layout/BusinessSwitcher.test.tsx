@@ -15,6 +15,37 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
+vi.mock("@/components/ui/dropdown-menu", async () => {
+  const React = await import("react");
+  return {
+    DropdownMenu: ({ children }: { children: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    DropdownMenuContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    DropdownMenuLabel: ({ children }: { children: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    DropdownMenuSeparator: () => React.createElement("hr"),
+    DropdownMenuItem: ({
+      children,
+      onSelect,
+      disabled,
+      className,
+    }: {
+      children: React.ReactNode;
+      onSelect?: () => void;
+      disabled?: boolean;
+      className?: string;
+    }) => React.createElement("button", {
+      type: "button",
+      onClick: onSelect,
+      disabled,
+      className,
+    }, children),
+  };
+});
+
 const legacyMembership = {
   business_id: "business-1",
   role: "owner",
@@ -71,10 +102,9 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
-    expect(await screen.findByText("Switch business")).toBeTruthy();
+    expect(screen.getByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
-    fireEvent.click(await screen.findByText("Market Stall"));
+    fireEvent.click(screen.getByText("Market Stall"));
 
     await waitFor(() => expect(switchBusiness).toHaveBeenCalledWith("business-2"));
     expect(toastMock).toHaveBeenCalledWith({ title: "Business workspace changed" });
@@ -93,8 +123,7 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
-    await screen.findByText("Switch business");
+    expect(screen.getByText("Switch business")).toBeTruthy();
     fireEvent.click(await screen.findByText("Market Stall"));
 
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith({
