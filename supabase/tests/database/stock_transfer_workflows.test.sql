@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(20);
+SELECT extensions.plan(21);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -9,6 +9,10 @@ INSERT INTO auth.users (
   'e3000000-0000-4000-8000-000000000001',
   'authenticated', 'authenticated',
   'store-transfer-owner@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb
+), (
+  'e3000000-0000-4000-8000-000000000002',
+  'authenticated', 'authenticated',
+  'store-transfer-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb
 );
 
 INSERT INTO public.businesses (
@@ -23,6 +27,10 @@ VALUES (
   'e3000000-0000-4000-8000-000000000010',
   'e3000000-0000-4000-8000-000000000001',
   'owner', 'active', now()
+), (
+  'e3000000-0000-4000-8000-000000000010',
+  'e3000000-0000-4000-8000-000000000002',
+  'cashier', 'active', now()
 );
 
 SELECT set_config(
@@ -134,6 +142,43 @@ SELECT extensions.is(
   'draft',
   'A new transfer begins in draft status'
 );
+
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'e3000000-0000-4000-8000-000000000002',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', 'e3000000-0000-4000-8000-000000000010'
+    )
+  )::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'e3000000-0000-4000-8000-000000000002', true);
+
+SELECT extensions.throws_ok(
+  format(
+    'SELECT public.approve_stock_transfer(%L::uuid)',
+    (SELECT transfer_id FROM store_transfer_test_state LIMIT 1)
+  ),
+  '42501',
+  'Only a business owner, administrator or accountant can approve stock transfers',
+  'A cashier can create/dispatch an approved transfer but cannot approve it'
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'e3000000-0000-4000-8000-000000000001',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', 'e3000000-0000-4000-8000-000000000010'
+    )
+  )::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'e3000000-0000-4000-8000-000000000001', true);
 
 SELECT public.approve_stock_transfer(
   (SELECT transfer_id FROM store_transfer_test_state LIMIT 1)
