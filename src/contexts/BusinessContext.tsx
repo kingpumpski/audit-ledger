@@ -25,6 +25,7 @@ interface BusinessContextValue {
   activeMembership: BusinessMembership | null;
   isLoading: boolean;
   isSwitching: boolean;
+  switchError: string | null;
   error: Error | null;
   switchBusiness: (businessId: string) => Promise<void>;
   refreshMemberships: () => Promise<void>;
@@ -36,6 +37,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [isSwitching, setIsSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   const membershipsQuery = useQuery({
     queryKey: ["business-memberships", user?.id],
@@ -102,23 +104,32 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsSwitching(true);
+    setSwitchError(null);
+    let serverClaimChanged = false;
     try {
       const { error } = await supabase.functions.invoke("set-active-business", {
         body: { businessId },
       });
       if (error) throw error;
+      serverClaimChanged = true;
 
       // Refresh the JWT before allowing any cached business query to run again.
-      // The layout remains covered while this happens, so old-business data cannot
-      // be displayed during the token transition.
+      // If refresh fails after the server changed the claim, keep the app blocked:
+      // resuming with the old token could expose data from the previous workspace.
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError) throw refreshError;
 
       await queryClient.cancelQueries();
       queryClient.clear();
       await queryClient.invalidateQueries({ queryKey: ["business-memberships", user?.id] });
-    } finally {
       setIsSwitching(false);
+    } catch (error) {
+      if (serverClaimChanged) {
+        setSwitchError("Your business claim changed, but the secure session could not be refreshed. Sign out and sign in again before continuing.");
+      } else {
+        setIsSwitching(false);
+      }
+      throw error;
     }
   }, [memberships, queryClient, user?.id]);
 
@@ -132,6 +143,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     activeMembership,
     isLoading: authLoading || membershipsQuery.isLoading,
     isSwitching,
+    switchError,
     error: membershipsQuery.error instanceof Error ? membershipsQuery.error : null,
     switchBusiness,
     refreshMemberships,
@@ -141,6 +153,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     activeMembership,
     authLoading,
     isSwitching,
+    switchError,
     membershipsQuery.isLoading,
     membershipsQuery.error,
     switchBusiness,
