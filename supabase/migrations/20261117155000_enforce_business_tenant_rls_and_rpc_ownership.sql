@@ -284,7 +284,7 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  SELECT count(*)::integer, min(bm.business_id)
+  SELECT count(*)::integer, (pg_catalog.array_agg(bm.business_id ORDER BY bm.business_id))[1]
     INTO v_membership_count, v_resolved_business_id
   FROM public.business_members bm
   WHERE bm.user_id = auth.uid()
@@ -559,12 +559,22 @@ $rpc_policies$;
 DROP POLICY IF EXISTS businesses_select_members ON public.businesses;
 CREATE POLICY businesses_select_members
   ON public.businesses FOR SELECT TO authenticated
-  USING (current_user <> 'audit_ledger_rpc_owner' AND public.is_business_member(id));
+  USING (
+    CASE
+      WHEN current_user = 'audit_ledger_rpc_owner' THEN true
+      ELSE public.is_business_member(id)
+    END
+  );
 
 DROP POLICY IF EXISTS business_members_select_members ON public.business_members;
 CREATE POLICY business_members_select_members
   ON public.business_members FOR SELECT TO authenticated
-  USING (current_user <> 'audit_ledger_rpc_owner' AND public.is_business_member(business_id));
+  USING (
+    CASE
+      WHEN current_user = 'audit_ledger_rpc_owner' THEN true
+      ELSE public.is_business_member(business_id)
+    END
+  );
 
 -- The event trigger continues to enable RLS on future public tables and also
 -- provisions the RPC-owner policy plus a tenant guard whenever business_id is
