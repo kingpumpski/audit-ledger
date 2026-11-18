@@ -537,7 +537,7 @@ BEGIN
     ) INTO v_has_business_id;
 
     IF v_has_business_id
-       AND v_table.relname NOT IN ('business_members','business_invitations')
+       AND v_table.relname NOT IN ('business_members','business_invitations','notifications')
        AND NOT EXISTS (
          SELECT 1 FROM pg_catalog.pg_policies p
          WHERE p.schemaname='public'
@@ -552,6 +552,11 @@ BEGIN
   END LOOP;
 END;
 $rpc_policies$;
+
+-- Notifications are user-owned fan-out records. Their recipient/workspace RLS
+-- policies below are the authoritative boundary; a generic current-business
+-- restriction would block trusted triggers that notify every active member.
+DROP POLICY IF EXISTS tenant_business_scope ON public.notifications;
 
 -- The constrained owner inherits authenticated privileges to call Supabase
 -- Auth helpers. Prevent authenticated membership policies from recursively
@@ -624,7 +629,7 @@ BEGIN
             AND NOT a.attisdropped
         ) INTO v_has_business_id;
 
-        IF v_has_business_id AND v_table NOT IN ('business_members','business_invitations') THEN
+        IF v_has_business_id AND v_table NOT IN ('business_members','business_invitations','notifications') THEN
           EXECUTE pg_catalog.format(
             'CREATE POLICY tenant_business_scope ON %I.%I AS RESTRICTIVE FOR ALL TO public USING (business_id IS NULL OR (business_id = public.current_business_id() AND public.can_access_business(business_id))) WITH CHECK (business_id IS NULL OR (business_id = public.current_business_id() AND public.can_access_business(business_id)))',
             cmd.schema_name,
