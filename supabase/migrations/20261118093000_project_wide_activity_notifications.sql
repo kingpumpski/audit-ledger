@@ -88,8 +88,8 @@ BEGIN
     WHEN 'receipts' THEN '/receipts'
     WHEN 'customers' THEN '/customers'
     WHEN 'products' THEN '/products'
-    WHEN 'operating_expenses' THEN '/accounting/expenses'
-    WHEN 'journal_entries' THEN '/accounting/general-ledger'
+    WHEN 'operating_expenses' THEN '/accounting'
+    WHEN 'journal_entries' THEN '/accounting'
     ELSE '/notifications'
   END;
 
