@@ -133,13 +133,7 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM auth.users u
-    WHERE u.id = v_user_id
-      AND lower(u.email) = v_email
-      AND u.email_confirmed_at IS NOT NULL
-  ) THEN
+  IF NOT public.rpc_auth_user_email_confirmed(v_user_id, v_email) THEN
     RAISE EXCEPTION 'Confirm the invited email address before accepting this invitation'
       USING ERRCODE = '42501';
   END IF;
@@ -244,15 +238,14 @@ BEGIN
   INSERT INTO public.audit_logs (
     user_id, user_email, action, entity_type, entity_id, old_data, new_data, metadata, business_id
   )
-  SELECT
-    v_user_id, u.email, 'update'::public.audit_action, 'business_invitation',
-    v_invitation.id,
+  VALUES (
+    v_user_id, public.rpc_auth_user_email(v_user_id), 'update'::public.audit_action,
+    'business_invitation', v_invitation.id,
     pg_catalog.jsonb_build_object('status', 'pending', 'email', v_invitation.email, 'role', v_invitation.role),
     pg_catalog.jsonb_build_object('status', 'revoked'),
     pg_catalog.jsonb_build_object('business_id', v_invitation.business_id),
     NULL
-  FROM auth.users u
-  WHERE u.id = v_user_id;
+  );
 
   RETURN true;
 END;
@@ -277,14 +270,13 @@ AS $get_business_members$
   SELECT
     bm.id,
     bm.user_id,
-    u.email::text,
-    COALESCE(p.full_name, u.raw_user_meta_data ->> 'full_name')::text,
+    public.rpc_auth_user_email(bm.user_id),
+    COALESCE(p.full_name, public.rpc_auth_user_full_name(bm.user_id))::text,
     bm.role,
     bm.status,
     bm.joined_at,
     bm.created_at
   FROM public.business_members bm
-  JOIN auth.users u ON u.id = bm.user_id
   LEFT JOIN public.profiles p ON p.id = bm.user_id
   WHERE bm.business_id = p_business_id
     AND public.has_business_role(p_business_id, ARRAY['owner', 'admin']::text[])
