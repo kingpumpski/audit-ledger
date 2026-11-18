@@ -96,11 +96,11 @@ SELECT set_config(
 SET LOCAL ROLE authenticated;
 
 SELECT extensions.lives_ok(
-  $ SELECT public.assign_user_role(
+  $assign_role_test$ SELECT public.assign_user_role(
     'e2000000-0000-4000-8000-000000000002',
     'accountant'::public.app_role,
     'e2000000-0000-4000-8000-000000000001'
-  ); $,
+  ); $assign_role_test$,
   'administrator role assignment succeeds through the guarded RPC'
 );
 
