@@ -126,11 +126,17 @@ export function useNotificationFeed() {
 
   const markAllRead = useCallback(async () => {
     if (!user) return;
-    const { error } = await supabase
+    let query = supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('user_id', user.id)
       .eq('is_read', false);
+
+    query = businessId
+      ? query.or(`business_id.eq.${businessId},business_id.is.null`)
+      : query.is('business_id', null);
+
+    const { error } = await query;
     if (error) throw error;
     refresh();
   }, [refresh, user]);
