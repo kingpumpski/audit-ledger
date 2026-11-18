@@ -70,6 +70,7 @@ SELECT set_config('app.stock_purchase_rpc', 'on', true);
 UPDATE public.products
 SET stock_quantity = 10, cost_price = 5.00, cost_price_verified = true
 WHERE id = 'e3000000-0000-4000-8000-000000000020';
+SELECT set_config('app.stock_purchase_rpc', 'off', true);
 
 INSERT INTO public.inventory_transactions (
   product_id, type, quantity, previous_quantity, new_quantity,
