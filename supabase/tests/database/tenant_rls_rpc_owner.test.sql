@@ -166,7 +166,7 @@ SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000001
 
 WITH inserted AS (
   INSERT INTO public.customers (code, name)
-  VALUES ('TENANT-CUSTOMER', 'Tenant A Customer')
+  VALUES ('TENANT-A-CUSTOMER', 'Tenant A Customer')
   RETURNING id
 )
 SELECT set_config('test.customer_a', (SELECT id::text FROM inserted), true);
@@ -180,7 +180,7 @@ SELECT set_config(
 
 WITH inserted AS (
   INSERT INTO public.customers (code, name)
-  VALUES ('TENANT-CUSTOMER', 'Tenant B Customer')
+  VALUES ('TENANT-B-CUSTOMER', 'Tenant B Customer')
   RETURNING id
 )
 SELECT set_config('test.customer_b', (SELECT id::text FROM inserted), true);
