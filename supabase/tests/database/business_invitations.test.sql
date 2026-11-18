@@ -95,7 +95,7 @@ INSERT INTO public.business_invitations (
    now() + interval '1 hour'),
   ('c1000000-0000-4000-8000-000000000022',
    'c1000000-0000-4000-8000-000000000010',
-   'auditor',
+   'invitation-member@example.invalid', 'auditor',
    'c1000000-0000-4000-8000-000000000001',
    'c1000000-0000-4000-8000-000000000002',
    now() - interval '1 minute');
