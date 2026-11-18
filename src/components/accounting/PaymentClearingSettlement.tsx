@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ const money = (value: number, currency: string) =>
 export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { roles } = useAuth();
+  const roles = useEffectiveRoles();
   const canSettle = roles.includes('admin') || roles.includes('accountant');
   // Reuse the same key until the server confirms success. If the response is
   // lost after the database commits, retrying the same form is idempotent.
