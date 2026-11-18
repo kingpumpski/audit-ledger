@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(21);
+SELECT extensions.plan(22);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -37,6 +37,16 @@ SELECT extensions.ok(
 SELECT extensions.ok(
   has_function_privilege('audit_ledger_rpc_owner', 'auth.uid()', 'EXECUTE'),
   'constrained RPC owner can execute auth.uid()'
+);
+
+SELECT extensions.ok(
+  has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
+  AND has_function_privilege('audit_ledger_rpc_owner', 'public.rpc_auth_user_email(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('authenticated', 'public.rpc_auth_user_email(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_exists(uuid)', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.rpc_auth_user_email(uuid)', 'EXECUTE'),
+  'Auth lookup helpers are executable only by the constrained RPC owner'
 );
 
 SELECT extensions.ok(
