@@ -72,8 +72,6 @@ describe("BusinessSwitcher", () => {
       name: "Active business: Legacy Workspace. Switch business",
     });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
-    await screen.findByText("Switch business");
-
     expect(await screen.findByText("Switch business")).toBeTruthy();
     expect(screen.getByText("Market Stall")).toBeTruthy();
     fireEvent.click(await screen.findByText("Market Stall"));
@@ -95,7 +93,8 @@ describe("BusinessSwitcher", () => {
     const trigger = screen.getByRole("button", {
       name: "Active business: Legacy Workspace. Switch business",
     });
-    fireEvent.click(trigger);
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" });
+    await screen.findByText("Switch business");
     fireEvent.click(await screen.findByText("Market Stall"));
 
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith({
