@@ -137,6 +137,15 @@ CREATE TRIGGER seed_business_chart_accounts_after_owner_membership
   WHEN (NEW.role = 'owner' AND NEW.status = 'active')
   EXECUTE FUNCTION app_private.seed_business_chart_accounts_after_owner_membership();
 
+-- Avoid flooding the new workspace with one notification per seeded account;
+-- the account-level audit log entries are still retained.
+DROP TRIGGER IF EXISTS notify_members_after_audit_log_insert ON public.audit_logs;
+CREATE TRIGGER notify_members_after_audit_log_insert
+  AFTER INSERT ON public.audit_logs
+  FOR EACH ROW
+  WHEN (current_setting('app.seed_business_chart_accounts', true) IS DISTINCT FROM 'on')
+  EXECUTE FUNCTION public.notify_members_of_audit_activity();
+
 -- Backfill businesses created before this migration that have no chart yet.
 DO $seed_existing_businesses$
 DECLARE
@@ -155,15 +164,6 @@ BEGIN
   END LOOP;
 END;
 $seed_existing_businesses$;
-
--- Avoid flooding the new workspace with one notification per seeded account;
--- the account-level audit log entries are still retained.
-DROP TRIGGER IF EXISTS notify_members_after_audit_log_insert ON public.audit_logs;
-CREATE TRIGGER notify_members_after_audit_log_insert
-  AFTER INSERT ON public.audit_logs
-  FOR EACH ROW
-  WHEN (current_setting('app.seed_business_chart_accounts', true) IS DISTINCT FROM 'on')
-  EXECUTE FUNCTION public.notify_members_of_audit_activity();
 
 NOTIFY pgrst, 'reload schema';
 COMMIT;
