@@ -60,9 +60,12 @@ CREATE TABLE public.stock_transfers (
   created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   approved_by uuid REFERENCES auth.users(id) ON DELETE RESTRICT,
   dispatched_by uuid REFERENCES auth.users(id) ON DELETE RESTRICT,
+  canceled_by uuid REFERENCES auth.users(id) ON DELETE RESTRICT,
+  cancellation_reason text,
   created_at timestamptz NOT NULL DEFAULT now(),
   approved_at timestamptz,
   dispatched_at timestamptz,
+  canceled_at timestamptz,
   completed_at timestamptz,
   CONSTRAINT stock_transfers_reference_nonblank CHECK (length(btrim(reference_number)) > 0),
   CONSTRAINT stock_transfers_distinct_locations CHECK (
@@ -97,6 +100,8 @@ CREATE INDEX idx_stock_transfers_approved_by
   ON public.stock_transfers (approved_by);
 CREATE INDEX idx_stock_transfers_dispatched_by
   ON public.stock_transfers (dispatched_by);
+CREATE INDEX idx_stock_transfers_canceled_by
+  ON public.stock_transfers (canceled_by);
 
 CREATE TABLE public.stock_transfer_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -398,6 +403,54 @@ BEGIN
 END;
 $approve_stock_transfer$;
 
+
+CREATE OR REPLACE FUNCTION public.cancel_stock_transfer(
+  p_transfer_id uuid,
+  p_reason text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $cancel_stock_transfer$
+DECLARE
+  v_business_id uuid := public.current_business_id();
+  v_transfer public.stock_transfers%ROWTYPE;
+BEGIN
+  IF auth.uid() IS NULL OR v_business_id IS NULL
+     OR NOT public.has_business_role(v_business_id, ARRAY['owner', 'admin', 'accountant']) THEN
+    RAISE EXCEPTION 'Only a business owner, administrator or accountant can cancel stock transfers'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NULLIF(btrim(p_reason), '') IS NULL THEN
+    RAISE EXCEPTION 'A cancellation reason is required' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_transfer
+  FROM public.stock_transfers
+  WHERE id = p_transfer_id AND business_id = v_business_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Stock transfer was not found';
+  END IF;
+  IF v_transfer.status = 'canceled' THEN
+    RETURN v_transfer.id;
+  END IF;
+  IF v_transfer.status NOT IN ('draft', 'approved') THEN
+    RAISE EXCEPTION 'A dispatched stock transfer cannot be canceled; reconcile its in-transit stock first';
+  END IF;
+
+  UPDATE public.stock_transfers
+  SET status = 'canceled',
+      canceled_by = auth.uid(),
+      canceled_at = now(),
+      cancellation_reason = btrim(p_reason)
+  WHERE id = v_transfer.id;
+
+  RETURN v_transfer.id;
+END;
+$cancel_stock_transfer$;
+
 CREATE OR REPLACE FUNCTION public.dispatch_stock_transfer(
   p_transfer_id uuid,
   p_idempotency_key uuid
@@ -696,6 +749,10 @@ GRANT EXECUTE ON FUNCTION public.create_stock_transfer(uuid, uuid, text, text, j
 REVOKE ALL ON FUNCTION public.approve_stock_transfer(uuid)
   FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.approve_stock_transfer(uuid)
+  TO authenticated;
+REVOKE ALL ON FUNCTION public.cancel_stock_transfer(uuid, text)
+  FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.cancel_stock_transfer(uuid, text)
   TO authenticated;
 REVOKE ALL ON FUNCTION public.dispatch_stock_transfer(uuid, uuid)
   FROM PUBLIC, anon, service_role;
