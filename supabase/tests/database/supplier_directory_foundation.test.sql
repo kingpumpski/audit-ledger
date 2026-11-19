@@ -24,7 +24,9 @@ INSERT INTO public.store_locations (
 ) VALUES
   ('e6000000-0000-4000-8000-000000000010', 'MAIN', 'Supplier Test One', 'store', 'Africa/Accra', true, true),
   ('e6000000-0000-4000-8000-000000000020', 'MAIN', 'Supplier Test Two', 'store', 'Africa/Accra', true, true)
-ON CONFLICT (business_id, code) DO NOTHING;
+ON CONFLICT (business_id, code) DO UPDATE
+SET is_default = true,
+    is_active = true;
 
 INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
 VALUES
