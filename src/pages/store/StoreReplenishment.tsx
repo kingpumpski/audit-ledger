@@ -13,6 +13,7 @@ import { useBusiness } from '@/contexts/BusinessContext';
 import { useStoreInventoryData } from '@/hooks/useStoreInventoryData';
 import { supabase } from '@/integrations/supabase/client';
 import { isPhysicalStoreLocation } from '@/lib/store-stock-availability';
+import { calculateMinMaxReplenishment } from '@/lib/inventory-planning';
 
 const quantity = (value: number) => new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 3,
@@ -90,21 +91,25 @@ export default function StoreReplenishment() {
         const setting = settingsByKey.get(`${balance.location_id}:${balance.product_id}`);
         const inbound = incoming.get(`${balance.location_id}:${balance.product_id}`) ?? 0;
         const reorderPoint = Number(setting?.reorder_point ?? product?.min_stock_level ?? 0);
-        const inventoryPosition = Number(balance.available_quantity) + inbound;
         const target = setting?.target_quantity === null || setting?.target_quantity === undefined
           ? null
           : Number(setting.target_quantity);
+        const plan = calculateMinMaxReplenishment({
+          available: Number(balance.available_quantity),
+          incoming: inbound,
+          reorderPoint,
+          targetStock: target,
+        });
         const needsReorder = Boolean(
           product && product.is_service !== true && product.is_active !== false
           && location?.is_active && isPhysicalStoreLocation(location.location_type)
           && setting?.is_active !== false
           && setting?.replenishment_method !== 'manual'
-          && inventoryPosition <= reorderPoint,
+          && plan.shouldReorder,
         );
-        const targetConfigured = target !== null && target > reorderPoint;
-        const suggestedQuantity = needsReorder && targetConfigured
-          ? Math.max(0, Number((target - inventoryPosition).toFixed(3)))
-          : 0;
+        const inventoryPosition = plan.inventoryPosition;
+        const targetConfigured = plan.targetConfigured;
+        const suggestedQuantity = plan.suggestedQuantity;
         return {
           id: balance.id,
           product,
