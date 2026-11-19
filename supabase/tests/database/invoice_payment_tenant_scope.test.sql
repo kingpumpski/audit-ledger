@@ -64,15 +64,15 @@ SELECT set_config(
 );
 
 SELECT extensions.lives_ok(
-  $ INSERT INTO public.customers(id,code,name,business_id)
+  $insert$ INSERT INTO public.customers(id,code,name,business_id)
      VALUES ('15000000-0000-4000-8000-000000000031',
        'INV-TENANT-A-CUSTOMER','Invoice tenant B customer',
-       '15000000-0000-4000-8000-000000000020') $,
+       '15000000-0000-4000-8000-000000000020') $insert$,
   'Customer codes can be reused in a different business'
 );
 
 SELECT extensions.lives_ok(
-  $ INSERT INTO public.invoices(
+  $insert$ INSERT INTO public.invoices(
        id,invoice_number,customer_id,business_id,status,issue_date,
        subtotal,tax_amount,total_amount,amount_paid,balance_due
      ) VALUES (
