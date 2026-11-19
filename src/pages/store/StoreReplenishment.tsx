@@ -1,8 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownToLine, ClipboardList, PackageSearch } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBusiness } from '@/contexts/BusinessContext';
@@ -20,7 +24,11 @@ type IncomingTransfer = {
 };
 
 export default function StoreReplenishment() {
-  const { activeBusiness } = useBusiness();
+  const queryClient = useQueryClient();
+  const { activeBusiness, activeMembership } = useBusiness();
+  const [configuringKey, setConfiguringKey] = useState<string | null>(null);
+  const [configValues, setConfigValues] = useState({ minimum: '0', reorderPoint: '0', target: '', leadTimeDays: '0' });
+  const canConfigure = ['owner', 'admin', 'accountant'].includes(activeMembership?.role ?? '');
   const businessId = activeBusiness?.id;
   const inventory = useStoreInventoryData();
 
@@ -110,6 +118,8 @@ export default function StoreReplenishment() {
           targetConfigured,
           suggestedQuantity,
           method: setting?.replenishment_method ?? 'min_max',
+          minimum: Number(setting?.minimum_quantity ?? 0),
+          leadTimeDays: Number(setting?.lead_time_days ?? 0),
         };
       })
       .filter(row => row.product && row.location && (row.needsReorder || row.inbound > 0))
@@ -118,6 +128,44 @@ export default function StoreReplenishment() {
         return a.inventoryPosition - a.reorderPoint - (b.inventoryPosition - b.reorderPoint);
       });
   }, [inventory.data, inboundQuery.data]);
+
+  const saveSettings = useMutation({
+    mutationFn: async () => {
+      if (!businessId || !configuringKey) throw new Error('Select a stock item to configure.');
+      const selected = rows.find(row => row.id === configuringKey);
+      if (!selected?.product || !selected.location) throw new Error('The selected stock item is no longer available.');
+      const minimum = Number(configValues.minimum);
+      const reorderPoint = Number(configValues.reorderPoint);
+      const target = configValues.target.trim() === '' ? null : Number(configValues.target);
+      const leadTimeDays = Number(configValues.leadTimeDays);
+      if (![minimum, reorderPoint, leadTimeDays].every(Number.isFinite)
+        || minimum < 0 || reorderPoint < 0 || leadTimeDays < 0
+        || !Number.isInteger(leadTimeDays)) {
+        throw new Error('Minimum, reorder point and lead time must be valid non-negative values.');
+      }
+      if (target !== null && (!Number.isFinite(target) || target < reorderPoint)) {
+        throw new Error('Target stock must be blank or greater than or equal to the reorder point.');
+      }
+      const { error } = await supabase.from('product_location_settings').upsert({
+        business_id: businessId,
+        location_id: selected.location.id,
+        product_id: selected.product.id,
+        minimum_quantity: minimum,
+        reorder_point: reorderPoint,
+        target_quantity: target,
+        lead_time_days: leadTimeDays,
+        replenishment_method: 'min_max',
+        is_active: true,
+      }, { onConflict: 'business_id,location_id,product_id' });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['store-inventory-snapshot', businessId] });
+      setConfiguringKey(null);
+      toast.success('Location replenishment settings saved.');
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Could not save replenishment settings.'),
+  });
 
   if (inventory.isLoading || inboundQuery.isLoading) {
     return <Skeleton className="h-96 rounded-xl" />;
@@ -222,6 +270,19 @@ export default function StoreReplenishment() {
                             : row.needsReorder
                               ? <span className="text-xs text-warning">Review before ordering</span>
                               : <span className="text-xs text-muted-foreground">Inbound</span>}
+                        {canConfigure && <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setConfiguringKey(row.id);
+                            setConfigValues({
+                              minimum: String(row.minimum),
+                              reorderPoint: String(row.reorderPoint),
+                              target: row.target === null ? '' : String(row.target),
+                              leadTimeDays: String(row.leadTimeDays),
+                            });
+                          }}
+                        >Settings</Button>}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -231,6 +292,48 @@ export default function StoreReplenishment() {
           )}
         </CardContent>
       </Card>
+
+      {configuringKey && canConfigure && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Location replenishment settings</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Configure the minimum, reorder trigger, target stock and expected supplier lead time for this product at this location.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="space-y-1 text-sm">
+                <span>Minimum quantity</span>
+                <Input type="number" min="0" step="0.001" value={configValues.minimum}
+                  onChange={event => setConfigValues(current => ({ ...current, minimum: event.target.value }))} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Reorder point</span>
+                <Input type="number" min="0" step="0.001" value={configValues.reorderPoint}
+                  onChange={event => setConfigValues(current => ({ ...current, reorderPoint: event.target.value }))} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Target stock quantity</span>
+                <Input type="number" min="0" step="0.001" value={configValues.target}
+                  placeholder="Required for order suggestion"
+                  onChange={event => setConfigValues(current => ({ ...current, target: event.target.value }))} />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Supplier lead time (days)</span>
+                <Input type="number" min="0" step="1" value={configValues.leadTimeDays}
+                  onChange={event => setConfigValues(current => ({ ...current, leadTimeDays: event.target.value }))} />
+              </label>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfiguringKey(null)} disabled={saveSettings.isPending}>Cancel</Button>
+              <Button onClick={() => saveSettings.mutate()} disabled={saveSettings.isPending}>
+                {saveSettings.isPending ? 'Saving…' : 'Save settings'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-xs text-muted-foreground">
         This first planning view is deliberately rule-based, not a statistical demand forecast. It does not yet subtract open supplier purchase orders; that requires the purchasing workflow and receiving ledger.
