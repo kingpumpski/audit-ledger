@@ -254,7 +254,7 @@ export function useInvoice(id: string) {
   const { activeBusiness } = useBusiness();
   const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['invoice', businessId, id],
+    queryKey: ['invoice', id, businessId],
     queryFn: async (): Promise<InvoiceWithItems | null> => {
       const { data, error } = await supabase
         .from('invoices')
