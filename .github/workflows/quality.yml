@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - main
-      - feat/store-cycle-count-workflow
+      - feat/supplier-directory-foundation-main
       - integration/reconcile-six-lovable-branches
   push:
     branches:
