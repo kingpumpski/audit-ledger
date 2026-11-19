@@ -30,20 +30,27 @@ These are observations from 2026-11-19, not a claim that production has remained
 
 ## Candidate dependency sequence
 
-The seven migrations already present in repository `main` after `use_active_business_for_new_records` are supplemented by three reviewed forward-only corrections in draft PRs #97 and #98. The candidate order, subject to those PRs passing CI and merging, is:
+The production rollout must reconcile the already-applied historical migration `20261112120819` with PR #96's restored source file first. It is already recorded in production and must not be applied a second time. On a clean isolated replay, it belongs at its historical timestamp before later migrations.
 
-1. `20261117155000_enforce_business_tenant_rls_and_rpc_ownership.sql`
-2. `20261117156000_require_active_membership_for_business_context.sql` — PR #98; isolated migration replay, database integration, frontend and Pages CI passed. Removes global-role fallback from business context while retaining global project-role helpers.
-3. `20261117160000_add_business_invitations.sql`
-4. `20261117161000_fix_business_invitation_audit_scope.sql` — PR #97; isolated migration replay and tests passed.
-5. `20261117170000_allow_legacy_business_membership_finance_reads.sql`
-6. `20261118093000_project_wide_activity_notifications.sql`
-7. `20261118154000_allow_audit_trigger_cross_business_logs.sql`
-8. `20261118155000_scope_business_creation_audit_events.sql` — PR #97; isolated migration replay and tests passed.
-9. `20261118210000_store_location_stock_balances.sql`
-10. `20261118220000_stock_transfer_workflows.sql`
+Subject to review, merge and fresh validation of the corresponding PRs, the later candidate sequence is:
 
-This is a candidate sequence, not an instruction to apply it. PR #97 and PR #98 are draft/unmerged; do not include their migrations in a production release unless those exact reviewed commits are merged and revalidated. The tenant/RPC cutover is a security boundary change and prerequisite for location-aware store workflows. Do not apply store-location or transfer migrations in isolation.
+1. `20261117155000_enforce_business_tenant_rls_and_rpc_ownership.sql` — tenant restrictive policies, constrained SECURITY DEFINER owner and future-object event triggers.
+2. `20261117156000_require_active_membership_for_business_context.sql` — PR #98; removes global-role fallback from business data context.
+3. `20261117160000_add_business_invitations.sql` — business invitation lifecycle.
+4. `20261117161000_fix_business_invitation_audit_scope.sql` — PR #97; ensures invitation audit events carry the tenant business ID.
+5. `20261117170000_allow_legacy_business_membership_finance_reads.sql` — preserves intended legacy finance reads under explicit membership.
+6. `20261118093000_project_wide_activity_notifications.sql` — notification pipeline.
+7. `20261118154000_allow_audit_trigger_cross_business_logs.sql` — trusted audit-trigger insert policy needed for new-business creation.
+8. `20261118155000_scope_business_creation_audit_events.sql` — PR #97; scopes business-root audit events to the new business.
+9. `20261118210000_store_location_stock_balances.sql` — store locations, per-location balances and product/location settings. Requires tenant/RPC cutover and the trusted audit-trigger setup.
+10. `20261118220000_stock_transfer_workflows.sql` — transfer workflow, depends on store locations and balances.
+11. `20261118225000_business_scoped_chart_of_accounts.sql` — PR #85; business-specific chart seed and inventory variance accounts. Depends on business membership and the existing legacy system chart template.
+12. `20261118230000_store_cycle_count_workflows.sql` — PR #85; location-scoped count/approval/posting, depends on store locations, stock balances and journal/accounting structures.
+13. `20261119100000_business_role_sequence_authorization.sql` — PR #85; updates shared sequence authorization for business-scoped roles. Must follow the strict membership context migration.
+14. `20261119120000_supplier_directory_foundation.sql` — PR #89; supplier and supplier-product master data. Depends on business-scoped products, tenant RLS infrastructure and the audit trigger; its integration tests also exercise store locations.
+15. PR #86 replenishment is currently frontend/helper-only and adds no migration. It is stacked on PR #85's cycle-count branch and must be retargeted/rebased and receive fresh CI after PR #85 is merged.
+
+PR #96 restores a historical migration source, PR #97 adds two audit corrections, PR #98 adds strict membership context, PR #85 adds three store/accounting migrations, and PR #89 adds supplier master-data tables. These PRs are currently draft/unmerged. The order above is a dependency candidate, not a production execution instruction. Validate the exact merged files and all intervening repository migrations before release. Do not apply the store-location, transfer, chart, cycle-count, sequence or supplier migrations independently of their prerequisites.
 
 ## Required rollout procedure
 
