@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
 type Customer = Tables<'customers'>;
@@ -9,23 +10,28 @@ type CustomerInsert = TablesInsert<'customers'>;
 export function useCustomers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const customersQuery = useQuery({
-    queryKey: ['customers'],
+    queryKey: ['customers', businessId],
     queryFn: async (): Promise<Customer[]> => {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('business_id', businessId!)
         .is('deleted_at', null)
         .order('name', { ascending: true });
 
       if (error) throw error;
       return data;
     },
+    enabled: !!businessId,
   });
 
   const createCustomerMutation = useMutation({
     mutationFn: async (customerData: Omit<CustomerInsert, 'code'>) => {
+      if (!businessId) throw new Error('Select an active business before creating a customer.');
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -39,6 +45,7 @@ export function useCustomers() {
         .from('customers')
         .insert({
           ...customerData,
+          business_id: businessId,
           code: customerCode,
           created_by: user.id,
         })
@@ -58,11 +65,14 @@ export function useCustomers() {
   });
 
   const updateCustomerMutation = useMutation({
-    mutationFn: async ({ id, ...data }: Partial<Customer> & { id: string }) => {
+    mutationFn: async ({ id, business_id, ...data }: Partial<Customer> & { id: string }) => {
+      if (!businessId) throw new Error('Select an active business before updating a customer.');
+      if (business_id && business_id !== businessId) throw new Error('A customer cannot be moved to another business.');
       const { error } = await supabase
         .from('customers')
         .update(data)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId);
 
       if (error) throw error;
     },
@@ -77,11 +87,13 @@ export function useCustomers() {
 
   const deleteCustomerMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (!businessId) throw new Error('Select an active business before deleting a customer.');
       // Soft delete
       const { error } = await supabase
         .from('customers')
         .update({ deleted_at: new Date().toISOString(), is_active: false })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId);
 
       if (error) throw error;
     },

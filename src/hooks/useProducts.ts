@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
 export type Product = Tables<'products'>;
@@ -9,23 +10,28 @@ type ProductInsert = TablesInsert<'products'>;
 export function useProducts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const productsQuery = useQuery({
-    queryKey: ['products'],
+    queryKey: ['products', businessId],
     queryFn: async (): Promise<Product[]> => {
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('business_id', businessId!)
         .is('deleted_at', null)
         .order('name', { ascending: true });
 
       if (error) throw error;
       return data;
     },
+    enabled: !!businessId,
   });
 
   const createProductMutation = useMutation({
     mutationFn: async (productData: Omit<ProductInsert, 'sku'> & { sku?: string }) => {
+      if (!businessId) throw new Error('Select an active business before creating a product.');
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -38,6 +44,7 @@ export function useProducts() {
       // so we use a local type here to allow sku to be omitted.
       const payload: ProductInsert = {
         ...restProductData,
+        business_id: businessId,
         sku: sku || '',
         created_by: user.id,
       };
@@ -55,6 +62,7 @@ export function useProducts() {
         .from('product_price_history')
         .insert({
           product_id: data.id,
+          business_id: businessId,
           price: productData.current_price,
           changed_by: user.id,
           change_reason: 'Initial price',
@@ -72,7 +80,9 @@ export function useProducts() {
   });
 
   const updateProductMutation = useMutation({
-    mutationFn: async ({ id, ...data }: Partial<Product> & { id: string; priceChangeReason?: string }) => {
+    mutationFn: async ({ id, business_id, ...data }: Partial<Product> & { id: string; priceChangeReason?: string }) => {
+      if (!businessId) throw new Error('Select an active business before updating a product.');
+      if (business_id && business_id !== businessId) throw new Error('A product cannot be moved to another business.');
       const { data: { user } } = await supabase.auth.getUser();
 
       // If price is changing, record history
@@ -81,6 +91,7 @@ export function useProducts() {
           .from('products')
           .select('current_price')
           .eq('id', id)
+          .eq('business_id', businessId)
           .single();
 
         if (oldProduct && oldProduct.current_price !== data.current_price) {
@@ -89,6 +100,7 @@ export function useProducts() {
             .from('product_price_history')
             .update({ effective_to: new Date().toISOString() })
             .eq('product_id', id)
+            .eq('business_id', businessId)
             .is('effective_to', null);
 
           // Create new price record
@@ -96,6 +108,7 @@ export function useProducts() {
             .from('product_price_history')
             .insert({
               product_id: id,
+              business_id: businessId,
               price: data.current_price,
               changed_by: user?.id,
               change_reason: data.priceChangeReason || 'Price update',
@@ -107,7 +120,8 @@ export function useProducts() {
       const { error } = await supabase
         .from('products')
         .update(updateData)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId);
 
       if (error) throw error;
     },
@@ -122,11 +136,13 @@ export function useProducts() {
 
   const deleteProductMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (!businessId) throw new Error('Select an active business before deleting a product.');
       // Soft delete
       const { error } = await supabase
         .from('products')
         .update({ deleted_at: new Date().toISOString(), is_active: false })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId);
 
       if (error) throw error;
     },
