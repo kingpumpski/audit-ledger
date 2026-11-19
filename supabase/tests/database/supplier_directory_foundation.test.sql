@@ -16,6 +16,16 @@ INSERT INTO public.businesses (
   ('e6000000-0000-4000-8000-000000000010', 'Supplier Test One', 'small_business', 'Ghana', 'GHS', 'Africa/Accra', 'active'),
   ('e6000000-0000-4000-8000-000000000020', 'Supplier Test Two', 'small_business', 'Ghana', 'USD', 'Africa/Accra', 'active');
 
+-- Keep this test independent of business-creation trigger side effects. The
+-- location migration owns that trigger; this suite only needs deterministic
+-- active locations to exercise the product and supplier relationship.
+INSERT INTO public.store_locations (
+  business_id, code, name, location_type, timezone, is_default, is_active
+) VALUES
+  ('e6000000-0000-4000-8000-000000000010', 'MAIN', 'Supplier Test One', 'store', 'Africa/Accra', true, true),
+  ('e6000000-0000-4000-8000-000000000020', 'MAIN', 'Supplier Test Two', 'store', 'Africa/Accra', true, true)
+ON CONFLICT (business_id, code) DO NOTHING;
+
 INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
 VALUES
   ('e6000000-0000-4000-8000-000000000010', 'e6000000-0000-4000-8000-000000000001', 'owner', 'active', now()),
