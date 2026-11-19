@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables, type Json } from '@/integrations/supabase/types';
 import { calculateLineAmounts, isTaxEffectiveOnDate, validateSelectedTaxRules, validateTaxCategoryApplicability, type TaxRule } from '@/lib/tax-calculator';
 
@@ -34,9 +35,11 @@ interface CreateInvoiceData {
 export function useInvoices() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const invoicesQuery = useQuery({
-    queryKey: ['invoices'],
+    queryKey: ['invoices', businessId],
     queryFn: async (): Promise<InvoiceWithItems[]> => {
       const { data, error } = await supabase
         .from('invoices')
@@ -45,16 +48,19 @@ export function useInvoices() {
           customer:customers!invoices_customer_id_fkey(*),
           items:invoice_items!invoice_items_invoice_id_fkey(*)
         `)
+        .eq('business_id', businessId!)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as InvoiceWithItems[];
     },
+    enabled: !!businessId,
   });
 
   const createInvoiceMutation = useMutation({
     mutationFn: async (invoiceData: CreateInvoiceData) => {
+      if (!businessId) throw new Error('Select an active business before creating an invoice.');
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -66,6 +72,7 @@ export function useInvoices() {
           .from('taxes')
           .select('id, name, code, rate, is_compound, applies_to_category, effective_from, effective_to, liability_account_id')
           .in('id', selectedTaxIds)
+          .eq('business_id', businessId)
           .eq('is_active', true);
         if (taxError) throw taxError;
         taxRules = (taxRows || []) as TaxRule[];
@@ -79,7 +86,8 @@ export function useInvoices() {
         const { data: productRows, error: productError } = await supabase
           .from('products')
           .select('id, category')
-          .in('id', productIds);
+          .in('id', productIds)
+          .eq('business_id', businessId);
         if (productError) throw productError;
         (productRows || []).forEach(product => productCategories.set(product.id, product.category));
       }
@@ -243,8 +251,10 @@ export function useInvoices() {
 }
 
 export function useInvoice(id: string) {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['invoice', id],
+    queryKey: ['invoice', businessId, id],
     queryFn: async (): Promise<InvoiceWithItems | null> => {
       const { data, error } = await supabase
         .from('invoices')
@@ -254,11 +264,12 @@ export function useInvoice(id: string) {
           items:invoice_items!invoice_items_invoice_id_fkey(*)
         `)
         .eq('id', id)
+        .eq('business_id', businessId!)
         .single();
 
       if (error) throw error;
       return data as InvoiceWithItems;
     },
-    enabled: !!id,
+    enabled: !!id && !!businessId,
   });
 }
