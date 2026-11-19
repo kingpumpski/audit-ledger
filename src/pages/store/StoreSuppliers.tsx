@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Truck } from 'lucide-react';
+import { canManageSupplierDirectory, normalizeSupplierMaster, normalizeSupplierProduct } from '@/lib/supplier-directory';
 
 type SupplierDraft = {
   supplier_code: string;
@@ -46,12 +47,11 @@ const emptySupplierProduct: SupplierProductDraft = {
   minimum_order_quantity: '1', order_multiple: '1', lead_time_days: '0',
 };
 
-const optionalText = (value: string) => value.trim() || null;
 export default function StoreSuppliers() {
   const { activeBusiness, activeMembership } = useBusiness();
   const businessId = activeBusiness?.id;
   const queryClient = useQueryClient();
-  const canManage = ['owner', 'admin', 'accountant'].includes(activeMembership?.role ?? '');
+  const canManage = canManageSupplierDirectory(activeMembership?.role);
   const [search, setSearch] = useState('');
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -85,22 +85,10 @@ export default function StoreSuppliers() {
   const createSupplier = useMutation({
     mutationFn: async (draft: SupplierDraft) => {
       if (!businessId) throw new Error('Select an active business workspace.');
-      const paymentTerms = Number(draft.payment_terms_days);
-      if (!Number.isInteger(paymentTerms) || paymentTerms < 0) {
-        throw new Error('Payment terms must be a whole number of days (zero or more).');
-      }
+      const normalized = normalizeSupplierMaster(draft);
       const { error } = await supabase.from('suppliers').insert({
         business_id: businessId,
-        supplier_code: optionalText(draft.supplier_code),
-        name: draft.name.trim(),
-        legal_name: optionalText(draft.legal_name),
-        contact_name: optionalText(draft.contact_name),
-        email: optionalText(draft.email),
-        phone: optionalText(draft.phone),
-        tax_identifier: optionalText(draft.tax_identifier),
-        address: optionalText(draft.address),
-        payment_terms_days: paymentTerms,
-        currency: optionalText(draft.currency)?.toUpperCase() ?? null,
+        ...normalized,
       });
       if (error) throw error;
     },
@@ -116,29 +104,10 @@ export default function StoreSuppliers() {
   const createSupplierProduct = useMutation({
     mutationFn: async (draft: SupplierProductDraft) => {
       if (!businessId) throw new Error('Select an active business workspace.');
-      if (!draft.supplier_id || !draft.product_id) throw new Error('Select both a supplier and a product.');
-      const minimum = Number(draft.minimum_order_quantity);
-      const multiple = Number(draft.order_multiple);
-      const leadTime = Number(draft.lead_time_days);
-      const cost = draft.unit_cost.trim() ? Number(draft.unit_cost) : null;
-      if (!Number.isFinite(minimum) || minimum <= 0 || !Number.isFinite(multiple) || multiple <= 0) {
-        throw new Error('Minimum order quantity and order multiple must be greater than zero.');
-      }
-      if (!Number.isInteger(leadTime) || leadTime < 0) throw new Error('Lead time must be a whole number of days.');
-      if (cost !== null && (!Number.isFinite(cost) || cost < 0)) throw new Error('Unit cost must be zero or greater.');
-      const currency = optionalText(draft.currency)?.toUpperCase() ?? null;
-      if (cost !== null && !currency) throw new Error('Enter the currency when recording a unit cost.');
-      if (currency && !/^[A-Z]{3}$/.test(currency)) throw new Error('Currency must be a three-letter code, such as GHS.');
+      const normalized = normalizeSupplierProduct(draft);
       const { error } = await supabase.from('supplier_products').insert({
         business_id: businessId,
-        supplier_id: draft.supplier_id,
-        product_id: draft.product_id,
-        supplier_sku: optionalText(draft.supplier_sku),
-        unit_cost: cost,
-        currency: cost === null ? null : currency,
-        minimum_order_quantity: minimum,
-        order_multiple: multiple,
-        lead_time_days: leadTime,
+        ...normalized,
       });
       if (error) throw error;
     },
