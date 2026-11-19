@@ -106,7 +106,11 @@ CREATE POLICY supplier_products_update_managers
   USING (public.has_business_role(business_id, ARRAY['owner', 'admin', 'accountant']))
   WITH CHECK (public.has_business_role(business_id, ARRAY['owner', 'admin', 'accountant']));
 
-REVOKE ALL ON public.suppliers, public.supplier_products FROM PUBLIC, anon, service_role;
+-- Explicitly revoke inherited/default table privileges before granting the
+-- supported operations. In particular, client sessions must never hard-delete
+-- supplier master data or purchasing history.
+REVOKE ALL ON public.suppliers, public.supplier_products
+  FROM PUBLIC, anon, authenticated, service_role, audit_ledger_rpc_owner;
 GRANT SELECT, INSERT, UPDATE ON public.suppliers, public.supplier_products TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.suppliers, public.supplier_products TO audit_ledger_rpc_owner;
 
