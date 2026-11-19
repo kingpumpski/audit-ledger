@@ -53,9 +53,27 @@ SELECT set_config('request.jwt.claim.sub', 'e6000000-0000-4000-8000-000000000001
 
 INSERT INTO public.products (
   id, business_id, sku, name, current_price, stock_quantity, min_stock_level, is_service, is_active
-) VALUES
-  ('e6000000-0000-4000-8000-000000000030', 'e6000000-0000-4000-8000-000000000010', 'SUP-ITEM-1', 'Supplier Test Item One', 10, 0, 0, false, true),
-  ('e6000000-0000-4000-8000-000000000040', 'e6000000-0000-4000-8000-000000000020', 'SUP-ITEM-2', 'Supplier Test Item Two', 10, 0, 0, false, true);
+) VALUES (
+  'e6000000-0000-4000-8000-000000000030', 'e6000000-0000-4000-8000-000000000010',
+  'SUP-ITEM-1', 'Supplier Test Item One', 10, 0, 0, false, true
+);
+
+-- The constrained trigger owner can see only the active business in the
+-- authenticated claim. Switch claims before creating the second tenant's item.
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub', 'e6000000-0000-4000-8000-000000000003', 'role', 'authenticated',
+    'app_metadata', jsonb_build_object('active_business_id', 'e6000000-0000-4000-8000-000000000020'))::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'e6000000-0000-4000-8000-000000000003', true);
+
+INSERT INTO public.products (
+  id, business_id, sku, name, current_price, stock_quantity, min_stock_level, is_service, is_active
+) VALUES (
+  'e6000000-0000-4000-8000-000000000040', 'e6000000-0000-4000-8000-000000000020',
+  'SUP-ITEM-2', 'Supplier Test Item Two', 10, 0, 0, false, true
+);
 
 SELECT extensions.ok(
   (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.suppliers'::regclass)
