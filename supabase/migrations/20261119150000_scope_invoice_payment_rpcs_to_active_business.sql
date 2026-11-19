@@ -2,6 +2,12 @@
 -- authenticated active business. Each parent lookup and write is explicitly
 -- bound to one tenant in addition to the restrictive RLS policy.
 
+-- The legacy global primary key prevented a second business from having its
+-- own sequence row. The business-scoped unique index is the intended key.
+ALTER TABLE public.sequences DROP CONSTRAINT IF EXISTS sequences_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sequences_business_id_name
+  ON public.sequences (business_id, name);
+
 CREATE OR REPLACE FUNCTION public.get_next_sequence(seq_name text)
 RETURNS text
 LANGUAGE plpgsql
@@ -32,6 +38,27 @@ BEGIN
     RAISE EXCEPTION 'Only an administrator or accountant can allocate this master-data number'
       USING ERRCODE = '42501';
   END IF;
+
+  -- Lazily provision each tenant's sequence on first use. This keeps new
+  -- businesses independent without requiring the business-creation RPC to
+  -- know every sequence type.
+  INSERT INTO public.sequences (business_id, name, prefix, current_value, padding)
+  VALUES (
+    v_business_id,
+    seq_name,
+    CASE seq_name
+      WHEN 'invoice' THEN 'INV-'
+      WHEN 'receipt' THEN 'RCP-'
+      WHEN 'payment' THEN 'PAY-'
+      WHEN 'customer' THEN 'CUST-'
+      WHEN 'product' THEN 'PRD-'
+      WHEN 'journal' THEN 'JRN-'
+      WHEN 'account' THEN 'ACC-'
+    END,
+    0,
+    CASE WHEN seq_name = 'product' THEN 5 ELSE 6 END
+  )
+  ON CONFLICT (business_id, name) DO NOTHING;
 
   UPDATE public.sequences
   SET current_value = current_value + 1,
