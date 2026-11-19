@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,8 @@ const money = (value: number | string, currency: string) =>
 
 export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id ?? null;
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [settlement, setSettlement] = useState<ExpenseRow | null>(null);
@@ -58,12 +61,14 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   const [payment, setPayment] = useState({ amount: '', paidOn: today(), method: 'cash' as PaymentMethod, reference: '' });
 
   const accountsQuery = useQuery({
-    queryKey: ['operating-expense-accounts'],
+    queryKey: ['operating-expense-accounts', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<ExpenseAccount[]> => {
       const { data, error } = await expenseApi.from('chart_of_accounts')
         .select('id, code, name')
         .eq('account_type', 'expense')
         .eq('is_active', true)
+        .eq('business_id', businessId!)
         .order('code');
       if (error) throw error;
       return (data || []) as ExpenseAccount[];
@@ -71,10 +76,12 @@ export function OperatingExpenseRegister({ currencySymbol }: { currencySymbol: s
   });
 
   const expensesQuery = useQuery({
-    queryKey: ['operating-expenses'],
+    queryKey: ['operating-expenses', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<ExpenseRow[]> => {
       const { data, error } = await expenseApi.from('operating_expenses')
         .select('id, expense_number, description, vendor_name, reference_number, incurred_on, due_on, amount, amount_paid, notes, expense_account:chart_of_accounts(code, name), reversal:operating_expense_reversals(id, reason, reference_number), refunds:operating_expense_refunds(id, amount, refunded_on, reference_number), payments:operating_expense_payments(id, paid_on)')
+        .eq('business_id', businessId!)
         .order('incurred_on', { ascending: false });
       if (error) throw error;
       return (data || []) as unknown as ExpenseRow[];
