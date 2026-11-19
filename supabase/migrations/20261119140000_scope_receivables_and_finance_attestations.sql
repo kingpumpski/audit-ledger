@@ -10,11 +10,11 @@ RETURNS TABLE(
   customer_id uuid,
   customer_code text,
   customer_name text,
-  invoiced_amount numeric(15,2),
-  payments_received numeric(15,2),
-  credit_notes_applied numeric(15,2),
-  customer_credits_applied numeric(15,2),
-  outstanding_balance numeric(15,2),
+  invoiced_amount numeric,
+  payments_received numeric,
+  credit_notes_applied numeric,
+  customer_credits_applied numeric,
+  outstanding_balance numeric,
   as_of_date date
 )
 LANGUAGE plpgsql
