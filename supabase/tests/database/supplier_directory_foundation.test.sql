@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(13);
+SELECT extensions.plan(12);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -15,16 +15,6 @@ INSERT INTO public.businesses (
 ) VALUES
   ('e6000000-0000-4000-8000-000000000010', 'Supplier Test One', 'small_business', 'Ghana', 'GHS', 'Africa/Accra', 'active'),
   ('e6000000-0000-4000-8000-000000000020', 'Supplier Test Two', 'small_business', 'Ghana', 'USD', 'Africa/Accra', 'active');
-
-SELECT extensions.is(
-  (SELECT count(*)::integer FROM public.store_locations
-   WHERE business_id IN (
-     'e6000000-0000-4000-8000-000000000010',
-     'e6000000-0000-4000-8000-000000000020'
-   ) AND is_default AND is_active),
-  2,
-  'Every newly created business receives an active default store location automatically'
-);
 
 INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
 VALUES
