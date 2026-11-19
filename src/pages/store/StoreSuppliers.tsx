@@ -47,12 +47,6 @@ const emptySupplierProduct: SupplierProductDraft = {
 };
 
 const optionalText = (value: string) => value.trim() || null;
-const numericValue = (value: string, fallback = 0) => {
-  if (!value.trim()) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
 export default function StoreSuppliers() {
   const { activeBusiness, activeMembership } = useBusiness();
   const businessId = activeBusiness?.id;
