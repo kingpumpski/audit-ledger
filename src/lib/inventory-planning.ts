@@ -166,6 +166,9 @@ export function calculateReplenishmentPlan(input: ReplenishmentInput): Replenish
     ['Order multiple', orderMultiple],
   ];
   values.forEach(([name, value]) => assertNonNegative(name, value));
+  if (reserved + quarantined > onHand) {
+    throw new Error('Reserved and quarantined quantities cannot exceed on-hand stock.');
+  }
   if (orderMultiple <= 0) {
     throw new Error('Order multiple must be greater than zero.');
   }
