@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(6);
+SELECT extensions.plan(9);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -58,6 +58,42 @@ SELECT set_config(
     'app_metadata',jsonb_build_object('active_business_id','i5000000-0000-4000-8000-000000000020')
   )::text,
   true
+);
+
+SELECT extensions.lives_ok(
+  $ INSERT INTO public.customers(id,code,name,business_id)
+     VALUES ('i5000000-0000-4000-8000-000000000031',
+       'INV-TENANT-A-CUSTOMER','Invoice tenant B customer',
+       'i5000000-0000-4000-8000-000000000020') $,
+  'Customer codes can be reused in a different business'
+);
+
+SELECT extensions.lives_ok(
+  $ INSERT INTO public.invoices(
+       id,invoice_number,customer_id,business_id,status,issue_date,
+       subtotal,tax_amount,total_amount,amount_paid,balance_due
+     ) VALUES (
+       'i5000000-0000-4000-8000-000000000041',
+       'INV-TENANT-A-001',
+       'i5000000-0000-4000-8000-000000000031',
+       'i5000000-0000-4000-8000-000000000020',
+       'draft',CURRENT_DATE,100,0,100,0,100
+     ) $,
+  'Invoice numbers can be reused in a different business'
+);
+
+SELECT extensions.is(
+  (
+    SELECT count(*)::integer FROM pg_constraint
+    WHERE conname IN (
+      'invoices_invoice_number_key','payments_payment_number_key',
+      'receipts_receipt_number_key','journal_entries_entry_number_key',
+      'journal_entries_source_unique','customers_code_key','products_sku_key',
+      'chart_of_accounts_code_key','sequences_pkey'
+    )
+  ),
+  0,
+  'Global unique constraints are replaced by business-scoped unique indexes'
 );
 
 SELECT extensions.throws_ok(
