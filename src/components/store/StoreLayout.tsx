@@ -2,13 +2,14 @@ import { Navigate, NavLink, Outlet } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { cn } from '@/lib/utils';
-import { ClipboardCheck, Loader2, LayoutDashboard, MapPin, PackageSearch, ShieldAlert } from 'lucide-react';
+import { ClipboardCheck, Loader2, LayoutDashboard, MapPin, PackageSearch, ShieldAlert, TrendingUp } from 'lucide-react';
 
 const STORE_READ_ROLES = new Set(['owner', 'admin', 'accountant', 'cashier', 'auditor']);
 
 const navigation = [
   { to: '/store', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/store/stock', label: 'Stock levels', icon: PackageSearch, end: false },
+  { to: '/store/replenishment', label: 'Replenishment', icon: TrendingUp, end: false },
   { to: '/store/cycle-counts', label: 'Cycle counts', icon: ClipboardCheck, end: false },
   { to: '/store/locations', label: 'Locations', icon: MapPin, end: false },
 ];

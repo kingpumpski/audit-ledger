@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildReplenishmentLocationProductRows,
   calculateDemandStatistics,
+  calculateMinMaxReplenishment,
   calculateReplenishmentPlan,
   classifyInventoryPortfolio,
 } from './inventory-planning';
@@ -39,6 +41,64 @@ describe('calculateDemandStatistics', () => {
   });
 });
 
+
+describe('calculateMinMaxReplenishment', () => {
+  it('subtracts inbound transfers from the replenishment requirement', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 4,
+      incoming: 3,
+      reorderPoint: 10,
+      targetStock: 20,
+    })).toEqual({
+      inventoryPosition: 7,
+      shouldReorder: true,
+      targetConfigured: true,
+      suggestedQuantity: 13,
+    });
+  });
+
+  it('does not suggest a purchase quantity when target stock is missing or not above the reorder point', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 2,
+      incoming: 0,
+      reorderPoint: 5,
+      targetStock: null,
+    })).toMatchObject({ shouldReorder: true, targetConfigured: false, suggestedQuantity: 0 });
+
+    expect(calculateMinMaxReplenishment({
+      available: 2,
+      incoming: 0,
+      reorderPoint: 5,
+      targetStock: 5,
+    })).toMatchObject({ shouldReorder: true, targetConfigured: false, suggestedQuantity: 0 });
+  });
+
+  it('does not reorder while available plus inbound stock is above the trigger', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 4,
+      incoming: 7,
+      reorderPoint: 10,
+      targetStock: 20,
+    })).toMatchObject({ inventoryPosition: 11, shouldReorder: false, suggestedQuantity: 0 });
+  });
+
+  it('rejects invalid stock planning inputs', () => {
+    expect(() => calculateMinMaxReplenishment({
+      available: -1,
+      incoming: 0,
+      reorderPoint: 2,
+      targetStock: 5,
+    })).toThrow('Available quantity must be a finite, non-negative number.');
+
+    expect(() => calculateMinMaxReplenishment({
+      available: 1,
+      incoming: 0,
+      reorderPoint: 2,
+      targetStock: 1,
+    })).toThrow('Target stock quantity must be a finite, non-negative number.');
+  });
+});
+
 describe('calculateReplenishmentPlan', () => {
   it('calculates safety stock, reorder point, inventory position and pack-rounded order quantity', () => {
     const result = calculateReplenishmentPlan({
@@ -64,6 +124,23 @@ describe('calculateReplenishmentPlan', () => {
     expect(result.suggestedOrderQuantity).toBe(114);
     expect(result.confidence).toBe('medium');
     expect(result.explanation.some(line => line.includes('stockout days'))).toBe(true);
+  });
+
+  it('rounds the minimum order quantity up to a valid supplier pack multiple', () => {
+    const result = calculateReplenishmentPlan({
+      averageDailyDemand: 1,
+      dailyDemandStandardDeviation: 0,
+      leadTimeDays: 1,
+      onHand: 0,
+      targetDaysOfCover: 2,
+      minimumOrderQuantity: 10,
+      orderMultiple: 6,
+    });
+
+    expect(result.shouldReorder).toBe(true);
+    expect(result.suggestedOrderQuantity).toBe(12);
+    expect(result.suggestedOrderQuantity % 6).toBe(0);
+    expect(result.suggestedOrderQuantity).toBeGreaterThanOrEqual(10);
   });
 
   it('does not recommend an order when inventory position is above the reorder point', () => {
@@ -110,6 +187,15 @@ describe('calculateReplenishmentPlan', () => {
       onHand: 2,
       orderMultiple: 0,
     })).toThrow('Order multiple must be greater than zero.');
+
+    expect(() => calculateReplenishmentPlan({
+      averageDailyDemand: 1,
+      dailyDemandStandardDeviation: 1,
+      leadTimeDays: 3,
+      onHand: 5,
+      reserved: 3,
+      quarantined: 3,
+    })).toThrow('Reserved and quarantined quantities cannot exceed on-hand stock.');
   });
 });
 
@@ -137,5 +223,51 @@ describe('classifyInventoryPortfolio', () => {
     expect(() => classifyInventoryPortfolio([
       { productId: 'bad', annualUnitsConsumed: 1, unitCost: -1, periodDemand: [] },
     ])).toThrow('Unit cost must be a finite, non-negative number.');
+  });
+});
+
+
+describe('buildReplenishmentLocationProductRows', () => {
+  it('includes configured products even when their stock-balance row is absent', () => {
+    expect(buildReplenishmentLocationProductRows([], [
+      { location_id: 'location-1', product_id: 'product-1' },
+    ])).toEqual([{
+      id: 'location-1:product-1',
+      locationId: 'location-1',
+      productId: 'product-1',
+      available: 0,
+    }]);
+  });
+
+  it('unions stock, settings and inbound pairs without duplicating the same location/SKU', () => {
+    const rows = buildReplenishmentLocationProductRows([
+      { id: 'balance-1', location_id: 'location-1', product_id: 'product-1', available_quantity: 4 },
+    ], [
+      { location_id: 'location-1', product_id: 'product-1' },
+      { location_id: 'location-2', product_id: 'product-2' },
+    ], new Map([
+      ['location-1:product-1', 3],
+      ['location-3:product-3', 5],
+    ]));
+
+    expect(rows).toHaveLength(3);
+    expect(rows).toContainEqual({
+      id: 'balance-1',
+      locationId: 'location-1',
+      productId: 'product-1',
+      available: 4,
+    });
+    expect(rows).toContainEqual({
+      id: 'location-2:product-2',
+      locationId: 'location-2',
+      productId: 'product-2',
+      available: 0,
+    });
+    expect(rows).toContainEqual({
+      id: 'location-3:product-3',
+      locationId: 'location-3',
+      productId: 'product-3',
+      available: 0,
+    });
   });
 });

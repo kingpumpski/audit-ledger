@@ -166,6 +166,9 @@ export function calculateReplenishmentPlan(input: ReplenishmentInput): Replenish
     ['Order multiple', orderMultiple],
   ];
   values.forEach(([name, value]) => assertNonNegative(name, value));
+  if (reserved + quarantined > onHand) {
+    throw new Error('Reserved and quarantined quantities cannot exceed on-hand stock.');
+  }
   if (orderMultiple <= 0) {
     throw new Error('Order multiple must be greater than zero.');
   }
@@ -188,11 +191,15 @@ export function calculateReplenishmentPlan(input: ReplenishmentInput): Replenish
   );
   const shouldReorder = inventoryPosition <= reorderPoint;
   const rawRequirement = Math.max(0, targetStock - inventoryPosition);
+  // Apply the MOQ before rounding to the supplier's pack multiple. Taking
+  // max(MOQ, rounded requirement) can otherwise return a quantity that is
+  // not divisible by the required order multiple (e.g. MOQ 10, pack 6 -> 10).
+  const minimumCompliantOrder = Math.ceil((minimumOrderQuantity - 1e-10) / orderMultiple) * orderMultiple;
   const roundedRequirement = rawRequirement > 0
     ? Math.ceil((rawRequirement - 1e-10) / orderMultiple) * orderMultiple
     : 0;
   const suggestedOrderQuantity = shouldReorder && rawRequirement > 0
-    ? Math.max(minimumOrderQuantity, roundedRequirement)
+    ? Math.max(minimumCompliantOrder, roundedRequirement)
     : 0;
 
   const explanation = [
@@ -290,4 +297,110 @@ export function classifyInventoryPortfolio(
       ? null
       : roundQuantity(item.coefficientOfVariation),
   }));
+}
+
+export interface MinMaxReplenishmentInput {
+  available: number;
+  incoming: number;
+  reorderPoint: number;
+  targetStock: number | null;
+}
+
+export interface MinMaxReplenishmentResult {
+  inventoryPosition: number;
+  shouldReorder: boolean;
+  targetConfigured: boolean;
+  suggestedQuantity: number;
+}
+
+/**
+ * Deterministic location-level min/max planning. Incoming quantities count only
+ * after dispatch; callers must exclude drafts, canceled and unapproved transfers.
+ * A missing or non-useful target never produces an invented order quantity.
+ */
+export function calculateMinMaxReplenishment(
+  input: MinMaxReplenishmentInput,
+): MinMaxReplenishmentResult {
+  assertNonNegative('Available quantity', input.available);
+  assertNonNegative('Incoming quantity', input.incoming);
+  assertNonNegative('Reorder point', input.reorderPoint);
+  if (input.targetStock !== null) {
+    assertNonNegative('Target stock quantity', input.targetStock);
+  }
+
+  const inventoryPosition = roundQuantity(input.available + input.incoming);
+  const shouldReorder = inventoryPosition <= input.reorderPoint;
+  const targetConfigured = input.targetStock !== null
+    && input.targetStock > input.reorderPoint;
+  const suggestedQuantity = shouldReorder && targetConfigured
+    ? roundQuantity(Math.max(0, input.targetStock! - inventoryPosition))
+    : 0;
+
+  return {
+    inventoryPosition,
+    shouldReorder,
+    targetConfigured,
+    suggestedQuantity,
+  };
+}
+
+
+export interface ReplenishmentBalanceRow {
+  id: string;
+  location_id: string;
+  product_id: string;
+  available_quantity: number;
+}
+
+export interface ReplenishmentSettingRow {
+  location_id: string;
+  product_id: string;
+}
+
+export interface ReplenishmentLocationProductRow {
+  id: string;
+  locationId: string;
+  productId: string;
+  available: number;
+}
+
+/**
+ * Build the union of stock, explicitly configured and inbound location/product
+ * pairs. A missing balance row is zero available stock, not an absent SKU.
+ */
+export function buildReplenishmentLocationProductRows(
+  balances: ReplenishmentBalanceRow[],
+  settings: ReplenishmentSettingRow[],
+  incoming: ReadonlyMap<string, number> = new Map(),
+): ReplenishmentLocationProductRow[] {
+  const balanceByKey = new Map<string, ReplenishmentBalanceRow>();
+  const pairs = new Map<string, { locationId: string; productId: string }>();
+
+  const addPair = (locationId: string, productId: string) => {
+    const key = `${locationId}:${productId}`;
+    if (!pairs.has(key)) pairs.set(key, { locationId, productId });
+    return key;
+  };
+
+  for (const balance of balances) {
+    const key = addPair(balance.location_id, balance.product_id);
+    balanceByKey.set(key, balance);
+  }
+  for (const setting of settings) addPair(setting.location_id, setting.product_id);
+  for (const key of incoming.keys()) {
+    const separator = key.indexOf(':');
+    if (separator > 0 && separator < key.length - 1) {
+      addPair(key.slice(0, separator), key.slice(separator + 1));
+    }
+  }
+
+  return Array.from(pairs.entries()).map(([key, pair]) => {
+    const balance = balanceByKey.get(key);
+    return {
+      id: balance?.id ?? key,
+      locationId: pair.locationId,
+      productId: pair.productId,
+      available: balance ? Number(balance.available_quantity) : 0,
+    };
+  });
 }
