@@ -125,7 +125,7 @@ SELECT extensions.ok(
   (SELECT count(*) > 0 FROM public.audit_logs
    WHERE business_id = 'e5000000-0000-4000-8000-000000000020'
      AND entity_type = 'chart_of_accounts'
-     AND action = 'INSERT'),
+     AND action = 'create'),
   'Default account creation remains auditable for each business'
 );
 
