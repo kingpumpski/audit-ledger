@@ -11,6 +11,16 @@ DROP FUNCTION IF EXISTS public.record_invoice_payment(
 -- The legacy global primary key prevented a second business from having its
 -- own sequence row. The business-scoped unique index is the intended key.
 ALTER TABLE public.sequences DROP CONSTRAINT IF EXISTS sequences_pkey;
+
+-- Idempotency keys are unique within a business, not across unrelated tenants.
+DROP INDEX IF EXISTS public.payments_idempotency_key_uidx;
+CREATE UNIQUE INDEX payments_business_idempotency_key_uidx
+  ON public.payments (business_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+DROP INDEX IF EXISTS public.receipts_idempotency_key_uidx;
+CREATE UNIQUE INDEX receipts_business_idempotency_key_uidx
+  ON public.receipts (business_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sequences_business_id_name
   ON public.sequences (business_id, name);
 
