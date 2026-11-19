@@ -1,3 +1,9 @@
+-- Remove the legacy non-idempotent overload. The application and receipt
+-- workflow use the seven-argument idempotent signature exclusively.
+DROP FUNCTION IF EXISTS public.record_invoice_payment(
+  uuid, uuid, numeric, public.payment_method, text, text
+);
+
 -- Scope invoice creation, issuance, payment, receipt and sequence RPCs to the
 -- authenticated active business. Each parent lookup and write is explicitly
 -- bound to one tenant in addition to the restrictive RLS policy.
