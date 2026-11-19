@@ -19,8 +19,25 @@ INSERT INTO public.user_roles (user_id, role) VALUES
   ('f0000000-0000-4000-8000-000000000002', 'auditor'),
   ('f0000000-0000-4000-8000-000000000003', 'cashier');
 
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(), fixture.user_id, fixture.role, 'active', now()
+FROM (VALUES
+  ('f0000000-0000-4000-8000-000000000001'::uuid,'accountant'::text),
+  ('f0000000-0000-4000-8000-000000000002'::uuid,'auditor'::text),
+  ('f0000000-0000-4000-8000-000000000003'::uuid,'cashier'::text)
+) AS fixture(user_id,role);
+
 SELECT set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','f0000000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text)
+  )::text,
+  true
+);
 
 SELECT extensions.lives_ok(
   $$ SELECT public.attest_financial_completeness(
@@ -136,6 +153,12 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000002', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f0000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT extensions.is(
   (SELECT count(*)::integer FROM public.get_financial_completeness_attestation()),
@@ -155,6 +178,12 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000003', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f0000000-0000-4000-8000-000000000003','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT extensions.throws_ok(
   $$ SELECT public.get_financial_completeness_attestation() $$,
