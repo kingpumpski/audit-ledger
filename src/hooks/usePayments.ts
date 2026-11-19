@@ -115,7 +115,7 @@ export function usePayment(id: string) {
   const { activeBusiness } = useBusiness();
   const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['payment', businessId, id],
+    queryKey: ['payment', id, businessId],
     queryFn: async (): Promise<PaymentWithRelations | null> => {
       const { data, error } = await supabase
         .from('payments')
