@@ -175,12 +175,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.record_stock_count_adjustment(
+  $cross_business$ SELECT public.record_stock_count_adjustment(
     (SELECT id FROM public.products WHERE sku='TEST-COUNT-FOREIGN-001'),
     9, CURRENT_DATE, 'Attempt cross-business stock count',
     'COUNT-SHEET-FOREIGN-001',
     'd1000000-0000-4000-8000-000000000105'
-  ) $,
+  ) $cross_business$,
   'P0001',
   'Select an active physical inventory product',
   'An accountant cannot adjust stock belonging to another active business'
