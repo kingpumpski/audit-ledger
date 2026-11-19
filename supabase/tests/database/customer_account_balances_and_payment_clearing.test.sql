@@ -196,7 +196,7 @@ SELECT set_config(
   true
 );
 SELECT extensions.throws_ok(
-  $ SELECT * FROM public.get_payment_clearing_balances() $,
+  $cab_unauthorized_clearing_read$ SELECT * FROM public.get_payment_clearing_balances() $cab_unauthorized_clearing_read$,
   '42501',
   'You are not authorized to view payment clearing balances',
   'A member cannot query clearing balances for a business where they have no active membership'
