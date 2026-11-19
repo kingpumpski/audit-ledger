@@ -80,8 +80,9 @@ export function useProducts() {
   });
 
   const updateProductMutation = useMutation({
-    mutationFn: async ({ id, business_id: _businessId, ...data }: Partial<Product> & { id: string; priceChangeReason?: string }) => {
+    mutationFn: async ({ id, business_id, ...data }: Partial<Product> & { id: string; priceChangeReason?: string }) => {
       if (!businessId) throw new Error('Select an active business before updating a product.');
+      if (business_id && business_id !== businessId) throw new Error('A product cannot be moved to another business.');
       const { data: { user } } = await supabase.auth.getUser();
 
       // If price is changing, record history
