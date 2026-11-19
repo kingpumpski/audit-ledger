@@ -21,6 +21,7 @@ import { usePayments } from '@/hooks/usePayments';
 import { useSettings } from '@/hooks/useSettings';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -45,11 +46,13 @@ type OperatingExpenseSummary = { amount: number | string; incurred_on: string; r
 const operatingExpenseSummaryApi = supabase as unknown as {
   from: (table: 'operating_expenses') => {
     select: (columns: 'amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)') => {
-      order: (column: 'incurred_on', options?: { ascending?: boolean }) => {
-        range: (from: number, to: number) => PromiseLike<{
+      eq: (column: 'business_id', value: string) => {
+        order: (column: 'incurred_on', options?: { ascending?: boolean }) => {
+          range: (from: number, to: number) => PromiseLike<{
           data: OperatingExpenseSummary[] | null;
-          error: { message: string } | null;
-        }>;
+            error: { message: string } | null;
+          }>;
+        };
       };
     };
   };
@@ -69,10 +72,12 @@ type PettyCashReversalRow = {
 const pettyCashReversalApi = supabase as unknown as {
   from: (table: 'petty_cash_expense_reversals') => {
     select: (columns: string) => {
-      order: (column: string, options?: { ascending?: boolean }) => PromiseLike<{
-        data: PettyCashReversalRow[] | null;
-        error: { message: string } | null;
-      }>;
+      eq: (column: 'business_id', value: string) => {
+        order: (column: string, options?: { ascending?: boolean }) => PromiseLike<{
+          data: PettyCashReversalRow[] | null;
+          error: { message: string } | null;
+        }>;
+      };
     };
   };
   rpc: (name: 'reverse_petty_cash_expense', args: Record<string, unknown>) => PromiseLike<{
@@ -90,6 +95,8 @@ export default function Accounting() {
   const { settings } = useSettings();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id ?? null;
   const roles = useEffectiveRoles();
   const canReversePettyCash = roles.includes('admin') || roles.includes('accountant');
 
@@ -162,6 +169,7 @@ export default function Accounting() {
     const { data, error } = await supabase
       .from('petty_cash_transactions')
       .select('*')
+      .eq('business_id', businessId!)
       .order('date', { ascending: false })
       .range(from, to);
     if (error) throw error;
@@ -169,7 +177,8 @@ export default function Accounting() {
   };
 
   const { data: pettyCash = [], isError: pettyCashError, isLoading: pettyCashLoading } = useQuery({
-    queryKey: ['petty-cash'],
+    queryKey: ['petty-cash', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       const rows: Awaited<ReturnType<typeof fetchPettyCashPage>> = [];
       let offset = 0;
@@ -186,11 +195,13 @@ export default function Accounting() {
 
 
   const pettyCashReversalsQuery = useQuery({
-    queryKey: ['petty-cash-reversals'],
+    queryKey: ['petty-cash-reversals', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<PettyCashReversalRow[]> => {
       const { data, error } = await pettyCashReversalApi
         .from('petty_cash_expense_reversals')
         .select('id, petty_cash_transaction_id, amount, reversed_on, reason, reference_number')
+        .eq('business_id', businessId!)
         .order('reversed_on', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -205,7 +216,8 @@ export default function Accounting() {
   );
 
   const { data: operatingExpenseRecords = [], isError: operatingExpensesError, isLoading: operatingExpensesLoading } = useQuery({
-    queryKey: ['operating-expenses-summary'],
+    queryKey: ['operating-expenses-summary', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       const rows: OperatingExpenseSummary[] = [];
       let offset = 0;
@@ -214,6 +226,7 @@ export default function Accounting() {
         const { data, error } = await operatingExpenseSummaryApi
           .from('operating_expenses')
           .select('amount, incurred_on, reversal:operating_expense_reversals(id, amount, created_at)')
+          .eq('business_id', businessId!)
           .order('incurred_on', { ascending: true })
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -230,9 +243,11 @@ export default function Accounting() {
   const createPettyCash = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!businessId) throw new Error('Select an active business before recording petty cash.');
       const { error } = await supabase
         .from('petty_cash_transactions')
         .insert({
+          business_id: businessId,
           description: pettyCashForm.description,
           amount: pettyCashForm.amount,
           type: pettyCashForm.type,
