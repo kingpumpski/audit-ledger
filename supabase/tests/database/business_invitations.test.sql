@@ -98,7 +98,13 @@ INSERT INTO public.business_invitations (
    'expired-member@example.invalid', 'auditor',
    'c1000000-0000-4000-8000-000000000001',
    'c1000000-0000-4000-8000-000000000002',
-   now() - interval '1 minute');
+   now() - interval '1 minute'),
+  ('c1000000-0000-4000-8000-000000000023',
+   'c1000000-0000-4000-8000-000000000010',
+   'wrong-email@example.invalid', 'cashier',
+   'c1000000-0000-4000-8000-000000000001',
+   NULL,
+   now() + interval '1 hour');
 
 SELECT set_config(
   'request.jwt.claims',
@@ -205,7 +211,7 @@ SELECT extensions.lives_ok(
   DO $reject_wrong_email$
   BEGIN
     BEGIN
-      PERFORM public.accept_business_invitation('c1000000-0000-4000-8000-000000000021');
+      PERFORM public.accept_business_invitation('c1000000-0000-4000-8000-000000000023');
       RAISE EXCEPTION 'wrong email unexpectedly accepted invitation';
     EXCEPTION
       WHEN insufficient_privilege THEN
