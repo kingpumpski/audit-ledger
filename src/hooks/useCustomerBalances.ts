@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 
 export interface CustomerAccountBalance {
   customer_id: string;
@@ -18,8 +19,10 @@ export interface CustomerAccountBalance {
  * Historical balances therefore remain stable when later payments are entered.
  */
 export function useCustomerAccountBalances(asOfDate: string, customerId?: string, enabled = true) {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   const query = useQuery({
-    queryKey: ['customer-account-balances', asOfDate, customerId || 'all'],
+    queryKey: ['customer-account-balances', businessId, asOfDate, customerId || 'all'],
     queryFn: async (): Promise<CustomerAccountBalance[]> => {
       const { data, error } = await supabase.rpc('get_customer_account_balances', {
         p_as_of_date: asOfDate,
@@ -28,7 +31,7 @@ export function useCustomerAccountBalances(asOfDate: string, customerId?: string
       if (error) throw error;
       return (data || []) as CustomerAccountBalance[];
     },
-    enabled: Boolean(asOfDate) && enabled,
+    enabled: Boolean(businessId) && Boolean(asOfDate) && enabled,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
