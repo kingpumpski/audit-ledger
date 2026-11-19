@@ -93,13 +93,13 @@ SELECT set_config(
   true
 );
 SELECT extensions.throws_ok(
-  $ SELECT * FROM public.get_customer_account_balances(CURRENT_DATE) $,
+  $cab_unauthorized_receivables$ SELECT * FROM public.get_customer_account_balances(CURRENT_DATE) $cab_unauthorized_receivables$,
   '42501',
   'You are not authorized to view customer account balances',
   'Receivables RPC rejects a business without an active membership'
 );
 SELECT extensions.throws_ok(
-  $ SELECT * FROM public.get_customer_credit_balances((SELECT id FROM public.customers WHERE code='CAB-001')) $,
+  $cab_unauthorized_credits$ SELECT * FROM public.get_customer_credit_balances((SELECT id FROM public.customers WHERE code='CAB-001')) $cab_unauthorized_credits$,
   '42501',
   'You are not authorized to view customer credit balances',
   'Customer-credit RPC rejects a business without an active membership'
