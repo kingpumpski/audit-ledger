@@ -19,14 +19,21 @@ INSERT INTO public.businesses (
 -- Keep this test independent of business-creation trigger side effects. The
 -- location migration owns that trigger; this suite only needs deterministic
 -- active locations to exercise the product and supplier relationship.
+-- Give each fixture a dedicated active default location. Clear any
+-- location created by the business trigger first so the partial unique
+-- one-default-per-business index remains satisfied.
+UPDATE public.store_locations
+SET is_default = false
+WHERE business_id IN (
+  'e6000000-0000-4000-8000-000000000010',
+  'e6000000-0000-4000-8000-000000000020'
+);
+
 INSERT INTO public.store_locations (
   business_id, code, name, location_type, timezone, is_default, is_active
 ) VALUES
-  ('e6000000-0000-4000-8000-000000000010', 'MAIN', 'Supplier Test One', 'store', 'Africa/Accra', true, true),
-  ('e6000000-0000-4000-8000-000000000020', 'MAIN', 'Supplier Test Two', 'store', 'Africa/Accra', true, true)
-ON CONFLICT (business_id, code) DO UPDATE
-SET is_default = true,
-    is_active = true;
+  ('e6000000-0000-4000-8000-000000000010', 'SUPPLIER-MAIN', 'Supplier Test One', 'store', 'Africa/Accra', true, true),
+  ('e6000000-0000-4000-8000-000000000020', 'SUPPLIER-MAIN', 'Supplier Test Two', 'store', 'Africa/Accra', true, true);
 
 INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
 VALUES
