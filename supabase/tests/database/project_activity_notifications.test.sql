@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(11);
+SELECT extensions.plan(13);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -25,6 +25,31 @@ VALUES
   ('e2000000-0000-4000-8000-000000000010', 'e2000000-0000-4000-8000-000000000001', 'owner', 'active', now()),
   ('e2000000-0000-4000-8000-000000000010', 'e2000000-0000-4000-8000-000000000002', 'accountant', 'active', now()),
   ('e2000000-0000-4000-8000-000000000020', 'e2000000-0000-4000-8000-000000000003', 'owner', 'active', now());
+
+-- A business created after other workspaces exist must not emit a generic
+-- project-wide event. The business table's own id is its tenant identifier.
+INSERT INTO public.businesses (
+  id, name, business_type, country, base_currency, timezone, status
+) VALUES (
+  'e2000000-0000-4000-8000-000000000040',
+  'New Activity Workspace C', 'small_business', 'Ghana', 'GHS', 'Africa/Accra', 'active'
+);
+
+SELECT extensions.is(
+  (SELECT business_id FROM public.audit_logs
+   WHERE entity_type='businesses'
+     AND entity_id='e2000000-0000-4000-8000-000000000040'
+   ORDER BY created_at DESC LIMIT 1),
+  'e2000000-0000-4000-8000-000000000040'::uuid,
+  'business creation audit event is scoped to the newly created business'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.notifications
+   WHERE business_id IS NULL AND type='project_activity'),
+  0,
+  'business creation does not broadcast generic activity to other workspaces'
+);
 
 INSERT INTO public.audit_logs (user_id, action, entity_type, entity_id, business_id)
 VALUES (

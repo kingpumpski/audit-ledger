@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(16);
+SELECT plan(20);
 
 SELECT ok(
   to_regclass('public.business_invitations') IS NOT NULL,
@@ -98,7 +98,13 @@ INSERT INTO public.business_invitations (
    'expired-member@example.invalid', 'auditor',
    'c1000000-0000-4000-8000-000000000001',
    'c1000000-0000-4000-8000-000000000002',
-   now() - interval '1 minute');
+   now() - interval '1 minute'),
+  ('c1000000-0000-4000-8000-000000000023',
+   'c1000000-0000-4000-8000-000000000010',
+   'wrong-email@example.invalid', 'cashier',
+   'c1000000-0000-4000-8000-000000000001',
+   NULL,
+   now() + interval '1 hour');
 
 SELECT set_config(
   'request.jwt.claims',
@@ -135,6 +141,63 @@ SELECT extensions.is(
   'successful acceptance consumes the pending invitation'
 );
 
+SELECT extensions.is(
+  (SELECT business_id FROM public.audit_logs
+   WHERE entity_type='business_member'
+     AND entity_id=(SELECT id FROM public.business_members
+                    WHERE business_id='c1000000-0000-4000-8000-000000000010'
+                      AND user_id='c1000000-0000-4000-8000-000000000002')
+   ORDER BY created_at DESC LIMIT 1),
+  'c1000000-0000-4000-8000-000000000010'::uuid,
+  'invitation acceptance audit event is scoped to the invited business'
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'c1000000-0000-4000-8000-000000000001',
+    'email', 'invitation-owner@example.invalid',
+    'role', 'authenticated',
+    'app_metadata', '{}'::jsonb
+  )::text,
+  true
+);
+SET LOCAL ROLE authenticated;
+
+SELECT extensions.is(
+  public.revoke_business_invitation('c1000000-0000-4000-8000-000000000021'),
+  true,
+  'an active business owner can revoke a pending invitation'
+);
+
+RESET ROLE;
+
+SELECT extensions.is(
+  (SELECT status FROM public.business_invitations
+   WHERE id='c1000000-0000-4000-8000-000000000021'),
+  'revoked',
+  'revocation persists the invitation status'
+);
+
+SELECT extensions.is(
+  (SELECT business_id FROM public.audit_logs
+   WHERE entity_type='business_invitation'
+     AND entity_id='c1000000-0000-4000-8000-000000000021'
+   ORDER BY created_at DESC LIMIT 1),
+  'c1000000-0000-4000-8000-000000000010'::uuid,
+  'invitation revocation audit event is scoped to the invited business'
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'c1000000-0000-4000-8000-000000000002',
+    'email', 'invitation-member@example.invalid',
+    'role', 'authenticated',
+    'app_metadata', '{}'::jsonb
+  )::text,
+  true
+);
 SET LOCAL ROLE authenticated;
 
 SELECT extensions.is(
@@ -148,7 +211,7 @@ SELECT extensions.lives_ok(
   DO $reject_wrong_email$
   BEGIN
     BEGIN
-      PERFORM public.accept_business_invitation('c1000000-0000-4000-8000-000000000021');
+      PERFORM public.accept_business_invitation('c1000000-0000-4000-8000-000000000023');
       RAISE EXCEPTION 'wrong email unexpectedly accepted invitation';
     EXCEPTION
       WHEN insufficient_privilege THEN
