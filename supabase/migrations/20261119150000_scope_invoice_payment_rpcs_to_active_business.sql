@@ -8,9 +8,18 @@ DROP FUNCTION IF EXISTS public.record_invoice_payment(
 -- authenticated active business. Each parent lookup and write is explicitly
 -- bound to one tenant in addition to the restrictive RLS policy.
 
--- The legacy global primary key prevented a second business from having its
--- own sequence row. The business-scoped unique index is the intended key.
+-- The legacy global keys prevented businesses from reusing their own
+-- document numbers and master-data codes. Business-scoped unique indexes from
+-- the tenancy foundation remain the authoritative uniqueness constraints.
 ALTER TABLE public.sequences DROP CONSTRAINT IF EXISTS sequences_pkey;
+ALTER TABLE public.invoices DROP CONSTRAINT IF EXISTS invoices_invoice_number_key;
+ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_payment_number_key;
+ALTER TABLE public.receipts DROP CONSTRAINT IF EXISTS receipts_receipt_number_key;
+ALTER TABLE public.journal_entries DROP CONSTRAINT IF EXISTS journal_entries_entry_number_key;
+ALTER TABLE public.journal_entries DROP CONSTRAINT IF EXISTS journal_entries_source_unique;
+ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_code_key;
+ALTER TABLE public.products DROP CONSTRAINT IF EXISTS products_sku_key;
+ALTER TABLE public.chart_of_accounts DROP CONSTRAINT IF EXISTS chart_of_accounts_code_key;
 
 -- Idempotency keys are unique within a business, not across unrelated tenants.
 DROP INDEX IF EXISTS public.payments_idempotency_key_uidx;
