@@ -151,7 +151,7 @@ DECLARE
   v_previous_tax_code text;
   v_item_count integer := 0;
 BEGIN
-  IF v_user_id IS NULL OR v_business_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]) THEN
+  IF v_user_id IS NULL OR v_business_id IS NULL OR NOT public.has_business_role(v_business_id, ARRAY['owner','admin','accountant','cashier']::text[]) THEN
     RAISE EXCEPTION 'You are not authorized to create invoices';
   END IF;
 
@@ -444,7 +444,7 @@ DECLARE
   v_debits numeric(14,2);
   v_credits numeric(14,2);
 BEGIN
-  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]) THEN
+  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_business_role(v_business_id, ARRAY['owner','admin','accountant','cashier']::text[]) THEN
     RAISE EXCEPTION 'You are not authorized to post invoice journals';
   END IF;
 
@@ -598,7 +598,7 @@ DECLARE
   v_invoice public.invoices%ROWTYPE;
   v_journal_id uuid;
 BEGIN
-  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]) THEN
+  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_business_role(v_business_id, ARRAY['owner','admin','accountant','cashier']::text[]) THEN
     RAISE EXCEPTION 'You are not authorized to issue invoices';
   END IF;
 
@@ -654,7 +654,7 @@ DECLARE
   v_existing_payment public.payments%ROWTYPE;
   v_reference_number text := NULLIF(BTRIM(p_reference_number), '');
 BEGIN
-  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]) THEN
+  IF auth.uid() IS NULL OR v_business_id IS NULL OR NOT public.has_business_role(v_business_id, ARRAY['owner','admin','accountant','cashier']::text[]) THEN
     RAISE EXCEPTION 'You are not authorized to record payments';
   END IF;
 
@@ -757,7 +757,7 @@ DECLARE
   v_existing_receipt public.receipts%ROWTYPE;
   v_issuer_name text;
 BEGIN
-  IF v_user_id IS NULL OR v_business_id IS NULL OR NOT public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]) THEN
+  IF v_user_id IS NULL OR v_business_id IS NULL OR NOT public.has_business_role(v_business_id, ARRAY['owner','admin','accountant','cashier']::text[]) THEN
     RAISE EXCEPTION 'You are not authorized to issue receipts';
   END IF;
 
