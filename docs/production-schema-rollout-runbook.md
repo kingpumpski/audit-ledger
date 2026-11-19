@@ -126,3 +126,10 @@ Both use branch `main`, root directory `/`, build command `bun install && bun ru
 **Do not delete or suspend either service yet.** Confirm which URL is canonical, whether custom domains or users depend on either hostname, and whether both are intentionally retained. Then consolidate to one canonical service with an explicit rollback plan. An HTTP page fetch could not be independently completed in this inspection, so Render's `live` deployment state is not represented as an end-to-end browser acceptance test.
 
 No dedicated Audit Ledger backup worker or backup object-storage service was found in the connected Render workspace. The existing two static sites cannot execute the proposed trusted backup/restore worker. No service was created, upgraded, or modified.
+
+
+## Preflight script execution — 2026-11-19
+
+The latest `supabase/diagnostics/production-schema-rollout-preflight.sql` was executed against production through the connected read-only SQL path after checking that it contains no DDL/DML, role changes, migration commands or schema-cache notifications. It completed without SQL errors. The SQL runner surfaced the final policy query result, showing the existing `notifications` table's three user-owned notification policies. Separate read-only catalog checks confirmed the missing-object list recorded above.
+
+This execution validates the diagnostic SQL syntax and current production connectivity only. It is not a migration test, tenant acceptance test, backup, restore rehearsal or production readiness approval.
