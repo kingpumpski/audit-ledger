@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables } from '@/integrations/supabase/types';
 
 type Receipt = Tables<'receipts'>;
@@ -36,9 +37,11 @@ async function generateChecksum(data: string): Promise<string> {
 export function useReceipts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const receiptsQuery = useQuery({
-    queryKey: ['receipts'],
+    queryKey: ['receipts', businessId],
     queryFn: async (): Promise<ReceiptWithRelations[]> => {
       const { data, error } = await supabase
         .from('receipts')
@@ -48,18 +51,21 @@ export function useReceipts() {
           invoice:invoices!receipts_invoice_id_fkey(*)
         `)
         // Voided receipts remain visible for audit history unless soft-deleted.
+        .eq('business_id', businessId!)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as ReceiptWithRelations[];
     },
+    enabled: !!businessId,
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
   });
 
   const createReceiptMutation = useMutation({
     mutationFn: async (receiptData: CreateReceiptData) => {
+      if (!businessId) throw new Error('Select an active business before issuing a receipt.');
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -109,6 +115,7 @@ export function useReceipts() {
         .from('receipts')
         .select('*')
         .eq('id', receiptId)
+        .eq('business_id', businessId)
         .single();
 
       if (fetchError) throw fetchError;
@@ -135,12 +142,14 @@ export function useReceipts() {
       id: string; 
       data: { notes?: string };
     }) => {
+      if (!businessId) throw new Error('Select an active business before editing a receipt.');
       const { data: updatedReceipt, error } = await supabase
         .from('receipts')
         .update({
           notes: data.notes,
         })
         .eq('id', id)
+        .eq('business_id', businessId)
         .eq('status', 'issued') // Only allow editing issued receipts
         .is('deleted_at', null)
         .select('id')
@@ -164,6 +173,7 @@ export function useReceipts() {
 
   const voidReceiptMutation = useMutation({
     mutationFn: async (receiptId: string) => {
+      if (!businessId) throw new Error('Select an active business before voiding a receipt.');
       const { error } = await supabase.rpc('void_receipt_and_reconcile', {
         receipt_id: receiptId,
       });
@@ -197,8 +207,10 @@ export function useReceipts() {
 }
 
 export function useReceipt(id: string) {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['receipt', id],
+    queryKey: ['receipt', id, businessId],
     queryFn: async (): Promise<ReceiptWithRelations | null> => {
       const { data, error } = await supabase
         .from('receipts')
@@ -208,6 +220,7 @@ export function useReceipt(id: string) {
           invoice:invoices!receipts_invoice_id_fkey(*)
         `)
         .eq('id', id)
+        .eq('business_id', businessId!)
         // Keep voided receipts accessible only while they remain in the audit record.
         .is('deleted_at', null)
         .single();
@@ -215,7 +228,7 @@ export function useReceipt(id: string) {
       if (error) throw error;
       return data as ReceiptWithRelations;
     },
-    enabled: !!id,
+    enabled: !!id && !!businessId,
   });
 }
 

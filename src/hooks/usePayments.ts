@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
 type Payment = Tables<'payments'>;
@@ -25,9 +26,11 @@ interface CreatePaymentData {
 export function usePayments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const paymentsQuery = useQuery({
-    queryKey: ['payments'],
+    queryKey: ['payments', businessId],
     queryFn: async (): Promise<PaymentWithRelations[]> => {
       const { data, error } = await supabase
         .from('payments')
@@ -36,18 +39,21 @@ export function usePayments() {
           customer:customers!payments_customer_id_fkey(*),
           invoice:invoices!payments_invoice_id_fkey(*)
         `)
+        .eq('business_id', businessId!)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as PaymentWithRelations[];
     },
+    enabled: !!businessId,
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
   });
 
   const createPaymentMutation = useMutation({
     mutationFn: async (paymentData: CreatePaymentData) => {
+      if (!businessId) throw new Error('Select an active business before recording a payment.');
       // Payment, invoice balance update and journal posting are committed atomically by Postgres.
       const { data: paymentId, error: paymentError } = await supabase.rpc('record_invoice_payment', {
         p_invoice_id: paymentData.invoice_id,
@@ -66,6 +72,7 @@ export function usePayments() {
         .from('payments')
         .select('*')
         .eq('id', paymentId)
+        .eq('business_id', businessId)
         .single();
 
       if (fetchError) throw fetchError;
@@ -105,8 +112,10 @@ export function usePayments() {
 }
 
 export function usePayment(id: string) {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['payment', id],
+    queryKey: ['payment', id, businessId],
     queryFn: async (): Promise<PaymentWithRelations | null> => {
       const { data, error } = await supabase
         .from('payments')
@@ -116,11 +125,12 @@ export function usePayment(id: string) {
           invoice:invoices!payments_invoice_id_fkey(*)
         `)
         .eq('id', id)
+        .eq('business_id', businessId!)
         .single();
 
       if (error) throw error;
       return data as PaymentWithRelations;
     },
-    enabled: !!id,
+    enabled: !!id && !!businessId,
   });
 }

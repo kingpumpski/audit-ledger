@@ -18,6 +18,10 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast }),
 }));
 
+vi.mock('@/contexts/BusinessContext', () => ({
+  useBusiness: () => ({ activeBusiness: { id: 'business-1' } }),
+}));
+
 const from = vi.mocked(supabase.from);
 
 function makeBuilder(result: { data: unknown; error: unknown }) {
@@ -72,6 +76,7 @@ describe('receipt soft-delete filtering', () => {
     renderReceiptsHook();
 
     await waitFor(() => expect(builder.order).toHaveBeenCalledWith('created_at', { ascending: false }));
+    expect(builder.eq).toHaveBeenCalledWith('business_id', 'business-1');
     expect(builder.is).toHaveBeenCalledWith('deleted_at', null);
     expect(builder.or).not.toHaveBeenCalled();
   });
@@ -107,6 +112,7 @@ describe('useReceipts updateReceipt', () => {
 
     expect(builder.update).toHaveBeenCalledWith({ notes: 'Corrected note' });
     expect(builder.eq).toHaveBeenCalledWith('id', 'receipt-1');
+    expect(builder.eq).toHaveBeenCalledWith('business_id', 'business-1');
     expect(builder.eq).toHaveBeenCalledWith('status', 'issued');
     expect(builder.is).toHaveBeenCalledWith('deleted_at', null);
     expect(builder.select).toHaveBeenCalledWith('id');
