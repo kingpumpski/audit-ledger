@@ -624,7 +624,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.record_invoice_payment(
+CREATE OR REPLACE FUNCTION public.record_invoice_payment(
   p_invoice_id uuid,
   p_customer_id uuid,
   p_amount numeric,
@@ -718,7 +718,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION public.create_receipt_with_payment(
+CREATE OR REPLACE FUNCTION public.create_receipt_with_payment(
   p_customer_id uuid,
   p_invoice_id uuid,
   p_payment_id uuid,
