@@ -122,7 +122,7 @@ export default function StoreReplenishment() {
           leadTimeDays: Number(setting?.lead_time_days ?? 0),
         };
       })
-      .filter(row => row.product && row.location && (row.needsReorder || row.inbound > 0))
+      .filter(row => row.product && row.location)
       .sort((a, b) => {
         if (a.needsReorder !== b.needsReorder) return a.needsReorder ? -1 : 1;
         return a.inventoryPosition - a.reorderPoint - (b.inventoryPosition - b.reorderPoint);
@@ -226,7 +226,7 @@ export default function StoreReplenishment() {
         <CardContent>
           {rows.length === 0 ? (
             <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              No products currently require replenishment and no inbound transfer quantities are outstanding.
+              No physical stock records are available for this workspace yet.
             </p>
           ) : (
             <div className="overflow-x-auto">
