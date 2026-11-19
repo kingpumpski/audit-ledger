@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,8 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const roles = useEffectiveRoles();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   const canSettle = roles.includes('admin') || roles.includes('accountant');
   // Reuse the same key until the server confirms success. If the response is
   // lost after the database commits, retrying the same form is idempotent.
@@ -37,7 +40,8 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
   });
 
   const balancesQuery = useQuery({
-    queryKey: ['payment-clearing-balances'],
+    queryKey: ['payment-clearing-balances', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<ClearingBalance[]> => {
       const { data, error } = await supabase.rpc('get_payment_clearing_balances');
       if (error) throw error;
@@ -48,7 +52,8 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
   });
 
   const settlementsQuery = useQuery({
-    queryKey: ['payment-clearing-settlements'],
+    queryKey: ['payment-clearing-settlements', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       const { data, error } = await supabase.rpc('get_payment_clearing_settlements');
       if (error) throw error;
@@ -64,6 +69,7 @@ export function PaymentClearingSettlement({ currencySymbol }: { currencySymbol: 
 
   const settlement = useMutation({
     mutationFn: async () => {
+      if (!businessId) throw new Error('Select an active business before posting a clearing settlement.');
       const gross = Number(form.grossAmount);
       const fees = Number(form.feeAmount || 0);
       if (!Number.isFinite(gross) || gross <= 0 || !Number.isFinite(fees) || fees < 0 || fees >= gross) {
