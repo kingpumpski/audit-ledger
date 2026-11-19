@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownToLine, ClipboardList, PackageSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -116,7 +115,7 @@ export default function StoreReplenishment() {
           id: pair.id,
           product,
           location,
-          available: Number(balance.available_quantity),
+          available: pair.available,
           inbound,
           inventoryPosition,
           reorderPoint,
@@ -152,8 +151,8 @@ export default function StoreReplenishment() {
         || !Number.isInteger(leadTimeDays)) {
         throw new Error('Minimum, reorder point and lead time must be valid non-negative values.');
       }
-      if (target !== null && (!Number.isFinite(target) || target <= reorderPoint)) {
-        throw new Error('Target stock must be blank or greater than the effective reorder trigger.');
+      if (target !== null && (!Number.isFinite(target) || target <= Math.max(minimum, reorderPoint))) {
+        throw new Error('Target stock must be blank or greater than the effective minimum/reorder trigger.');
       }
       const { error } = await supabase.from('product_location_settings').upsert({
         business_id: businessId,
@@ -189,7 +188,6 @@ export default function StoreReplenishment() {
   }
 
   const reorderRows = rows.filter(row => row.needsReorder);
-  const requiresSetup = reorderRows.filter(row => !row.targetConfigured);
   const suggestions = reorderRows.filter(row => row.targetConfigured);
 
   return (
