@@ -6,8 +6,11 @@ SELECT extensions.ok(
   NOT has_table_privilege('authenticated', 'public.store_stock_counts', 'INSERT')
   AND NOT has_table_privilege('service_role', 'public.store_stock_counts', 'INSERT')
   AND NOT has_table_privilege('authenticated', 'public.store_stock_count_lines', 'UPDATE')
-  AND NOT has_table_privilege('service_role', 'public.store_stock_count_lines', 'UPDATE'),
-  'Clients and service-role sessions cannot bypass the guarded stock-count RPCs'
+  AND NOT has_table_privilege('service_role', 'public.store_stock_count_lines', 'UPDATE')
+  AND NOT has_table_privilege('authenticated', 'public.sequences', 'UPDATE')
+  AND NOT has_table_privilege('service_role', 'public.sequences', 'UPDATE')
+  AND has_table_privilege('audit_ledger_rpc_owner', 'public.sequences', 'UPDATE'),
+  'Clients and service-role sessions cannot bypass guarded stock-count or sequence RPCs'
 );
 
 INSERT INTO auth.users (
