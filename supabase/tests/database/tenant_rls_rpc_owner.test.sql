@@ -92,9 +92,9 @@ SELECT extensions.is(
    FROM pg_catalog.pg_policies
    WHERE schemaname='public'
      AND policyname='tenant_business_scope'
-     AND tablename = ANY(ARRAY['chart_of_accounts','company_settings','credit_note_line_taxes','credit_note_lines','credit_notes','customer_credit_applications','customer_credit_refunds','customers','discounts','financial_completeness_attestations','inventory_count_adjustments','inventory_purchase_reversals','inventory_transactions','invoice_item_direct_costs','invoice_item_taxes','invoice_items','invoice_taxes','invoices','journal_entries','journal_lines','operating_expense_payments','operating_expense_refunds','operating_expense_reversals','operating_expenses','payment_clearing_settlements','payments','petty_cash_expense_reversals','petty_cash_transactions','product_price_history','products','receipts','sequences','taxes'])),
-  33,
-  'all 33 operational tables have restrictive tenant-scope policies'
+     AND tablename = ANY(ARRAY['chart_of_accounts','company_settings','credit_note_line_taxes','credit_note_lines','credit_notes','customer_credit_applications','customer_credit_refunds','customers','discounts','financial_completeness_attestations','inventory_count_adjustments','inventory_purchase_reversals','inventory_transactions','invoice_item_direct_costs','invoice_item_taxes','invoice_items','invoice_taxes','invoices','journal_entries','journal_lines','operating_expense_payments','operating_expense_refunds','operating_expense_reversals','operating_expenses','payment_clearing_settlements','payments','petty_cash_expense_reversals','petty_cash_transactions','product_price_history','products','receipts','taxes'])),
+  32,
+  'all 32 tenant-owned operational tables have restrictive tenant-scope policies; shared sequences are RPC-only'
 );
 
 SELECT extensions.is(
