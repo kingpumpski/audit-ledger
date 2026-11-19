@@ -51,6 +51,17 @@ SELECT set_config(
   true
 );
 
+-- Fixture setup is performed with the database-owner claim so the
+-- authenticated product-opening-stock guard does not reject pre-existing stock.
+-- Keep the active-business claim so the tenant default remains deterministic.
+SELECT set_config('request.jwt.claim.role','postgres',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','postgres',
+    'app_metadata',jsonb_build_object('active_business_id','d1000000-0000-4000-8000-000000000010'))::text,
+  true
+);
+
 INSERT INTO public.products (
   business_id,sku,name,current_price,cost_price,cost_price_verified,
   stock_quantity,is_service,is_active
@@ -60,6 +71,7 @@ INSERT INTO public.products (
   20,NULL,false,0,false,true
 );
 
+SELECT set_config('request.jwt.claim.role','authenticated',true);
 SELECT set_config(
   'request.jwt.claims',
   jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
