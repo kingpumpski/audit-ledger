@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(18);
+SELECT extensions.plan(19);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -91,6 +91,12 @@ SELECT set_config(
   jsonb_build_object('sub','ca100000-0000-4000-8000-000000000001','role','authenticated',
     'app_metadata',jsonb_build_object('active_business_id','ca100000-0000-4000-8000-000000000003'))::text,
   true
+);
+SELECT extensions.throws_ok(
+  $cab_unauthorized_clearing_read$ SELECT * FROM public.get_payment_clearing_balances() $cab_unauthorized_clearing_read$,
+  '42501',
+  'You are not authorized to view payment clearing balances',
+  'A member cannot query clearing balances for a business where they have no active membership'
 );
 SELECT extensions.throws_ok(
   $cab_unauthorized_receivables$ SELECT * FROM public.get_customer_account_balances(CURRENT_DATE) $cab_unauthorized_receivables$,
