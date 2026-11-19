@@ -104,3 +104,18 @@ Read-only Supabase advisors were run against production project `phfpbqlhxagonpo
 6. Record whether leaked-password protection is enabled and the reviewed Auth policy before inviting production users.
 
 These advisor counts are point-in-time values and must be refreshed before rollout.
+
+## Render deployment topology snapshot — 2026-11-19
+
+The connected Render workspace currently contains **two active static-site services** connected to the same repository and branch:
+
+| Service | URL | Service ID | Current deployment |
+|---|---|---|---|
+| `bredas-receipt` | `https://bredas-receipt.onrender.com` | `srv-d94vtfvlk1mc73c08ea0` | Live, commit `e8811c482e12984e050cb9159c0748e87e849761` |
+| `breda-receipt` | `https://breda-receipt.onrender.com` | `srv-d9362mu7r5hc73a7bks0` | Live, same commit `e8811c482e12984e050cb9159c0748e87e849761` |
+
+Both use branch `main`, root directory `/`, build command `bun install && bun run build`, and publish directory `dist`. Both deployments completed successfully on 2026-11-19 at approximately 07:41 UTC. The two Render deployments therefore appear to be duplicate hosting targets, not separate application environments.
+
+**Do not delete or suspend either service yet.** Confirm which URL is canonical, whether custom domains or users depend on either hostname, and whether both are intentionally retained. Then consolidate to one canonical service with an explicit rollback plan. An HTTP page fetch could not be independently completed in this inspection, so Render's `live` deployment state is not represented as an end-to-end browser acceptance test.
+
+No dedicated Audit Ledger backup worker or backup object-storage service was found in the connected Render workspace. The existing two static sites cannot execute the proposed trusted backup/restore worker. No service was created, upgraded, or modified.
