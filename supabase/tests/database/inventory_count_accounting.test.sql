@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(11);
+SELECT extensions.plan(12);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -14,6 +14,58 @@ INSERT INTO auth.users (
 INSERT INTO public.user_roles(user_id, role) VALUES
   ('d1000000-0000-4000-8000-000000000001','accountant'),
   ('d1000000-0000-4000-8000-000000000002','cashier');
+
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(), fixture.user_id, fixture.role, 'active', now()
+FROM (VALUES
+  ('d1000000-0000-4000-8000-000000000001'::uuid,'accountant'::text),
+  ('d1000000-0000-4000-8000-000000000002'::uuid,'cashier'::text)
+) AS fixture(user_id,role);
+
+SELECT set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
+
+INSERT INTO public.businesses (
+  id,name,business_type,country,base_currency,timezone,status
+) VALUES (
+  'd1000000-0000-4000-8000-000000000010',
+  'Stock count tenant B','small_business','Ghana','GHS','Africa/Accra','active'
+);
+
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+VALUES (
+  'd1000000-0000-4000-8000-000000000010',
+  'd1000000-0000-4000-8000-000000000001','accountant','active',now()
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id','d1000000-0000-4000-8000-000000000010'))::text,
+  true
+);
+
+INSERT INTO public.products (
+  business_id,sku,name,current_price,cost_price,cost_price_verified,
+  stock_quantity,is_service,is_active
+) VALUES (
+  'd1000000-0000-4000-8000-000000000010',
+  'TEST-COUNT-FOREIGN-001','Foreign tenant stock count item',
+  20,5,true,10,false,true
+);
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 INSERT INTO public.products (
   sku, name, current_price, cost_price, cost_price_verified,
@@ -122,7 +174,25 @@ SELECT extensions.is(
   'Negative variance debits inventory shrinkage expense at verified cost'
 );
 
+SELECT extensions.throws_ok(
+  $ SELECT public.record_stock_count_adjustment(
+    (SELECT id FROM public.products WHERE sku='TEST-COUNT-FOREIGN-001'),
+    9, CURRENT_DATE, 'Attempt cross-business stock count',
+    'COUNT-SHEET-FOREIGN-001',
+    'd1000000-0000-4000-8000-000000000105'
+  ) $,
+  'P0001',
+  'Select an active physical inventory product',
+  'An accountant cannot adjust stock belonging to another active business'
+);
+
 SELECT set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000002',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 SELECT extensions.throws_ok(
   $$ SELECT public.record_stock_count_adjustment(
     (SELECT id FROM public.products WHERE sku='TEST-COUNT-NEG-001'),
@@ -130,8 +200,8 @@ SELECT extensions.throws_ok(
     'COUNT-SHEET-CASHIER-001',
     'd1000000-0000-4000-8000-000000000103'
   ) $$,
-  'P0001',
-  'Only an admin or accountant can approve stock-count corrections',
+  '42501',
+  'Only an active business owner, admin or accountant can approve stock-count corrections',
   'Cashier cannot approve stock-count corrections'
 );
 
