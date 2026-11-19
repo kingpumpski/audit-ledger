@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,8 +104,10 @@ export function ChartOfAccounts() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
+    const requestGeneration = ++loadGeneration.current;
     const businessId = activeBusiness?.id;
     if (!businessId) {
       setAccounts([]);
@@ -120,9 +122,8 @@ export function ChartOfAccounts() {
       .eq('business_id', businessId)
       .order('code', { ascending: true });
 
-    // A workspace switch can happen while the previous request is in flight.
-    // Never let its response repopulate this component with another tenant's accounts.
-    if (activeBusiness?.id !== businessId) return;
+    // A newer load (including a workspace switch) invalidates this response.
+    if (loadGeneration.current !== requestGeneration) return;
 
     if (error) {
       setAccounts([]);
@@ -176,7 +177,14 @@ export function ChartOfAccounts() {
       return;
     }
     setSaving(true);
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      setSaving(false);
+      setFormError('Select an active business before saving an account.');
+      return;
+    }
     const payload = {
+      business_id: businessId,
       code: parsed.data.code.toUpperCase(),
       name: parsed.data.name,
       description: parsed.data.description || null,
@@ -187,7 +195,7 @@ export function ChartOfAccounts() {
       is_active: parsed.data.is_active,
     };
     const op = editing
-      ? supabase.from('chart_of_accounts').update(payload).eq('id', editing.id)
+      ? supabase.from('chart_of_accounts').update(payload).eq('id', editing.id).eq('business_id', businessId)
       : supabase.from('chart_of_accounts').insert({ ...payload, current_balance: payload.opening_balance });
     const { error } = await op;
     setSaving(false);
@@ -201,7 +209,12 @@ export function ChartOfAccounts() {
   };
 
   const handleDelete = async (a: Account) => {
-    const { error } = await supabase.from('chart_of_accounts').delete().eq('id', a.id);
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      toast({ title: 'No active business', description: 'Select a business before deleting an account.', variant: 'destructive' });
+      return;
+    }
+    const { error } = await supabase.from('chart_of_accounts').delete().eq('id', a.id).eq('business_id', businessId);
     if (error) {
       toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
     } else {
