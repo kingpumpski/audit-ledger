@@ -133,3 +133,22 @@ No dedicated Audit Ledger backup worker or backup object-storage service was fou
 The latest `supabase/diagnostics/production-schema-rollout-preflight.sql` was executed against production through the connected read-only SQL path after checking that it contains no DDL/DML, role changes, migration commands or schema-cache notifications. It completed without SQL errors. The SQL runner surfaced the final policy query result, showing the existing `notifications` table's three user-owned notification policies. Separate read-only catalog checks confirmed the missing-object list recorded above.
 
 This execution validates the diagnostic SQL syntax and current production connectivity only. It is not a migration test, tenant acceptance test, backup, restore rehearsal or production readiness approval.
+
+
+## Live application error evidence — 2026-11-19
+
+Read-only Supabase unified-log queries over the most recent 24-hour window confirmed repeated production Data API 404s for application features whose backing migrations are not yet present. The grouped query returned at least the following observed requests:
+
+| Data API path | Observed 404 requests | First seen (UTC) | Last seen (UTC) |
+|---|---:|---|---|
+| `/rest/v1/product_location_settings` | 50 | 04:50:38 | 09:04:44 |
+| `/rest/v1/store_locations` | 50 | 04:50:38 | 09:04:44 |
+| `/rest/v1/stock_balances` | 50 | 04:50:38 | 09:04:44 |
+| `/rest/v1/business_invitations` | 8 | 04:50:13 | 09:03:10 |
+| `/rest/v1/rpc/get_business_members` | 8 | 04:50:13 | 09:03:10 |
+
+The three store routes map to `20261118210000_store_location_stock_balances.sql`; the invitation table and member-list RPC are created by `20261117160000_add_business_invitations.sql`. Their absence was independently confirmed in `pg_catalog`/migration checks. This is a schema deployment gap, not a schema-cache-only problem. A PostgREST schema reload cannot create missing relations or functions.
+
+The log query's per-route count for the three store routes reached 50 in the returned result, so treat those as at least 50 observed failures each, not necessarily exhaustive totals. The logs also show successful authenticated reads of the existing `businesses`, `profiles`, and `user_roles` endpoints during the same window.
+
+**Operational consequence:** the current live app is calling APIs that production does not yet provide. The correct remediation is the complete reviewed migration sequence after backup/restore and tenant-security gates—not frontend retries, fake tables, manual schema edits or a cache reload.
