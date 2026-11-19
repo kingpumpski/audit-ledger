@@ -30,12 +30,6 @@ SELECT set_config(
     'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
   true
 );
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000001','role','authenticated',
-    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
-  true
-);
 
 INSERT INTO public.customers(code,name)
 VALUES ('TAX-SNAPSHOT-CUSTOMER','Tax snapshot test customer');
