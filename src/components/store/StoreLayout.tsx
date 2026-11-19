@@ -2,7 +2,7 @@ import { Navigate, NavLink, Outlet } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { cn } from '@/lib/utils';
-import { Loader2, LayoutDashboard, MapPin, PackageSearch, ShieldAlert } from 'lucide-react';
+import { Loader2, LayoutDashboard, MapPin, PackageSearch, ShieldAlert, Truck } from 'lucide-react';
 
 const STORE_READ_ROLES = new Set(['owner', 'admin', 'accountant', 'cashier', 'auditor']);
 
@@ -10,6 +10,7 @@ const navigation = [
   { to: '/store', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/store/stock', label: 'Stock levels', icon: PackageSearch, end: false },
   { to: '/store/locations', label: 'Locations', icon: MapPin, end: false },
+  { to: '/store/suppliers', label: 'Suppliers', icon: Truck, end: false },
 ];
 
 export default function StoreLayout() {
