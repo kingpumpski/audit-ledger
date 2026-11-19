@@ -210,7 +210,7 @@ export function useReceipt(id: string) {
   const { activeBusiness } = useBusiness();
   const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['receipt', businessId, id],
+    queryKey: ['receipt', id, businessId],
     queryFn: async (): Promise<ReceiptWithRelations | null> => {
       const { data, error } = await supabase
         .from('receipts')
