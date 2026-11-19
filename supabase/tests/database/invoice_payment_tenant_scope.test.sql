@@ -9,6 +9,9 @@ INSERT INTO auth.users (
   'invoice-tenant-scope@example.invalid','',now(),'{}'::jsonb,'{}'::jsonb
 );
 
+INSERT INTO public.user_roles(user_id,role)
+VALUES ('15000000-0000-4000-8000-000000000001','accountant');
+
 INSERT INTO public.businesses(id,name,created_by)
 VALUES
   ('15000000-0000-4000-8000-000000000010','Invoice tenant A','15000000-0000-4000-8000-000000000001'),
