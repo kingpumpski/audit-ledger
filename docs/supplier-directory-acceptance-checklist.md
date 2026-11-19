@@ -37,6 +37,12 @@ Run against a disposable/test environment with at least two businesses and users
 - [ ] A supplier-product link cannot reference a supplier or product from a different business.
 - [ ] Deactivated records remain visible with inactive status and are not hard-deleted.
 
+### Test data and cleanup
+
+- [ ] Use disposable business and user records; do not use production supplier or customer data.
+- [ ] Record the tested business IDs, user roles and observed outcomes without including credentials or personal contact data.
+- [ ] Remove only test fixtures through the approved test-environment reset process; never hard-delete supplier history through the application.
+
 ## Explicit scope exclusions
 
 Purchase requisitions, purchase orders, approvals, goods receipts, inventory movements, supplier invoice matching, accounts payable, supplier payments and returns are separate future workflows. Do not treat this directory as a procurement or receiving workflow.
