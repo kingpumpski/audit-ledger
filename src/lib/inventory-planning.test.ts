@@ -187,6 +187,15 @@ describe('calculateReplenishmentPlan', () => {
       onHand: 2,
       orderMultiple: 0,
     })).toThrow('Order multiple must be greater than zero.');
+
+    expect(() => calculateReplenishmentPlan({
+      averageDailyDemand: 1,
+      dailyDemandStandardDeviation: 1,
+      leadTimeDays: 3,
+      onHand: 5,
+      reserved: 3,
+      quarantined: 3,
+    })).toThrow('Reserved and quarantined quantities cannot exceed on-hand stock.');
   });
 });
 
