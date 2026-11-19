@@ -39,9 +39,9 @@ RETURNS TABLE(
   settlement_id uuid,
   account_code text,
   account_name text,
-  gross_amount numeric(15,2),
-  fee_amount numeric(15,2),
-  net_amount numeric(15,2),
+  gross_amount numeric,
+  fee_amount numeric,
+  net_amount numeric,
   settled_on date,
   provider_reference text,
   bank_reference text,
@@ -224,6 +224,10 @@ REVOKE ALL ON FUNCTION public.get_payment_clearing_settlements() FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.get_payment_clearing_settlements() TO authenticated;
 REVOKE ALL ON FUNCTION public.settle_payment_clearing_account(text,numeric,numeric,date,text,text,uuid,text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.settle_payment_clearing_account(text,numeric,numeric,date,text,text,uuid,text) TO authenticated;
+
+ALTER FUNCTION public.get_payment_clearing_balances() OWNER TO audit_ledger_rpc_owner;
+ALTER FUNCTION public.get_payment_clearing_settlements() OWNER TO audit_ledger_rpc_owner;
+ALTER FUNCTION public.settle_payment_clearing_account(text,numeric,numeric,date,text,text,uuid,text) OWNER TO audit_ledger_rpc_owner;
 
 DROP POLICY IF EXISTS payment_clearing_settlements_finance_read
   ON public.payment_clearing_settlements;
