@@ -2,10 +2,10 @@
 
 ## Scope and method
 
-This is a read-only comparison of:
+Read-only comparison of:
 - Production Supabase project ref: `phfpbqlhxagonpofzvtn`.
 - Repository `main` migration directory inspected on 2026-11-19.
-- Production `supabase_migrations.schema_migrations` rows queried on 2026-11-19.
+- Production migration history returned by Supabase's migration listing and queried `supabase_migrations.schema_migrations`.
 
 No production DDL, DML, migration-history edit, schema-cache reload, or migration execution was performed.
 
@@ -13,48 +13,42 @@ No production DDL, DML, migration-history edit, schema-cache reload, or migratio
 
 Production contains 70 migration-history rows. Its latest recorded version is `20261117120018`.
 
-The complete ordered list was queried directly from production. The relevant tail after the common repository migration `20261117105432` is:
+The critical detail is that production migration versions were renumbered, but Supabase's migration listing retains descriptive migration names. The eight production versions after `20261117105432` map by name to repository migration files as follows:
 
-```text
-20261117112228
-20261117112246
-20261117112249
-20261117112251
-20261117113408
-20261117114039
-20261117114343
-20261117120018
-```
+| Production version | Production migration name | Repository migration file |
+|---|---|---|
+| `20261117112228` | `business_tenancy_foundation` | `20261114170000_business_tenancy_foundation.sql` |
+| `20261117112246` | `business_member_administration` | `20261116150000_business_member_administration.sql` |
+| `20261117112249` | `index_business_membership_foreign_keys` | `20261116151000_index_business_membership_foreign_keys.sql` |
+| `20261117112251` | `index_business_members_user_id` | `20261116152000_index_business_members_user_id.sql` |
+| `20261117113408` | `add_business_ownership_columns` | `20261117120000_add_business_ownership_columns.sql` |
+| `20261117114039` | `add_tenant_consistent_foreign_keys` | `20261117130000_add_tenant_consistent_foreign_keys.sql` |
+| `20261117114343` | `add_business_scoped_unique_keys` | `20261117140000_add_business_scoped_unique_keys.sql` |
+| `20261117120018` | `use_active_business_for_new_records` | `20261117150000_use_active_business_for_new_records.sql` |
 
-These eight versions do not have exact timestamp-named counterparts in the repository `main` migration directory inspected in this comparison. Their origin and schema effects are not yet established. Do not infer equivalence from timestamp proximity.
+This corrects the earlier interpretation: production version `20261117120018` is named `use_active_business_for_new_records`, not `add_business_ownership_columns`. The version numbers differ from repository filenames, but the migration names establish a strong intended mapping. The actual DDL and catalog effects must still be compared before considering the mapping fully reconciled.
 
-## Repository migration tail
+## Remaining repository migration gap
 
-Repository `main` contains 76 SQL migration files total. Its relevant tail after `20261117105432` is:
+Repository `main` has seven subsequent migrations after the mapped `use_active_business_for_new_records` migration that are not present in the production history returned on 2026-11-19:
 
-```text
-20261117120000_add_business_ownership_columns.sql
-20261117130000_add_tenant_consistent_foreign_keys.sql
-20261117140000_add_business_scoped_unique_keys.sql
-20261117150000_use_active_business_for_new_records.sql
-20261117155000_enforce_business_tenant_rls_and_rpc_ownership.sql
-20261117160000_add_business_invitations.sql
-20261117170000_allow_legacy_business_membership_finance_reads.sql
-20261118093000_project_wide_activity_notifications.sql
-20261118154000_allow_audit_trigger_cross_business_logs.sql
-20261118210000_store_location_stock_balances.sql
-20261118220000_stock_transfer_workflows.sql
-```
+1. `20261117155000_enforce_business_tenant_rls_and_rpc_ownership.sql`
+2. `20261117160000_add_business_invitations.sql`
+3. `20261117170000_allow_legacy_business_membership_finance_reads.sql`
+4. `20261118093000_project_wide_activity_notifications.sql`
+5. `20261118154000_allow_audit_trigger_cross_business_logs.sql`
+6. `20261118210000_store_location_stock_balances.sql`
+7. `20261118220000_stock_transfer_workflows.sql`
 
-These eleven repository migrations are not present as exact version strings in the production history queried on 2026-11-19. This does **not** prove that none of their effects exist: some earlier production versions may implement equivalent or partial changes. Actual schema equivalence must be established.
+The exact current production schema still requires semantic review. In particular, `audit_ledger_rpc_owner`, `store_locations`, `stock_balances` and `product_location_settings` were confirmed absent. The seven migrations must be assessed in dependency order, not applied one-by-one based only on timestamps.
 
-## Key divergence
+## Key reconciliation status
 
-The repository ownership migration is timestamped `20261117120000`, while production records `20261117120018`. Earlier inspection found that production already has some business-ownership schema elements, but the dedicated `audit_ledger_rpc_owner` role is absent and later inventory tables are absent.
-
-Therefore, the first task is a semantic DDL equivalence review of production version `20261117120018` against repository migration `20261117120000_add_business_ownership_columns.sql`, followed by a mapping of each production-only version listed above to its originating SQL/source or actual catalog effects.
-
-Do not mark `20261117120000` as applied, delete production history rows, or run a blind `supabase db push` to resolve this divergence.
+- The first eight production versions after `20261117105432` now have repository filename candidates based on the exact migration names returned by Supabase.
+- The ownership migration is not an unexplained timestamp mismatch: production records the migration name `add_business_ownership_columns` under version `20261117113408`, corresponding to repository file `20261117120000_add_business_ownership_columns.sql`.
+- Production version `20261117120018` corresponds by name to repository `20261117150000_use_active_business_for_new_records.sql`.
+- The seven later repository migrations remain the rollout candidates; the exact DDL/policy/function state must be validated against production catalog output.
+- Do not mark repository migrations as applied, delete production history rows, or force a blind `supabase db push` to resolve numbering differences.
 
 ## Verified production object gaps
 
@@ -64,22 +58,17 @@ Read-only catalog inspection confirmed the absence of:
 - `public.product_location_settings`
 - `audit_ledger_rpc_owner`
 
-The application-reported 404s for `store_locations` and `product_location_settings`, together with the earlier missing `stock_balances` error, are consistent with these missing relations. They are not fixed by a schema-cache reload alone.
+The application-reported 404s for store locations, stock balances and product location settings are consistent with missing relations, not a schema-cache-only problem.
 
-The repository migration `20261118210000_store_location_stock_balances.sql` is the intended foundation for the first three tables, but it depends on tenant/RPC ownership and must not be applied in isolation. The subsequent `20261118220000_stock_transfer_workflows.sql` depends on that location-aware inventory foundation.
+## Required rollout work
 
-## Required reconciliation work
-
-Before any production rollout:
-
-1. Retrieve or recover the SQL source for all eight production-only versions. If their original migration files are unavailable, capture exact catalog definitions and reconstruct a reviewed equivalence map.
-2. Compare the DDL, functions, triggers, indexes, constraints, grants, RLS flags and policies from production version `20261117120018` with repository ownership migration `20261117120000`.
-3. Map each repository migration from `20261117130000` onward to production catalog state and production-only migration effects.
-4. Identify overlapping, partially applied, and destructive operations. Review data backfills against live row counts and tenant ownership.
-5. Produce a reviewed candidate migration plan that avoids duplicate DDL and never falsifies migration history.
-6. Replay the candidate plan from a clean isolated database, then apply to representative staging data and test role/tenant isolation.
-7. Require a complete, encrypted, independently stored backup and successful isolated restore rehearsal before release.
-8. Obtain explicit approval for the exact candidate migration plan, project ref and execution window.
+1. Compare the actual production DDL/catalog effects of the eight mapped migration names against their repository SQL files, prioritizing ownership columns, composite FKs, unique indexes and active-business helper functions.
+2. Review the seven unapplied repository migrations for dependencies, backfills, locks, destructive operations, grants, RLS, event triggers and function ownership.
+3. Reconcile the production authorization baseline: 47 public tables have RLS enabled, but none has a restrictive policy; 36 have `business_id` and none has a restrictive tenant policy.
+4. Review legacy-role fallback and the 85 SECURITY DEFINER functions, including seven that retain `search_path=public`.
+5. Run clean isolated replay and two-business staging tests.
+6. Require a complete encrypted independent backup and successful isolated restore rehearsal.
+7. Obtain explicit approval for the exact candidate sequence, project ref and execution window.
 
 ## Current release decision
 
@@ -87,9 +76,9 @@ Before any production rollout:
 
 Reasons:
 - No complete manual backup and successful restore rehearsal has been confirmed.
-- Eight production-only migration versions have no exact repository counterparts.
-- The ownership migration version mismatch has not been semantically reconciled.
-- The tenant/RPC owner role and location-aware inventory schema are missing.
-- Full candidate sequence and staging acceptance remain outstanding.
+- Seven later repository migrations remain unrecorded in production.
+- The semantic equivalence review of the eight mapped migrations is not yet complete.
+- Tenant/RPC owner role and location-aware inventory schema are missing.
+- Strict tenant isolation and two-business staging acceptance remain outstanding.
 
 This report records evidence and next steps only. It does not authorize production changes.
