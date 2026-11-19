@@ -188,11 +188,15 @@ export function calculateReplenishmentPlan(input: ReplenishmentInput): Replenish
   );
   const shouldReorder = inventoryPosition <= reorderPoint;
   const rawRequirement = Math.max(0, targetStock - inventoryPosition);
+  // Apply the MOQ before rounding to the supplier's pack multiple. Taking
+  // max(MOQ, rounded requirement) can otherwise return a quantity that is
+  // not divisible by the required order multiple (e.g. MOQ 10, pack 6 -> 10).
+  const minimumCompliantOrder = Math.ceil((minimumOrderQuantity - 1e-10) / orderMultiple) * orderMultiple;
   const roundedRequirement = rawRequirement > 0
     ? Math.ceil((rawRequirement - 1e-10) / orderMultiple) * orderMultiple
     : 0;
   const suggestedOrderQuantity = shouldReorder && rawRequirement > 0
-    ? Math.max(minimumOrderQuantity, roundedRequirement)
+    ? Math.max(minimumCompliantOrder, roundedRequirement)
     : 0;
 
   const explanation = [
