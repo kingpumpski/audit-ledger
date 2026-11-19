@@ -3239,6 +3239,478 @@ export type Database = {
           },
         ]
       }
+      stock_transfers: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          business_id: string
+          canceled_at: string | null
+          canceled_by: string | null
+          cancellation_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          destination_location_id: string
+          dispatch_idempotency_key: string | null
+          dispatched_at: string | null
+          dispatched_by: string | null
+          id: string
+          idempotency_key: string
+          line_snapshot: Json
+          notes: string | null
+          reference_number: string
+          request_fingerprint: string
+          source_location_id: string
+          status: string
+          transit_location_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          business_id: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cancellation_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          destination_location_id: string
+          dispatch_idempotency_key?: string | null
+          dispatched_at?: string | null
+          dispatched_by?: string | null
+          id?: string
+          idempotency_key: string
+          line_snapshot: Json
+          notes?: string | null
+          reference_number: string
+          request_fingerprint: string
+          source_location_id: string
+          status?: string
+          transit_location_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          business_id?: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cancellation_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          destination_location_id?: string
+          dispatch_idempotency_key?: string | null
+          dispatched_at?: string | null
+          dispatched_by?: string | null
+          id?: string
+          idempotency_key?: string
+          line_snapshot?: Json
+          notes?: string | null
+          reference_number?: string
+          request_fingerprint?: string
+          source_location_id?: string
+          status?: string
+          transit_location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transfers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfers_source_location_fk"
+            columns: ["business_id", "source_location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfers_destination_location_fk"
+            columns: ["business_id", "destination_location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfers_transit_location_fk"
+            columns: ["business_id", "transit_location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
+      stock_transfer_lines: {
+        Row: {
+          business_id: string
+          created_at: string
+          dispatch_inventory_transaction_id: string | null
+          dispatched_quantity: number
+          id: string
+          product_id: string
+          received_quantity: number
+          requested_quantity: number
+          transfer_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          dispatch_inventory_transaction_id?: string | null
+          dispatched_quantity?: number
+          id?: string
+          product_id: string
+          received_quantity?: number
+          requested_quantity: number
+          transfer_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          dispatch_inventory_transaction_id?: string | null
+          dispatched_quantity?: number
+          id?: string
+          product_id?: string
+          received_quantity?: number
+          requested_quantity?: number
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transfer_lines_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_lines_transfer_fk"
+            columns: ["business_id", "transfer_id"]
+            isOneToOne: false
+            referencedRelation: "stock_transfers"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_lines_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_lines_dispatch_transaction_fk"
+            columns: ["business_id", "dispatch_inventory_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transactions"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
+      stock_transfer_receipts: {
+        Row: {
+          business_id: string
+          id: string
+          idempotency_key: string
+          line_snapshot: Json
+          notes: string | null
+          received_at: string
+          received_by: string
+          receipt_reference: string
+          request_fingerprint: string
+          transfer_id: string
+        }
+        Insert: {
+          business_id: string
+          id?: string
+          idempotency_key: string
+          line_snapshot: Json
+          notes?: string | null
+          received_at?: string
+          received_by: string
+          receipt_reference: string
+          request_fingerprint: string
+          transfer_id: string
+        }
+        Update: {
+          business_id?: string
+          id?: string
+          idempotency_key?: string
+          line_snapshot?: Json
+          notes?: string | null
+          received_at?: string
+          received_by?: string
+          receipt_reference?: string
+          request_fingerprint?: string
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transfer_receipts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_receipts_transfer_fk"
+            columns: ["business_id", "transfer_id"]
+            isOneToOne: false
+            referencedRelation: "stock_transfers"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
+      stock_transfer_receipt_lines: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          inventory_transaction_id: string
+          product_id: string
+          quantity: number
+          receipt_id: string
+          transfer_line_id: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          inventory_transaction_id: string
+          product_id: string
+          quantity: number
+          receipt_id: string
+          transfer_line_id: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          inventory_transaction_id?: string
+          product_id?: string
+          quantity?: number
+          receipt_id?: string
+          transfer_line_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transfer_receipt_lines_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_receipt_lines_receipt_fk"
+            columns: ["business_id", "receipt_id"]
+            isOneToOne: false
+            referencedRelation: "stock_transfer_receipts"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_receipt_lines_transfer_line_fk"
+            columns: ["business_id", "transfer_line_id"]
+            isOneToOne: false
+            referencedRelation: "stock_transfer_lines"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_receipt_lines_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "stock_transfer_receipt_lines_inventory_transaction_fk"
+            columns: ["business_id", "inventory_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transactions"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
+      store_stock_counts: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          business_id: string
+          canceled_at: string | null
+          canceled_by: string | null
+          cancellation_reason: string | null
+          created_at: string
+          created_by: string
+          id: string
+          idempotency_key: string
+          journal_entry_id: string | null
+          line_snapshot: Json
+          location_id: string
+          notes: string | null
+          posted_at: string | null
+          posted_by: string | null
+          posting_idempotency_key: string | null
+          reference_number: string
+          request_fingerprint: string
+          snapshot_at: string
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          business_id: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cancellation_reason?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          idempotency_key: string
+          journal_entry_id?: string | null
+          line_snapshot?: Json
+          location_id: string
+          notes?: string | null
+          posted_at?: string | null
+          posted_by?: string | null
+          posting_idempotency_key?: string | null
+          reference_number: string
+          request_fingerprint: string
+          snapshot_at?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          business_id?: string
+          canceled_at?: string | null
+          canceled_by?: string | null
+          cancellation_reason?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          idempotency_key?: string
+          journal_entry_id?: string | null
+          line_snapshot?: Json
+          location_id?: string
+          notes?: string | null
+          posted_at?: string | null
+          posted_by?: string | null
+          posting_idempotency_key?: string | null
+          reference_number?: string
+          request_fingerprint?: string
+          snapshot_at?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_stock_counts_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_stock_counts_location_fk"
+            columns: ["business_id", "location_id"]
+            isOneToOne: false
+            referencedRelation: "store_locations"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "store_stock_counts_journal_fk"
+            columns: ["business_id", "journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
+      store_stock_count_lines: {
+        Row: {
+          adjustment_value: number
+          business_id: string
+          counted_at: string | null
+          counted_by: string | null
+          counted_quantity: number | null
+          count_id: string
+          created_at: string
+          id: string
+          inventory_transaction_id: string | null
+          product_id: string
+          reason: string | null
+          system_quantity_snapshot: number
+          unit_cost_snapshot: number | null
+          variance_quantity: number
+        }
+        Insert: {
+          adjustment_value?: number
+          business_id: string
+          counted_at?: string | null
+          counted_by?: string | null
+          counted_quantity?: number | null
+          count_id: string
+          created_at?: string
+          id?: string
+          inventory_transaction_id?: string | null
+          product_id: string
+          reason?: string | null
+          system_quantity_snapshot: number
+          unit_cost_snapshot?: number | null
+          variance_quantity?: number
+        }
+        Update: {
+          adjustment_value?: number
+          business_id?: string
+          counted_at?: string | null
+          counted_by?: string | null
+          counted_quantity?: number | null
+          count_id?: string
+          created_at?: string
+          id?: string
+          inventory_transaction_id?: string | null
+          product_id?: string
+          reason?: string | null
+          system_quantity_snapshot?: number
+          unit_cost_snapshot?: number | null
+          variance_quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_stock_count_lines_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "store_stock_count_lines_count_fk"
+            columns: ["business_id", "count_id"]
+            isOneToOne: false
+            referencedRelation: "store_stock_counts"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "store_stock_count_lines_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "store_stock_count_lines_transaction_fk"
+            columns: ["business_id", "inventory_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_transactions"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      },
       profiles: {
         Row: {
           avatar_url: string | null
@@ -3596,6 +4068,74 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_stock_transfer: {
+        Args: {
+          p_destination_location_id: string
+          p_idempotency_key: string
+          p_lines: Json
+          p_notes: string | null
+          p_reference_number: string
+          p_source_location_id: string
+        }
+        Returns: string
+      },
+      approve_stock_transfer: {
+        Args: { p_transfer_id: string }
+        Returns: string
+      },
+      cancel_stock_transfer: {
+        Args: { p_reason: string; p_transfer_id: string }
+        Returns: string
+      },
+      dispatch_stock_transfer: {
+        Args: { p_idempotency_key: string; p_transfer_id: string }
+        Returns: string
+      },
+      receive_stock_transfer: {
+        Args: {
+          p_idempotency_key: string
+          p_lines: Json
+          p_notes?: string | null
+          p_receipt_reference: string
+          p_transfer_id: string
+        }
+        Returns: string
+      },
+      create_store_stock_count: {
+        Args: {
+          p_idempotency_key: string
+          p_location_id: string
+          p_notes: string | null
+          p_product_ids?: string[] | null
+          p_reference_number: string
+        }
+        Returns: string
+      },
+      record_store_stock_count_line: {
+        Args: {
+          p_count_id: string
+          p_counted_quantity: number
+          p_product_id: string
+          p_reason?: string | null
+        }
+        Returns: string
+      },
+      submit_store_stock_count: {
+        Args: { p_count_id: string }
+        Returns: string
+      },
+      approve_store_stock_count: {
+        Args: { p_count_id: string }
+        Returns: string
+      },
+      cancel_store_stock_count: {
+        Args: { p_count_id: string; p_reason: string }
+        Returns: string
+      },
+      post_store_stock_count: {
+        Args: { p_count_id: string; p_idempotency_key: string }
+        Returns: string
+      },
       accept_business_invitation: {
         Args: { p_invitation_id: string }
         Returns: string

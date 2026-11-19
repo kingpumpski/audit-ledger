@@ -40,6 +40,7 @@ const Inventory = lazy(() => import("./pages/Inventory"));
 const StoreLayout = lazy(() => import("./components/store/StoreLayout"));
 const StoreDashboard = lazy(() => import("./pages/store/StoreDashboard"));
 const StoreStock = lazy(() => import("./pages/store/StoreStock"));
+const StoreCycleCounts = lazy(() => import("./pages/store/StoreCycleCounts"));
 const StoreLocations = lazy(() => import("./pages/store/StoreLocations"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminPasswordResets = lazy(() => import("./pages/AdminPasswordResets"));
@@ -96,6 +97,7 @@ const App = () => (
                 <Route path="/store" element={<ProtectedRoute requireAnyRole={false}><StoreLayout /></ProtectedRoute>}>
                   <Route index element={<StoreDashboard />} />
                   <Route path="stock" element={<StoreStock />} />
+                  <Route path="cycle-counts" element={<StoreCycleCounts />} />
                   <Route path="locations" element={<StoreLocations />} />
                 </Route>
                 <Route path="/accounting/*" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Accounting /></ProtectedRoute>} />
