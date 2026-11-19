@@ -127,7 +127,9 @@ export default function StoreReplenishment() {
           leadTimeDays: Number(setting?.lead_time_days ?? 0),
         };
       })
-      .filter(row => row.product && row.location)
+      .filter(row => row.product && row.location
+        && row.product.is_service !== true && row.product.is_active !== false
+        && row.location.is_active && isPhysicalStoreLocation(row.location.location_type))
       .sort((a, b) => {
         if (a.needsReorder !== b.needsReorder) return a.needsReorder ? -1 : 1;
         return a.inventoryPosition - a.reorderPoint - (b.inventoryPosition - b.reorderPoint);
