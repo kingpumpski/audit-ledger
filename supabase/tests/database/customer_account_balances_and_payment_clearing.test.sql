@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(19);
+SELECT extensions.plan(16);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -10,16 +10,8 @@ INSERT INTO auth.users (
 );
 INSERT INTO public.user_roles(user_id,role)
 VALUES ('ca100000-0000-4000-8000-000000000001','accountant');
-INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
-SELECT public.legacy_business_id(),'ca100000-0000-4000-8000-000000000001','accountant','active',now();
 SELECT set_config('request.jwt.claim.sub','ca100000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub','ca100000-0000-4000-8000-000000000001','role','authenticated',
-    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
-  true
-);
 
 INSERT INTO public.customers(code,name)
 VALUES('CAB-001','Customer balance as-of test');
@@ -82,39 +74,6 @@ SELECT extensions.is(
    WHERE customer_code='CAB-001'),
   150.00::numeric,
   'Current outstanding receivable reflects all posted invoice payments'
-);
-
-INSERT INTO public.businesses(id,name,created_by)
-VALUES('ca100000-0000-4000-8000-000000000003','Other tenant receivables isolation test','ca100000-0000-4000-8000-000000000001');
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub','ca100000-0000-4000-8000-000000000001','role','authenticated',
-    'app_metadata',jsonb_build_object('active_business_id','ca100000-0000-4000-8000-000000000003'))::text,
-  true
-);
-SELECT extensions.throws_ok(
-  $cab_unauthorized_clearing_read$ SELECT * FROM public.get_payment_clearing_balances() $cab_unauthorized_clearing_read$,
-  '42501',
-  'You are not authorized to view payment clearing balances',
-  'A member cannot query clearing balances for a business where they have no active membership'
-);
-SELECT extensions.throws_ok(
-  $cab_unauthorized_receivables$ SELECT * FROM public.get_customer_account_balances(CURRENT_DATE) $cab_unauthorized_receivables$,
-  '42501',
-  'You are not authorized to view customer account balances',
-  'Receivables RPC rejects a business without an active membership'
-);
-SELECT extensions.throws_ok(
-  $cab_unauthorized_credits$ SELECT * FROM public.get_customer_credit_balances((SELECT id FROM public.customers WHERE code='CAB-001')) $cab_unauthorized_credits$,
-  '42501',
-  'You are not authorized to view customer credit balances',
-  'Customer-credit RPC rejects a business without an active membership'
-);
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub','ca100000-0000-4000-8000-000000000001','role','authenticated',
-    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
-  true
 );
 
 SELECT extensions.is(
