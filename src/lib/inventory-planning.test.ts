@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateDemandStatistics,
+  calculateMinMaxReplenishment,
   calculateReplenishmentPlan,
   classifyInventoryPortfolio,
 } from './inventory-planning';
@@ -36,6 +37,64 @@ describe('calculateDemandStatistics', () => {
   it('rejects invalid daily demand values', () => {
     expect(() => calculateDemandStatistics([{ unitsSold: -1, wasStockout: false }]))
       .toThrow('finite, non-negative');
+  });
+});
+
+
+describe('calculateMinMaxReplenishment', () => {
+  it('subtracts inbound transfers from the replenishment requirement', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 4,
+      incoming: 3,
+      reorderPoint: 10,
+      targetStock: 20,
+    })).toEqual({
+      inventoryPosition: 7,
+      shouldReorder: true,
+      targetConfigured: true,
+      suggestedQuantity: 13,
+    });
+  });
+
+  it('does not suggest a purchase quantity when target stock is missing or not above the reorder point', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 2,
+      incoming: 0,
+      reorderPoint: 5,
+      targetStock: null,
+    })).toMatchObject({ shouldReorder: true, targetConfigured: false, suggestedQuantity: 0 });
+
+    expect(calculateMinMaxReplenishment({
+      available: 2,
+      incoming: 0,
+      reorderPoint: 5,
+      targetStock: 5,
+    })).toMatchObject({ shouldReorder: true, targetConfigured: false, suggestedQuantity: 0 });
+  });
+
+  it('does not reorder while available plus inbound stock is above the trigger', () => {
+    expect(calculateMinMaxReplenishment({
+      available: 4,
+      incoming: 7,
+      reorderPoint: 10,
+      targetStock: 20,
+    })).toMatchObject({ inventoryPosition: 11, shouldReorder: false, suggestedQuantity: 0 });
+  });
+
+  it('rejects invalid stock planning inputs', () => {
+    expect(() => calculateMinMaxReplenishment({
+      available: -1,
+      incoming: 0,
+      reorderPoint: 2,
+      targetStock: 5,
+    })).toThrow('Available quantity must be a finite, non-negative number.');
+
+    expect(() => calculateMinMaxReplenishment({
+      available: 1,
+      incoming: 0,
+      reorderPoint: 2,
+      targetStock: 1,
+    })).toThrow('Target stock quantity must be a finite, non-negative number.');
   });
 });
 
