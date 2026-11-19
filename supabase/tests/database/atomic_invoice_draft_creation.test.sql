@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(8);
+SELECT extensions.plan(9);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -13,11 +13,23 @@ INSERT INTO auth.users (
 INSERT INTO public.user_roles(user_id, role)
 VALUES ('f2000000-0000-4000-8000-000000000001','accountant');
 
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(),'f2000000-0000-4000-8000-000000000001','accountant','active',now();
+
 INSERT INTO public.customers(code,name)
 VALUES ('ATOMIC-INVOICE-CUSTOMER','Atomic invoice test customer');
 
 SELECT set_config('request.jwt.claim.sub','f2000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','f2000000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text)
+  )::text,
+  true
+);
 
 SELECT extensions.lives_ok(
   $$
@@ -42,6 +54,19 @@ SELECT extensions.is(
   ),
   1,
   'The committed draft has its complete invoice line'
+);
+
+SELECT extensions.is(
+  (
+    SELECT count(*)::integer
+    FROM public.invoices i
+    JOIN public.invoice_items ii ON ii.invoice_id=i.id
+    WHERE i.notes='Atomic draft test'
+      AND i.business_id=public.legacy_business_id()
+      AND ii.business_id=public.legacy_business_id()
+  ),
+  1,
+  'Invoice header and line are explicitly assigned to the active business'
 );
 
 INSERT INTO public.taxes (
