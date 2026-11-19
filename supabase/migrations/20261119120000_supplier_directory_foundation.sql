@@ -54,7 +54,6 @@ CREATE TABLE public.supplier_products (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT supplier_products_business_id_key UNIQUE (business_id, id),
-  CONSTRAINT supplier_products_business_supplier_product_key UNIQUE (business_id, supplier_id, product_id),
   CONSTRAINT supplier_products_supplier_fk
     FOREIGN KEY (business_id, supplier_id)
     REFERENCES public.suppliers (business_id, id) ON DELETE RESTRICT,
@@ -70,6 +69,11 @@ CREATE TABLE public.supplier_products (
   CONSTRAINT supplier_products_sku_nonblank CHECK (supplier_sku IS NULL OR length(btrim(supplier_sku)) > 0)
 );
 
+-- Preserve deactivated supplier-product terms as history while allowing a new
+-- active relationship for the same supplier/product pair.
+CREATE UNIQUE INDEX uq_supplier_products_active_supplier_product
+  ON public.supplier_products (business_id, supplier_id, product_id)
+  WHERE is_active;
 CREATE UNIQUE INDEX uq_supplier_products_sku
   ON public.supplier_products (business_id, supplier_id, lower(supplier_sku))
   WHERE supplier_sku IS NOT NULL;
