@@ -172,8 +172,8 @@ SELECT extensions.throws_ok(
     'I confirm that all expenses and direct costs through this date have been entered and reconciled to supporting evidence.',
     'f0000000-0000-4000-8000-000000000103'
   ) $$,
-  'P0001',
-  'Only an admin or accountant can attest financial completeness',
+  '42501',
+  'Only an active business owner, admin or accountant can attest financial completeness',
   'Auditor cannot create a finance completeness attestation'
 );
 
@@ -187,7 +187,7 @@ SELECT set_config(
 
 SELECT extensions.throws_ok(
   $$ SELECT public.get_financial_completeness_attestation() $$,
-  'P0001',
+  '42501',
   'You are not authorized to view financial completeness attestations',
   'Cashier cannot view finance attestation records'
 );
