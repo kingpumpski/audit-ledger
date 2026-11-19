@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Search, Loader2, Lock } from 'lucide-react';
 import { z } from 'zod';
@@ -89,6 +90,7 @@ const emptyForm = {
 
 export function ChartOfAccounts() {
   const roles = useEffectiveRoles();
+  const { activeBusiness } = useBusiness();
   const { toast } = useToast();
   const canEdit = roles.includes('admin') || roles.includes('accountant');
   const canDelete = roles.includes('admin');
@@ -102,20 +104,35 @@ export function ChartOfAccounts() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
 
   const load = useCallback(async () => {
+    const requestGeneration = ++loadGeneration.current;
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      setAccounts([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from('chart_of_accounts')
       .select('*')
+      .eq('business_id', businessId)
       .order('code', { ascending: true });
+
+    // A newer load (including a workspace switch) invalidates this response.
+    if (loadGeneration.current !== requestGeneration) return;
+
     if (error) {
+      setAccounts([]);
       toast({ title: 'Failed to load accounts', description: error.message, variant: 'destructive' });
     } else {
       setAccounts((data as Account[]) || []);
     }
     setLoading(false);
-  }, [toast]);
+  }, [toast, activeBusiness?.id]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -160,7 +177,14 @@ export function ChartOfAccounts() {
       return;
     }
     setSaving(true);
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      setSaving(false);
+      setFormError('Select an active business before saving an account.');
+      return;
+    }
     const payload = {
+      business_id: businessId,
       code: parsed.data.code.toUpperCase(),
       name: parsed.data.name,
       description: parsed.data.description || null,
@@ -171,7 +195,7 @@ export function ChartOfAccounts() {
       is_active: parsed.data.is_active,
     };
     const op = editing
-      ? supabase.from('chart_of_accounts').update(payload).eq('id', editing.id)
+      ? supabase.from('chart_of_accounts').update(payload).eq('id', editing.id).eq('business_id', businessId)
       : supabase.from('chart_of_accounts').insert({ ...payload, current_balance: payload.opening_balance });
     const { error } = await op;
     setSaving(false);
@@ -185,7 +209,12 @@ export function ChartOfAccounts() {
   };
 
   const handleDelete = async (a: Account) => {
-    const { error } = await supabase.from('chart_of_accounts').delete().eq('id', a.id);
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      toast({ title: 'No active business', description: 'Select a business before deleting an account.', variant: 'destructive' });
+      return;
+    }
+    const { error } = await supabase.from('chart_of_accounts').delete().eq('id', a.id).eq('business_id', businessId);
     if (error) {
       toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
     } else {
