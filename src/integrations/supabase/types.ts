@@ -3239,6 +3239,150 @@ export type Database = {
           },
         ]
       }
+      suppliers: {
+        Row: {
+          address: string | null
+          business_id: string
+          contact_name: string | null
+          created_at: string
+          created_by: string
+          currency: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          legal_name: string | null
+          name: string
+          notes: string | null
+          payment_terms_days: number
+          phone: string | null
+          supplier_code: string | null
+          tax_identifier: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          business_id: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          legal_name?: string | null
+          name: string
+          notes?: string | null
+          payment_terms_days?: number
+          phone?: string | null
+          supplier_code?: string | null
+          tax_identifier?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          business_id?: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          legal_name?: string | null
+          name?: string
+          notes?: string | null
+          payment_terms_days?: number
+          phone?: string | null
+          supplier_code?: string | null
+          tax_identifier?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suppliers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_products: {
+        Row: {
+          business_id: string
+          created_at: string
+          currency: string | null
+          id: string
+          is_active: boolean
+          is_preferred: boolean
+          lead_time_days: number
+          minimum_order_quantity: number
+          notes: string | null
+          order_multiple: number
+          product_id: string
+          supplier_id: string
+          supplier_sku: string | null
+          unit_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_active?: boolean
+          is_preferred?: boolean
+          lead_time_days?: number
+          minimum_order_quantity?: number
+          notes?: string | null
+          order_multiple?: number
+          product_id: string
+          supplier_id: string
+          supplier_sku?: string | null
+          unit_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_active?: boolean
+          is_preferred?: boolean
+          lead_time_days?: number
+          minimum_order_quantity?: number
+          notes?: string | null
+          order_multiple?: number
+          product_id?: string
+          supplier_id?: string
+          supplier_sku?: string | null
+          unit_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_products_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_supplier_fk"
+            columns: ["business_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["business_id", "id"]
+          },
+          {
+            foreignKeyName: "supplier_products_product_fk"
+            columns: ["business_id", "product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["business_id", "id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
