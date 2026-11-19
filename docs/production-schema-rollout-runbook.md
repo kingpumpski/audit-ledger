@@ -79,3 +79,28 @@ Attach the following to the rollout change record:
 - Two-business staging acceptance evidence by role.
 - Explicit production approval.
 - Applied migration list and post-deployment preflight output.
+
+
+## Supabase advisor snapshot — 2026-11-19
+
+Read-only Supabase advisors were run against production project `phfpbqlhxagonpofzvtn`. These findings are diagnostic, not automatic permission to change production.
+
+### Security advisor
+- `authenticated_security_definer_function_executable`: **45** SECURITY DEFINER overloads/functions are callable by `authenticated` through the public Data API. Some are intended transactional RPCs; others are identity/authorization helpers or role-management functions. Review each exact signature against application call sites, function body, caller identity checks, grants, owner, fixed `search_path`, tenant context and RLS behavior. Do not blanket-revoke all 45 or assume all are safe.
+- High-priority signatures for explicit review include `claim_initial_admin()`, `assign_user_role(uuid, app_role, uuid)`, `get_user_role(uuid)`, `has_any_role(uuid)`, `has_permission(text, uuid)`, `set_business_member_access(uuid, uuid, text, text)`, `legacy_business_id()`, `current_business_id()`, `create_business(...)`, and financial/inventory posting RPCs.
+- `auth_leaked_password_protection`: leaked-password protection is disabled. Enable only after confirming supported Auth configuration, user impact and operational policy; do not alter Auth settings as part of a schema migration.
+- `extension_in_public`: `pg_net` is installed in `public`. Review dependency and extension relocation compatibility before moving it; do not move it blindly.
+
+### Performance advisor
+- `multiple_permissive_policies`: **19** policy/action combinations have multiple permissive policies for `authenticated`. PostgreSQL ORs permissive policies, so verify that each combination preserves intended tenant and role semantics. Consolidate only after policy-by-policy tests; do not simply drop policies.
+- `unused_index`: **143** indexes were reported unused at the observation time. This may reflect low production traffic or recently created indexes. Do not drop indexes from this snapshot; first inspect index definitions, FK support, query plans, table write costs and representative workload history.
+
+### Acceptance before production release
+1. Produce a function-signature inventory classifying every SECURITY DEFINER function as public RPC, internal helper, trigger-only, or service-only.
+2. For each public RPC, test unauthenticated, authenticated non-member, active member by role, suspended member, cross-business user and service-role calls.
+3. Confirm all SECURITY DEFINER functions have intentional ownership, explicit execute grants, safe `search_path`, correct identity binding and tenant checks. Pay particular attention to any function accepting a caller-supplied user ID.
+4. Review all 19 multiple-permissive-policy combinations for tenant-scope equivalence and role semantics.
+5. Defer unused-index cleanup until production query statistics and FK dependencies justify each removal.
+6. Record whether leaked-password protection is enabled and the reviewed Auth policy before inviting production users.
+
+These advisor counts are point-in-time values and must be refreshed before rollout.
