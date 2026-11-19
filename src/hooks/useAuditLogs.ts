@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 
 export interface AuditLog {
   id: string;
@@ -26,12 +27,16 @@ interface AuditLogFilters {
 }
 
 export function useAuditLogs(filters: AuditLogFilters = {}) {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['audit-logs', filters],
+    queryKey: ['audit-logs', businessId, filters],
+    enabled: !!businessId,
     queryFn: async (): Promise<AuditLog[]> => {
       let query = supabase
         .from('audit_logs')
         .select('*')
+        .eq('business_id', businessId!)
         .order('created_at', { ascending: false })
         .limit(500);
 
@@ -70,12 +75,16 @@ export function useAuditLogs(filters: AuditLogFilters = {}) {
 }
 
 export function useAuditLogStats() {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
   return useQuery({
-    queryKey: ['audit-log-stats'],
+    queryKey: ['audit-log-stats', businessId],
+    enabled: !!businessId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('audit_logs')
         .select('action, entity_type, created_at')
+        .eq('business_id', businessId!)
         .order('created_at', { ascending: false })
         .limit(1000);
 
