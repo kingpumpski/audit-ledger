@@ -57,7 +57,7 @@ INSERT INTO public.products (
 ) VALUES (
   'd1000000-0000-4000-8000-000000000010',
   'TEST-COUNT-FOREIGN-001','Foreign tenant stock count item',
-  20,5,true,10,false,true
+  20,NULL,false,0,false,true
 );
 
 SELECT set_config(
