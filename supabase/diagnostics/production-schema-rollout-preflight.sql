@@ -54,6 +54,33 @@ SELECT
   to_regprocedure('public.has_business_role(uuid,text[])') IS NOT NULL
 ORDER BY object_name;
 
+-- 3a) Verify the constrained RPC role attributes when it exists.
+SELECT
+  rolname,
+  rolcanlogin,
+  rolsuper,
+  rolbypassrls
+FROM pg_catalog.pg_roles
+WHERE rolname = 'audit_ledger_rpc_owner';
+
+-- 3b) Summarize SECURITY DEFINER ownership and row-security settings.
+SELECT
+  pg_catalog.count(*) AS public_security_definer_count,
+  pg_catalog.count(*) FILTER (
+    WHERE pg_catalog.pg_get_userbyid(p.proowner) = 'audit_ledger_rpc_owner'
+  ) AS owned_by_constrained_rpc_role,
+  pg_catalog.count(*) FILTER (
+    WHERE NOT COALESCE(p.proconfig @> ARRAY['row_security=on'], false)
+  ) AS without_row_security_on,
+  pg_catalog.count(*) FILTER (
+    WHERE NOT COALESCE(p.proconfig @> ARRAY['search_path=""'], false)
+      AND NOT COALESCE(p.proconfig @> ARRAY['search_path=pg_catalog'], false)
+  ) AS without_empty_or_catalog_search_path
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.prosecdef;
+
 -- 4) Show RLS status for operational tables that exist.
 SELECT
   n.nspname AS schema_name,
@@ -70,6 +97,8 @@ WHERE n.nspname = 'public'
     'product_location_settings',
     'stock_transfers',
     'stock_transfer_lines',
+    'stock_transfer_receipts',
+    'stock_transfer_receipt_lines',
     'business_invitations',
     'notifications',
     'suppliers',
@@ -97,6 +126,8 @@ WHERE schemaname = 'public'
     'product_location_settings',
     'stock_transfers',
     'stock_transfer_lines',
+    'stock_transfer_receipts',
+    'stock_transfer_receipt_lines',
     'business_invitations',
     'notifications',
     'suppliers',
