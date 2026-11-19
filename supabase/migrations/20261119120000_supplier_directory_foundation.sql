@@ -88,6 +88,16 @@ CREATE INDEX idx_supplier_products_business_supplier
 ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplier_products ENABLE ROW LEVEL SECURITY;
 
+-- Keep tenant isolation restrictive so a future permissive policy cannot widen access.
+CREATE POLICY suppliers_tenant_scope
+  ON public.suppliers AS RESTRICTIVE FOR ALL TO authenticated
+  USING (public.is_business_member(business_id))
+  WITH CHECK (public.is_business_member(business_id));
+CREATE POLICY supplier_products_tenant_scope
+  ON public.supplier_products AS RESTRICTIVE FOR ALL TO authenticated
+  USING (public.is_business_member(business_id))
+  WITH CHECK (public.is_business_member(business_id));
+
 CREATE POLICY suppliers_select_members
   ON public.suppliers FOR SELECT TO authenticated
   USING (public.is_business_member(business_id));
