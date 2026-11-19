@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,10 +50,12 @@ type DirectInvoiceCostRecord = {
 
 type DirectCostApi = {
   from: (table: 'invoice_item_direct_costs') => {
-    select: (columns: 'invoice_item_id, amount, incurred_on') => PromiseLike<{
-      data: DirectInvoiceCostRecord[] | null;
-      error: { message: string } | null;
-    }>;
+    select: (columns: 'invoice_item_id, amount, incurred_on') => {
+      eq: (column: 'business_id', value: string) => PromiseLike<{
+        data: DirectInvoiceCostRecord[] | null;
+        error: { message: string } | null;
+      }>;
+    };
   };
   rpc: (
     functionName: 'record_invoice_item_direct_cost',
@@ -96,6 +99,8 @@ const financialAttestationApi = supabase as unknown as FinancialAttestationApi;
 
 export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id ?? null;
   const { toast } = useToast();
   const roles = useEffectiveRoles();
   const canAttestCompleteness = roles.includes('admin') || roles.includes('accountant');
@@ -109,7 +114,8 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   const [attestationIdempotencyKey, setAttestationIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const attestationQuery = useQuery({
-    queryKey: ['financial-completeness-attestation'],
+    queryKey: ['financial-completeness-attestation', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<FinancialAttestation | null> => {
       const { data, error } = await financialAttestationApi.rpc('get_financial_completeness_attestation');
       if (error) throw error;
@@ -122,7 +128,8 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   const costCoverageThroughDate = attestationOpen ? attestationDate : asOfDate;
 
   const journalQuery = useQuery({
-    queryKey: ['profit-loss-journal', asOfDate],
+    queryKey: ['profit-loss-journal', businessId, asOfDate],
+    enabled: !!businessId,
     queryFn: async (): Promise<JournalEntry[]> => {
       const allEntries: JournalEntry[] = [];
       let offset = 0;
@@ -131,6 +138,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const { data, error } = await supabase
           .from('journal_entries')
           .select('entry_date, source_type, lines:journal_lines(debit, credit, account:chart_of_accounts(code, account_type))')
+          .eq('business_id', businessId!)
           .lte('entry_date', asOfDate)
           .order('entry_date', { ascending: true })
           .range(offset, offset + pageSize - 1);
@@ -146,7 +154,8 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
   });
 
   const costCoverageQuery = useQuery({
-    queryKey: ['profit-loss-cost-coverage', costCoverageThroughDate],
+    queryKey: ['profit-loss-cost-coverage', businessId, costCoverageThroughDate],
+    enabled: !!businessId,
     queryFn: async () => {
       const pageSize = 1000;
       const invoices: Array<{ id: string; invoice_number: string; issue_date: string | null }> = [];
@@ -154,7 +163,8 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
       const products: Array<{ id: string; name: string; is_service: boolean }> = [];
       const { data: directCosts, error: directCostsError } = await directCostApi
         .from('invoice_item_direct_costs')
-        .select('invoice_item_id, amount, incurred_on');
+        .select('invoice_item_id, amount, incurred_on')
+        .eq('business_id', businessId!);
       if (directCostsError) throw directCostsError;
       const directCostMap = new Map<string, DirectInvoiceCostRecord>(
         (directCosts || []).map((cost) => [cost.invoice_item_id, cost])
@@ -167,6 +177,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
           .select('id, invoice_number, issue_date')
           .in('status', ['issued', 'partially_paid', 'paid', 'overdue'])
           .is('deleted_at', null)
+          .eq('business_id', businessId!)
           .lte('issue_date', costCoverageThroughDate)
           .order('id')
           .range(offset, offset + pageSize - 1);
@@ -181,6 +192,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const { data, error } = await supabase
           .from('invoice_items')
           .select('id, invoice_id, description, quantity, unit_price, product_id, unit_cost')
+          .eq('business_id', businessId!)
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
@@ -194,6 +206,7 @@ export function ProfitAndLossReport({ currencySymbol }: { currencySymbol: string
         const { data, error } = await supabase
           .from('products')
           .select('id, name, is_service')
+          .eq('business_id', businessId!)
           .order('id')
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
