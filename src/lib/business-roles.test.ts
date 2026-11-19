@@ -25,6 +25,11 @@ describe("getEffectiveRoles", () => {
     ]);
   });
 
+  it("does not grant legacy global roles when a membership exists but is inactive or unknown", () => {
+    expect(getEffectiveRoles(["admin", "accountant"], "suspended")).toEqual([]);
+    expect(getEffectiveRoles(["admin"], "pending")).toEqual([]);
+  });
+
   it("ignores unsupported role values", () => {
     expect(getEffectiveRoles(["root", "guest"], "unknown")).toEqual([]);
   });
