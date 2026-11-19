@@ -291,3 +291,48 @@ export function classifyInventoryPortfolio(
       : roundQuantity(item.coefficientOfVariation),
   }));
 }
+
+export interface MinMaxReplenishmentInput {
+  available: number;
+  incoming: number;
+  reorderPoint: number;
+  targetStock: number | null;
+}
+
+export interface MinMaxReplenishmentResult {
+  inventoryPosition: number;
+  shouldReorder: boolean;
+  targetConfigured: boolean;
+  suggestedQuantity: number;
+}
+
+/**
+ * Deterministic location-level min/max planning. Incoming quantities count only
+ * after dispatch; callers must exclude drafts, canceled and unapproved transfers.
+ * A missing or non-useful target never produces an invented order quantity.
+ */
+export function calculateMinMaxReplenishment(
+  input: MinMaxReplenishmentInput,
+): MinMaxReplenishmentResult {
+  assertNonNegative('Available quantity', input.available);
+  assertNonNegative('Incoming quantity', input.incoming);
+  assertNonNegative('Reorder point', input.reorderPoint);
+  if (input.targetStock !== null) {
+    assertNonNegative('Target stock quantity', input.targetStock);
+  }
+
+  const inventoryPosition = roundQuantity(input.available + input.incoming);
+  const shouldReorder = inventoryPosition <= input.reorderPoint;
+  const targetConfigured = input.targetStock !== null
+    && input.targetStock > input.reorderPoint;
+  const suggestedQuantity = shouldReorder && targetConfigured
+    ? roundQuantity(Math.max(0, input.targetStock! - inventoryPosition))
+    : 0;
+
+  return {
+    inventoryPosition,
+    shouldReorder,
+    targetConfigured,
+    suggestedQuantity,
+  };
+}
