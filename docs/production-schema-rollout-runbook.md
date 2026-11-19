@@ -33,7 +33,7 @@ These are observations from 2026-11-19, not a claim that production has remained
 The seven migrations already present in repository `main` after `use_active_business_for_new_records` are supplemented by three reviewed forward-only corrections in draft PRs #97 and #98. The candidate order, subject to those PRs passing CI and merging, is:
 
 1. `20261117155000_enforce_business_tenant_rls_and_rpc_ownership.sql`
-2. `20261117156000_require_active_membership_for_business_context.sql` — PR #98; pending CI at the time of this update. Removes global-role fallback from business context while retaining global project-role helpers.
+2. `20261117156000_require_active_membership_for_business_context.sql` — PR #98; isolated migration replay, database integration, frontend and Pages CI passed. Removes global-role fallback from business context while retaining global project-role helpers.
 3. `20261117160000_add_business_invitations.sql`
 4. `20261117161000_fix_business_invitation_audit_scope.sql` — PR #97; isolated migration replay and tests passed.
 5. `20261117170000_allow_legacy_business_membership_finance_reads.sql`
