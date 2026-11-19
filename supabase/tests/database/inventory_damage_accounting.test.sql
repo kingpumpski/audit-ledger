@@ -21,6 +21,22 @@ VALUES
   ('d0000000-0000-4000-8000-000000000001', 'accountant'),
   ('d0000000-0000-4000-8000-000000000002', 'cashier');
 
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(), fixture.user_id, fixture.role, 'active', now()
+FROM (VALUES
+  ('d0000000-0000-4000-8000-000000000001'::uuid,'accountant'::text),
+  ('d0000000-0000-4000-8000-000000000002'::uuid,'cashier'::text)
+) AS fixture(user_id,role);
+
+SELECT set_config('request.jwt.claim.sub','d0000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
+
 INSERT INTO public.products (
   sku, name, current_price, cost_price, cost_price_verified,
   stock_quantity, is_service, is_active
@@ -114,6 +130,11 @@ JOIN public.products p ON p.sku = 'TEST-SERVICE-001'
 WHERE i.invoice_number = 'INV-TEST-MIXED-001';
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+SELECT set_config('request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.throws_ok(
@@ -545,6 +566,11 @@ SELECT extensions.ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
+SELECT set_config('request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT extensions.throws_ok(
   $$ SELECT public.record_inventory_damage(
@@ -560,6 +586,11 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+SELECT set_config('request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT extensions.throws_ok(
   $$ SELECT public.record_inventory_damage(
@@ -686,6 +717,11 @@ SELECT extensions.is(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000002', true);
+SELECT set_config('request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT extensions.throws_ok(
   $$ SELECT public.reverse_petty_cash_expense(
@@ -700,6 +736,11 @@ SELECT extensions.throws_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000001', true);
+SELECT set_config('request.jwt.claims',
+  jsonb_build_object('sub','d0000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 
 SELECT extensions.throws_ok(
