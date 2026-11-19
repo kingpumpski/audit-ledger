@@ -1,0 +1,240 @@
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, ArrowDownToLine, ClipboardList, PackageSearch } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useBusiness } from '@/contexts/BusinessContext';
+import { useStoreInventoryData } from '@/hooks/useStoreInventoryData';
+import { supabase } from '@/integrations/supabase/client';
+import { isPhysicalStoreLocation } from '@/lib/store-stock-availability';
+
+const quantity = (value: number) => new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 3,
+}).format(value);
+
+type IncomingTransfer = {
+  id: string;
+  destination_location_id: string;
+};
+
+export default function StoreReplenishment() {
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
+  const inventory = useStoreInventoryData();
+
+  const inboundQuery = useQuery({
+    queryKey: ['store-inbound-transfer-quantities', businessId],
+    enabled: Boolean(businessId),
+    staleTime: 15_000,
+    queryFn: async () => {
+      if (!businessId) throw new Error('Select an active business workspace.');
+      const transfersResult = await supabase
+        .from('stock_transfers')
+        .select('id, destination_location_id')
+        .eq('business_id', businessId)
+        .in('status', ['in_transit', 'partially_received']);
+      if (transfersResult.error) throw transfersResult.error;
+
+      const transfers = (transfersResult.data ?? []) as IncomingTransfer[];
+      if (!transfers.length) return new Map<string, number>();
+
+      const transferIds = transfers.map(transfer => transfer.id);
+      const linesResult = await supabase
+        .from('stock_transfer_lines')
+        .select('transfer_id, product_id, dispatched_quantity, received_quantity')
+        .eq('business_id', businessId)
+        .in('transfer_id', transferIds);
+      if (linesResult.error) throw linesResult.error;
+
+      const destinationByTransfer = new Map(transfers.map(transfer => [
+        transfer.id,
+        transfer.destination_location_id,
+      ]));
+      const incoming = new Map<string, number>();
+      for (const line of linesResult.data ?? []) {
+        const locationId = destinationByTransfer.get(line.transfer_id);
+        const outstanding = Math.max(0, Number(line.dispatched_quantity) - Number(line.received_quantity));
+        if (!locationId || outstanding <= 0) continue;
+        const key = `${locationId}:${line.product_id}`;
+        incoming.set(key, (incoming.get(key) ?? 0) + outstanding);
+      }
+      return incoming;
+    },
+  });
+
+  const rows = useMemo(() => {
+    const data = inventory.data;
+    if (!data) return [];
+    const productById = new Map(data.products.map(product => [product.id, product]));
+    const locationById = new Map(data.locations.map(location => [location.id, location]));
+    const settingsByKey = new Map(data.settings.map(setting => [
+      `${setting.location_id}:${setting.product_id}`,
+      setting,
+    ]));
+    const incoming = inboundQuery.data ?? new Map<string, number>();
+
+    return data.balances
+      .map(balance => {
+        const product = productById.get(balance.product_id);
+        const location = locationById.get(balance.location_id);
+        const setting = settingsByKey.get(`${balance.location_id}:${balance.product_id}`);
+        const inbound = incoming.get(`${balance.location_id}:${balance.product_id}`) ?? 0;
+        const reorderPoint = Number(setting?.reorder_point ?? product?.min_stock_level ?? 0);
+        const inventoryPosition = Number(balance.available_quantity) + inbound;
+        const target = setting?.target_quantity === null || setting?.target_quantity === undefined
+          ? null
+          : Number(setting.target_quantity);
+        const needsReorder = Boolean(
+          product && product.is_service !== true && product.is_active !== false
+          && location?.is_active && isPhysicalStoreLocation(location.location_type)
+          && setting?.is_active !== false
+          && setting?.replenishment_method !== 'manual'
+          && inventoryPosition <= reorderPoint,
+        );
+        const targetConfigured = target !== null && target > reorderPoint;
+        const suggestedQuantity = needsReorder && targetConfigured
+          ? Math.max(0, Number((target - inventoryPosition).toFixed(3)))
+          : 0;
+        return {
+          id: balance.id,
+          product,
+          location,
+          available: Number(balance.available_quantity),
+          inbound,
+          inventoryPosition,
+          reorderPoint,
+          target,
+          needsReorder,
+          targetConfigured,
+          suggestedQuantity,
+          method: setting?.replenishment_method ?? 'min_max',
+        };
+      })
+      .filter(row => row.product && row.location && (row.needsReorder || row.inbound > 0))
+      .sort((a, b) => {
+        if (a.needsReorder !== b.needsReorder) return a.needsReorder ? -1 : 1;
+        return a.inventoryPosition - a.reorderPoint - (b.inventoryPosition - b.reorderPoint);
+      });
+  }, [inventory.data, inboundQuery.data]);
+
+  if (inventory.isLoading || inboundQuery.isLoading) {
+    return <Skeleton className="h-96 rounded-xl" />;
+  }
+
+  if (inventory.error || inboundQuery.error || !inventory.data) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {inventory.error?.message ?? inboundQuery.error?.message ?? 'Replenishment data could not be loaded.'}
+      </div>
+    );
+  }
+
+  const reorderRows = rows.filter(row => row.needsReorder);
+  const requiresSetup = reorderRows.filter(row => !row.targetConfigured);
+  const suggestions = reorderRows.filter(row => row.targetConfigured);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm text-muted-foreground">Items to review</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{reorderRows.length}</p>
+            </div>
+            <AlertTriangle className="h-5 w-5 text-warning" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm text-muted-foreground">Order quantities suggested</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{suggestions.length}</p>
+            </div>
+            <ClipboardList className="h-5 w-5 text-primary" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between p-5">
+            <div>
+              <p className="text-sm text-muted-foreground">Inbound transfer lines</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{rows.filter(row => row.inbound > 0).length}</p>
+            </div>
+            <ArrowDownToLine className="h-5 w-5 text-primary" />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><PackageSearch className="h-5 w-5" /> Replenishment review</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Suggestions use available stock, configured reorder points and outstanding inbound transfers.
+            No purchase order is created automatically.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {rows.length === 0 ? (
+            <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              No products currently require replenishment and no inbound transfer quantities are outstanding.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead className="text-right">Available</TableHead>
+                    <TableHead className="text-right">Inbound</TableHead>
+                    <TableHead className="text-right">Inventory position</TableHead>
+                    <TableHead className="text-right">Reorder point</TableHead>
+                    <TableHead className="text-right">Target</TableHead>
+                    <TableHead className="text-right">Suggested qty.</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map(row => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <div className="font-medium">{row.product?.name}</div>
+                        <div className="text-xs text-muted-foreground">{row.product?.sku || 'No SKU'}</div>
+                      </TableCell>
+                      <TableCell>{row.location?.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{quantity(row.available)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{quantity(row.inbound)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{quantity(row.inventoryPosition)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{quantity(row.reorderPoint)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.target === null ? 'Not set' : quantity(row.target)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {row.needsReorder
+                          ? row.targetConfigured ? quantity(row.suggestedQuantity) : 'Configure target'
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {row.inbound > 0 && !row.needsReorder
+                          ? <span className="text-xs text-muted-foreground">Await receipt</span>
+                          : row.needsReorder && !row.targetConfigured
+                            ? <Link className="text-sm text-primary hover:underline" to="/store/stock">Review stock settings</Link>
+                            : row.needsReorder
+                              ? <span className="text-xs text-warning">Review before ordering</span>
+                              : <span className="text-xs text-muted-foreground">Inbound</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-xs text-muted-foreground">
+        This first planning view is deliberately rule-based, not a statistical demand forecast. It does not yet subtract open supplier purchase orders; that requires the purchasing workflow and receiving ledger.
+      </p>
+    </div>
+  );
+}
