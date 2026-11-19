@@ -215,3 +215,49 @@ describe('classifyInventoryPortfolio', () => {
     ])).toThrow('Unit cost must be a finite, non-negative number.');
   });
 });
+
+
+describe('buildReplenishmentLocationProductRows', () => {
+  it('includes configured products even when their stock-balance row is absent', () => {
+    expect(buildReplenishmentLocationProductRows([], [
+      { location_id: 'location-1', product_id: 'product-1' },
+    ])).toEqual([{
+      id: 'location-1:product-1',
+      locationId: 'location-1',
+      productId: 'product-1',
+      available: 0,
+    }]);
+  });
+
+  it('unions stock, settings and inbound pairs without duplicating the same location/SKU', () => {
+    const rows = buildReplenishmentLocationProductRows([
+      { id: 'balance-1', location_id: 'location-1', product_id: 'product-1', available_quantity: 4 },
+    ], [
+      { location_id: 'location-1', product_id: 'product-1' },
+      { location_id: 'location-2', product_id: 'product-2' },
+    ], new Map([
+      ['location-1:product-1', 3],
+      ['location-3:product-3', 5],
+    ]));
+
+    expect(rows).toHaveLength(3);
+    expect(rows).toContainEqual({
+      id: 'balance-1',
+      locationId: 'location-1',
+      productId: 'product-1',
+      available: 4,
+    });
+    expect(rows).toContainEqual({
+      id: 'location-2:product-2',
+      locationId: 'location-2',
+      productId: 'product-2',
+      available: 0,
+    });
+    expect(rows).toContainEqual({
+      id: 'location-3:product-3',
+      locationId: 'location-3',
+      productId: 'product-3',
+      available: 0,
+    });
+  });
+});
