@@ -81,7 +81,7 @@ SELECT extensions.lives_ok(
        '15000000-0000-4000-8000-000000000031',
        '15000000-0000-4000-8000-000000000020',
        'draft',CURRENT_DATE,100,0,100,0,100
-     ) $,
+     ) $insert$,
   'Invoice numbers can be reused in a different business'
 );
 
