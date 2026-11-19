@@ -50,10 +50,12 @@ type DirectInvoiceCostRecord = {
 
 type DirectCostApi = {
   from: (table: 'invoice_item_direct_costs') => {
-    select: (columns: 'invoice_item_id, amount, incurred_on') => PromiseLike<{
-      data: DirectInvoiceCostRecord[] | null;
-      error: { message: string } | null;
-    }>;
+    select: (columns: 'invoice_item_id, amount, incurred_on') => {
+      eq: (column: 'business_id', value: string) => PromiseLike<{
+        data: DirectInvoiceCostRecord[] | null;
+        error: { message: string } | null;
+      }>;
+    };
   };
   rpc: (
     functionName: 'record_invoice_item_direct_cost',
