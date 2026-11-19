@@ -12,7 +12,7 @@ import { useBusiness } from '@/contexts/BusinessContext';
 import { useStoreInventoryData } from '@/hooks/useStoreInventoryData';
 import { supabase } from '@/integrations/supabase/client';
 import { isPhysicalStoreLocation } from '@/lib/store-stock-availability';
-import { calculateMinMaxReplenishment } from '@/lib/inventory-planning';
+import { buildReplenishmentLocationProductRows, calculateMinMaxReplenishment } from '@/lib/inventory-planning';
 
 const quantity = (value: number) => new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 3,
@@ -83,12 +83,12 @@ export default function StoreReplenishment() {
     ]));
     const incoming = inboundQuery.data ?? new Map<string, number>();
 
-    return data.balances
-      .map(balance => {
-        const product = productById.get(balance.product_id);
-        const location = locationById.get(balance.location_id);
-        const setting = settingsByKey.get(`${balance.location_id}:${balance.product_id}`);
-        const inbound = incoming.get(`${balance.location_id}:${balance.product_id}`) ?? 0;
+    return buildReplenishmentLocationProductRows(data.balances, data.settings, incoming)
+      .map(pair => {
+        const product = productById.get(pair.productId);
+        const location = locationById.get(pair.locationId);
+        const setting = settingsByKey.get(`${pair.locationId}:${pair.productId}`);
+        const inbound = incoming.get(`${pair.locationId}:${pair.productId}`) ?? 0;
         const minimum = Number(setting?.minimum_quantity ?? product?.min_stock_level ?? 0);
         const configuredReorderPoint = Number(setting?.reorder_point ?? product?.min_stock_level ?? 0);
         // Never let a configured reorder trigger undercut the minimum stock floor.
@@ -97,7 +97,7 @@ export default function StoreReplenishment() {
           ? null
           : Number(setting.target_quantity);
         const plan = calculateMinMaxReplenishment({
-          available: Number(balance.available_quantity),
+          available: pair.available,
           incoming: inbound,
           reorderPoint,
           targetStock: target,
@@ -113,7 +113,7 @@ export default function StoreReplenishment() {
         const targetConfigured = plan.targetConfigured;
         const suggestedQuantity = plan.suggestedQuantity;
         return {
-          id: balance.id,
+          id: pair.id,
           product,
           location,
           available: Number(balance.available_quantity),
