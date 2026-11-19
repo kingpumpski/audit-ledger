@@ -69,7 +69,7 @@ export default function StoreCycleCounts() {
   };
 
   const mutation = useMutation({
-    mutationFn: async (action: () => Promise<{ error: { message: string } | null }>) => {
+    mutationFn: async (action: () => PromiseLike<{ error: { message: string } | null }>) => {
       const result = await action();
       if (result.error) throw result.error;
     },
