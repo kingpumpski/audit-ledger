@@ -41,6 +41,16 @@ VALUES
   ('e6000000-0000-4000-8000-000000000010', 'e6000000-0000-4000-8000-000000000002', 'cashier', 'active', now()),
   ('e6000000-0000-4000-8000-000000000020', 'e6000000-0000-4000-8000-000000000003', 'owner', 'active', now());
 
+-- Product stock initialization runs through the constrained RPC owner, so
+-- seed the authenticated owner's claims before inserting stocked products.
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub', 'e6000000-0000-4000-8000-000000000001', 'role', 'authenticated',
+    'app_metadata', jsonb_build_object('active_business_id', 'e6000000-0000-4000-8000-000000000010'))::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'e6000000-0000-4000-8000-000000000001', true);
+
 INSERT INTO public.products (
   id, business_id, sku, name, current_price, stock_quantity, min_stock_level, is_service, is_active
 ) VALUES
