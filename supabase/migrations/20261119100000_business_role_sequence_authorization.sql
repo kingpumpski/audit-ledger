@@ -3,22 +3,19 @@
 -- Sequences remain shared monotonic counters; the active business only governs
 -- authorization, not the counter key.
 
-CREATE POLICY "Active business members can use shared sequences"
-ON public.sequences
-FOR ALL
-TO authenticated
-USING (
-  public.has_business_role(
-    public.current_business_id(),
-    ARRAY['owner', 'admin', 'accountant', 'cashier']::text[]
-  )
-)
-WITH CHECK (
-  public.has_business_role(
-    public.current_business_id(),
-    ARRAY['owner', 'admin', 'accountant', 'cashier']::text[]
-  )
-);
+-- Sequence counters are intentionally global and shared across workspaces.
+-- They are not tenant-owned records: the generic restrictive tenant policy
+-- would hide the legacy counter row from a member of a newer workspace.
+-- Keep table access internal to the constrained SECURITY DEFINER RPC owner;
+-- callers must pass the role checks below before the counter is incremented.
+DROP POLICY IF EXISTS "Active business members can use shared sequences"
+  ON public.sequences;
+DROP POLICY IF EXISTS tenant_business_scope ON public.sequences;
+
+REVOKE ALL ON TABLE public.sequences
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT, UPDATE ON TABLE public.sequences
+  TO audit_ledger_rpc_owner;
 
 CREATE OR REPLACE FUNCTION public.get_next_sequence(seq_name text)
 RETURNS text
@@ -47,7 +44,14 @@ BEGIN
         v_business_id, ARRAY['owner', 'admin', 'accountant', 'cashier']::text[]
       ))
       OR
-      (v_business_id IS NULL AND public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[]))
+      (
+        v_business_id = public.legacy_business_id()
+        AND NOT EXISTS (
+          SELECT 1 FROM public.business_members bm
+          WHERE bm.user_id = auth.uid()
+        )
+        AND public.has_any_role(ARRAY['admin', 'accountant', 'cashier']::text[])
+      )
     ) THEN
       RAISE EXCEPTION 'You are not authorized to allocate this transaction number'
         USING ERRCODE = '42501';
@@ -57,7 +61,14 @@ BEGIN
       v_business_id, ARRAY['owner', 'admin', 'accountant']::text[]
     ))
     OR
-    (v_business_id IS NULL AND public.has_any_role(ARRAY['admin', 'accountant']::text[]))
+    (
+      v_business_id = public.legacy_business_id()
+      AND NOT EXISTS (
+        SELECT 1 FROM public.business_members bm
+        WHERE bm.user_id = auth.uid()
+      )
+      AND public.has_any_role(ARRAY['admin', 'accountant']::text[])
+    )
   ) THEN
     RAISE EXCEPTION 'Only an administrator, owner or accountant can allocate this master-data number'
       USING ERRCODE = '42501';
