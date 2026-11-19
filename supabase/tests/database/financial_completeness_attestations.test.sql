@@ -19,6 +19,13 @@ INSERT INTO public.user_roles (user_id, role) VALUES
   ('f0000000-0000-4000-8000-000000000002', 'auditor'),
   ('f0000000-0000-4000-8000-000000000003', 'cashier');
 
+-- Test users exercise legacy single-workspace workflows through explicit membership.
+INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
+SELECT public.legacy_business_id(), ur.user_id, ur.role::text, 'active', now()
+FROM public.user_roles ur
+WHERE ur.user_id IN ('f0000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000002', 'f0000000-0000-4000-8000-000000000003')
+ON CONFLICT (business_id, user_id) DO NOTHING;
+
 SELECT set_config('request.jwt.claim.sub', 'f0000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 

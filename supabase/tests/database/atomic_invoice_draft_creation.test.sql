@@ -13,6 +13,13 @@ INSERT INTO auth.users (
 INSERT INTO public.user_roles(user_id, role)
 VALUES ('f2000000-0000-4000-8000-000000000001','accountant');
 
+-- Test users exercise legacy single-workspace workflows through explicit membership.
+INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
+SELECT public.legacy_business_id(), ur.user_id, ur.role::text, 'active', now()
+FROM public.user_roles ur
+WHERE ur.user_id IN ('f2000000-0000-4000-8000-000000000001')
+ON CONFLICT (business_id, user_id) DO NOTHING;
+
 INSERT INTO public.customers(code,name)
 VALUES ('ATOMIC-INVOICE-CUSTOMER','Atomic invoice test customer');
 

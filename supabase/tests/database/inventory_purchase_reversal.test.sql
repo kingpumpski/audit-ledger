@@ -15,6 +15,13 @@ INSERT INTO public.user_roles(user_id, role) VALUES
   ('e1000000-0000-4000-8000-000000000001','accountant'),
   ('e1000000-0000-4000-8000-000000000002','cashier');
 
+-- Test users exercise legacy single-workspace workflows through explicit membership.
+INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
+SELECT public.legacy_business_id(), ur.user_id, ur.role::text, 'active', now()
+FROM public.user_roles ur
+WHERE ur.user_id IN ('e1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000002')
+ON CONFLICT (business_id, user_id) DO NOTHING;
+
 INSERT INTO public.products (
   sku, name, current_price, cost_price, cost_price_verified,
   stock_quantity, is_service, is_active
