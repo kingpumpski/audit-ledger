@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { subscribeRealtimeWithPageLifecycle } from '@/lib/realtime-lifecycle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,8 +36,11 @@ type TrialBalanceRow = {
 
 export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string }) {
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id ?? null;
   const journalQuery = useQuery({
-    queryKey: ['journal-ledger-entries'],
+    queryKey: ['journal-ledger-entries', businessId],
+    enabled: !!businessId,
     queryFn: async (): Promise<LedgerEntry[]> => {
       const pageSize = 1000;
       let offset = 0;
@@ -45,6 +49,7 @@ export function GeneralLedgerReport({ currencySymbol }: { currencySymbol: string
         const { data, error } = await supabase
           .from('journal_entries')
           .select('id, entry_number, entry_date, description, source_type, currency, lines:journal_lines(id, account_id, debit, credit, account:chart_of_accounts(id, code, name, account_type))')
+          .eq('business_id', businessId!)
           .order('entry_date', { ascending: false })
           .range(offset, offset + pageSize - 1);
         if (error) throw error;
