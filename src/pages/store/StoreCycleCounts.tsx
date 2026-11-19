@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CheckCircle2, ClipboardCheck, Loader2, Plus, RefreshCw, Send, ShieldCheck } from 'lucide-react';
+import { Ban, CheckCircle2, ClipboardCheck, Loader2, Plus, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ export default function StoreCycleCounts() {
   const [selectedCountId, setSelectedCountId] = useState('');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [cancelReason, setCancelReason] = useState('');
 
   const countsQuery = useQuery({
     queryKey: ['store-stock-counts', businessId],
@@ -76,6 +77,7 @@ export default function StoreCycleCounts() {
     },
     onSuccess: async () => {
       await invalidate();
+      setCancelReason('');
       toast.success('Stock-count action completed.');
     },
     onError: (error: Error) => toast.error(error.message || 'The stock-count action failed.'),
@@ -93,6 +95,7 @@ export default function StoreCycleCounts() {
     location => location.is_active && physicalTypes.has(location.location_type),
   );
   const manager = canApprove.has(activeMembership?.role ?? '');
+  const canCount = new Set(['owner', 'admin', 'accountant', 'cashier']).has(activeMembership?.role ?? '');
 
   const createCount = () => {
     if (!locationId || !reference.trim()) {
@@ -105,10 +108,13 @@ export default function StoreCycleCounts() {
       p_notes: notes.trim() || null,
       p_idempotency_key: crypto.randomUUID(),
       p_product_ids: selectedProductIds.length ? selectedProductIds : null,
-    }).then(({ error }) => ({ error })));
-    setReference('');
-    setNotes('');
-    setSelectedProductIds([]);
+    }).then(({ error }) => ({ error })), {
+      onSuccess: () => {
+        setReference('');
+        setNotes('');
+        setSelectedProductIds([]);
+      },
+    });
   };
 
   const saveLine = (line: StockCountLine) => {
@@ -137,7 +143,7 @@ export default function StoreCycleCounts() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      {canCount && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" /> Start a blind stock count</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -164,7 +170,7 @@ export default function StoreCycleCounts() {
             Start count
           </Button>
         </CardContent>
-      </Card>
+      </Card>}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -251,6 +257,20 @@ export default function StoreCycleCounts() {
               }).then(({ error }) => ({ error })))}>
               <CheckCircle2 className="mr-2 h-4 w-4" /> Post stock adjustment and journal
             </Button>}
+
+            {['counting', 'submitted', 'approved'].includes(selectedCount.status) && manager && (
+              <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row">
+                <Input value={cancelReason} onChange={event => setCancelReason(event.target.value)}
+                  placeholder="Reason for canceling this count" aria-label="Stock-count cancellation reason" />
+                <Button variant="destructive" disabled={mutation.isPending || !cancelReason.trim()}
+                  onClick={() => mutation.mutate(() => supabase.rpc('cancel_store_stock_count', {
+                    p_count_id: selectedCount.id,
+                    p_reason: cancelReason.trim(),
+                  }).then(({ error }) => ({ error })))}>
+                  <Ban className="mr-2 h-4 w-4" /> Cancel count and release locks
+                </Button>
+              </div>
+            )}
 
             {selectedCount.status === 'counting' && <p className="text-xs text-muted-foreground">
               Save each physical count. Submission is enabled only after every SKU has been counted. Approval and posting are separate manager-controlled steps.
