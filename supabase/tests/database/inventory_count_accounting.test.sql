@@ -23,14 +23,6 @@ FROM (VALUES
 ) AS fixture(user_id,role);
 
 SELECT set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000001',true);
-SELECT set_config('request.jwt.claim.role','authenticated',true);
-SELECT set_config(
-  'request.jwt.claims',
-  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
-    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
-  true
-);
-
 INSERT INTO public.businesses (
   id,name,business_type,country,base_currency,timezone,status
 ) VALUES (
@@ -93,6 +85,15 @@ INSERT INTO public.inventory_transactions (
 )
 SELECT id,'purchase',1,9,10,5,5,'test','COUNT-DATE-MOVEMENT',now()
 FROM public.products WHERE sku='TEST-COUNT-DATE-001';
+
+-- Restore the authenticated claim only after privileged fixture creation.
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 SELECT set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
