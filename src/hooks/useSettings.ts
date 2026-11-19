@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { Tables } from '@/integrations/supabase/types';
 
 type CompanySettings = Tables<'company_settings'>;
@@ -33,23 +34,28 @@ export interface SettingsData {
 export function useSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeBusiness } = useBusiness();
+  const businessId = activeBusiness?.id;
 
   const settingsQuery = useQuery({
-    queryKey: ['company-settings'],
+    queryKey: ['company-settings', businessId],
     queryFn: async (): Promise<CompanySettings | null> => {
       const { data, error } = await supabase
         .from('company_settings')
         .select('*')
+        .eq('business_id', businessId!)
         .limit(1)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
       return data;
     },
+    enabled: !!businessId,
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (settings: Partial<SettingsData>) => {
+      if (!businessId) throw new Error('Select an active business before updating company settings.');
       const existingSettings = settingsQuery.data;
       
       if (existingSettings) {
@@ -57,6 +63,7 @@ export function useSettings() {
           .from('company_settings')
           .update(settings)
           .eq('id', existingSettings.id)
+          .eq('business_id', businessId)
           .select()
           .single();
 
@@ -65,7 +72,7 @@ export function useSettings() {
       } else {
         const { data, error } = await supabase
           .from('company_settings')
-          .insert(settings as SettingsData)
+          .insert({ ...settings, business_id: businessId } as SettingsData & { business_id: string })
           .select()
           .single();
 
