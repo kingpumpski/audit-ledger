@@ -273,7 +273,7 @@ export default function StoreReplenishment() {
                         {row.inbound > 0 && !row.needsReorder
                           ? <span className="text-xs text-muted-foreground">Await receipt</span>
                           : row.needsReorder && !row.targetConfigured
-                            ? <Link className="text-sm text-primary hover:underline" to="/store/stock">Review stock settings</Link>
+                            ? <span className="text-xs text-muted-foreground">Manager setup required</span>
                             : row.needsReorder
                               ? <span className="text-xs text-warning">Review before ordering</span>
                               : <span className="text-xs text-muted-foreground">Inbound</span>}
