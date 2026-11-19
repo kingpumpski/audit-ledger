@@ -25,37 +25,12 @@ BEGIN
     -- The creator may not have a membership row yet, so the trusted trigger
     -- owner and audit_logs tenant policy must permit this initial audit event.
     v_business_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END;
-  ELSIF v_row ? 'business_id'
-     AND (v_row ->> 'business_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
-
-  INSERT INTO public.audit_logs (
-    user_id, user_email, action, entity_type, entity_id,
-    old_data, new_data, ip_address, business_id
-  )
-  VALUES (
-    auth.uid(),
-    public.rpc_auth_user_email(auth.uid()),
-    CASE TG_OP
-      WHEN 'INSERT' THEN 'create'::public.audit_action
-      WHEN 'UPDATE' THEN 'update'::public.audit_action
-      WHEN 'DELETE' THEN 'delete'::public.audit_action
-      ELSE NULL
-    END,
-    TG_TABLE_NAME,
-    CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END,
-    v_old_data,
-    v_new_data,
-    NULL,
-    v_business_id
-  );
-
-  RETURN COALESCE(NEW, OLD);
-END;
-$audit$;
-
--- The user_roles table already has an audit trigger. Remove the duplicate
--- manual audit insert from this RPC so each role change produces one event. THEN
-    v_business_id := (v_row ->> 'business_id')::uuid;
+  ELSIF v_row ? 'business_id' THEN
+    BEGIN
+      v_business_id := NULLIF(v_row ->> 'business_id', '')::uuid;
+    EXCEPTION WHEN invalid_text_representation THEN
+      v_business_id := NULL;
+    END;
   END IF;
 
   INSERT INTO public.audit_logs (
