@@ -10,8 +10,19 @@ INSERT INTO auth.users (
 );
 INSERT INTO public.user_roles(user_id,role)
 VALUES ('ca100000-0000-4000-8000-000000000001','accountant');
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(),'ca100000-0000-4000-8000-000000000001','accountant','active',now();
 SELECT set_config('request.jwt.claim.sub','ca100000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','ca100000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text)
+  )::text,
+  true
+);
 
 INSERT INTO public.customers(code,name)
 VALUES('CAB-001','Customer balance as-of test');
