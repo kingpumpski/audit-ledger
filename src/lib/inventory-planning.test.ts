@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildReplenishmentLocationProductRows,
   calculateDemandStatistics,
   calculateMinMaxReplenishment,
   calculateReplenishmentPlan,
