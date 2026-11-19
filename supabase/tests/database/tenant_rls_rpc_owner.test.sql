@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(23);
+SELECT extensions.plan(27);
 
 CREATE OR REPLACE FUNCTION public.test_rpc_owner_event_trigger_guard()
 RETURNS integer
@@ -31,7 +31,9 @@ INSERT INTO auth.users (
   ('b2000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
    'tenant-b@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
   ('b2000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
-   'tenant-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+   'tenant-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('b2000000-0000-4000-8000-000000000004', 'authenticated', 'authenticated',
+   'tenant-global-admin-without-membership@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
 
 SELECT extensions.ok(
   EXISTS (
@@ -255,11 +257,13 @@ SELECT extensions.is(
 
 RESET ROLE;
 INSERT INTO public.user_roles (user_id, role, granted_by)
-VALUES (
-  'b2000000-0000-4000-8000-000000000002',
-  'admin'::public.app_role,
-  'b2000000-0000-4000-8000-000000000001'
-);
+VALUES
+  ('b2000000-0000-4000-8000-000000000002',
+   'admin'::public.app_role,
+   'b2000000-0000-4000-8000-000000000001'),
+  ('b2000000-0000-4000-8000-000000000004',
+   'admin'::public.app_role,
+   'b2000000-0000-4000-8000-000000000001');
 UPDATE public.business_members
 SET status='suspended'
 WHERE business_id=current_setting('test.tenant_b')::uuid
@@ -287,6 +291,42 @@ SELECT extensions.is(
   (SELECT count(*)::integer FROM public.customers),
   0,
   'a suspended member with a legacy global role still cannot read operational data'
+);
+
+RESET ROLE;
+
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'b2000000-0000-4000-8000-000000000004',
+    'role', 'authenticated',
+    'app_metadata', '{}'::jsonb
+  )::text,
+  true
+);
+SELECT set_config('request.jwt.claim.sub', 'b2000000-0000-4000-8000-000000000004', true);
+SET LOCAL ROLE authenticated;
+
+SELECT extensions.is(
+  public.current_business_id(),
+  NULL::uuid,
+  'a global project administrator without membership receives no business context'
+);
+
+SELECT extensions.ok(
+  NOT public.can_access_business(current_setting('test.tenant_a')::uuid),
+  'a global project administrator without membership cannot access a business'
+);
+
+SELECT extensions.ok(
+  public.has_any_role(ARRAY['admin']::text[]),
+  'global project role checks remain available for project-wide administration'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.customers),
+  0,
+  'a global project administrator without membership cannot read business-owned records'
 );
 
 RESET ROLE;
