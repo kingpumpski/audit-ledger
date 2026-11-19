@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/supplier-directory-foundation-main
       - integration/reconcile-six-lovable-branches
   push:
     branches:
