@@ -22,12 +22,6 @@ VALUES
   ('e6000000-0000-4000-8000-000000000010', 'e6000000-0000-4000-8000-000000000002', 'cashier', 'active', now()),
   ('e6000000-0000-4000-8000-000000000020', 'e6000000-0000-4000-8000-000000000003', 'owner', 'active', now());
 
-INSERT INTO public.store_locations (
-  business_id, code, name, location_type, timezone, is_default, is_active
-) VALUES
-  ('e6000000-0000-4000-8000-000000000010', 'MAIN', 'Supplier Test Store One', 'store', 'Africa/Accra', true, true),
-  ('e6000000-0000-4000-8000-000000000020', 'MAIN', 'Supplier Test Store Two', 'store', 'Africa/Accra', true, true);
-
 INSERT INTO public.products (
   id, business_id, sku, name, current_price, stock_quantity, min_stock_level, is_service, is_active
 ) VALUES
