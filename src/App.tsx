@@ -41,6 +41,7 @@ const StoreLayout = lazy(() => import("./components/store/StoreLayout"));
 const StoreDashboard = lazy(() => import("./pages/store/StoreDashboard"));
 const StoreStock = lazy(() => import("./pages/store/StoreStock"));
 const StoreLocations = lazy(() => import("./pages/store/StoreLocations"));
+const StoreSuppliers = lazy(() => import("./pages/store/StoreSuppliers"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminPasswordResets = lazy(() => import("./pages/AdminPasswordResets"));
 const Notifications = lazy(() => import("./pages/Notifications"));
@@ -97,6 +98,7 @@ const App = () => (
                   <Route index element={<StoreDashboard />} />
                   <Route path="stock" element={<StoreStock />} />
                   <Route path="locations" element={<StoreLocations />} />
+                  <Route path="suppliers" element={<StoreSuppliers />} />
                 </Route>
                 <Route path="/accounting/*" element={<ProtectedRoute requiredRoles={['admin', 'accountant', 'auditor']}><Accounting /></ProtectedRoute>} />
                 <Route path="/taxes" element={<ProtectedRoute requiredRoles={['admin', 'accountant']}><Taxes /></ProtectedRoute>} />
