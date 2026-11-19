@@ -15,6 +15,14 @@ INSERT INTO public.user_roles(user_id,role) VALUES
   ('c1000000-0000-4000-8000-000000000001','accountant'),
   ('c1000000-0000-4000-8000-000000000002','cashier');
 
+-- Finance RPCs now require a real active-business membership, not a global role alone.
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(),u.user_id,u.role,'active',now()
+FROM (VALUES
+  ('c1000000-0000-4000-8000-000000000001'::uuid,'accountant'::text),
+  ('c1000000-0000-4000-8000-000000000002'::uuid,'cashier'::text)
+) AS u(user_id,role);
+
 SELECT extensions.is(
   has_table_privilege('authenticated','public.credit_notes','SELECT'),
   true,
@@ -33,11 +41,17 @@ SELECT extensions.is(
   'Anonymous users cannot read credit notes'
 );
 
-INSERT INTO public.customers(code,name)
-VALUES('CREDIT-NOTE-CUSTOMER','Credit note test customer');
-
 SELECT set_config('request.jwt.claim.sub','c1000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','c1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
+
+INSERT INTO public.customers(code,name)
+VALUES('CREDIT-NOTE-CUSTOMER','Credit note test customer');
 
 INSERT INTO public.invoices (
   invoice_number,customer_id,status,issue_date,subtotal,tax_amount,total_amount,amount_paid,balance_due
@@ -580,6 +594,12 @@ SELECT extensions.is(
 );
 
 SELECT set_config('request.jwt.claim.sub','c1000000-0000-4000-8000-000000000002',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','c1000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 SELECT extensions.throws_ok(
   $$ SELECT public.record_invoice_credit_note(
     (SELECT id FROM public.invoices WHERE invoice_number='INV-CN-001'),
