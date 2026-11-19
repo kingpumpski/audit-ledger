@@ -15,6 +15,28 @@ INSERT INTO public.user_roles(user_id, role) VALUES
   ('f1000000-0000-4000-8000-000000000001','accountant'),
   ('f1000000-0000-4000-8000-000000000002','cashier');
 
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(), fixture.user_id, fixture.role, 'active', now()
+FROM (VALUES
+  ('f1000000-0000-4000-8000-000000000001'::uuid,'accountant'::text),
+  ('f1000000-0000-4000-8000-000000000002'::uuid,'cashier'::text)
+) AS fixture(user_id,role);
+
+SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
+
 INSERT INTO public.customers(code,name)
 VALUES ('TAX-SNAPSHOT-CUSTOMER','Tax snapshot test customer');
 
@@ -33,6 +55,12 @@ FROM public.invoices WHERE invoice_number='INV-TAX-SNAPSHOT-001';
 
 SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 INSERT INTO public.taxes (
   code, name, type, rate, is_compound, is_active,
@@ -51,6 +79,12 @@ WHERE i.invoice_number='INV-TAX-SNAPSHOT-001';
 
 SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000001','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 INSERT INTO public.invoice_item_taxes (
   invoice_id, invoice_item_id, tax_id, tax_name, tax_code,
@@ -197,6 +231,12 @@ SELECT extensions.lives_ok(
 );
 
 SELECT set_config('request.jwt.claim.sub','f1000000-0000-4000-8000-000000000002',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','f1000000-0000-4000-8000-000000000002','role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 SET LOCAL ROLE authenticated;
 SELECT set_config(
   'test.invoice_item_tax_snapshot_visible_count',
