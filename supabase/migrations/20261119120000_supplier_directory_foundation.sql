@@ -17,7 +17,7 @@ CREATE TABLE public.suppliers (
   currency text,
   notes text,
   is_active boolean NOT NULL DEFAULT true,
-  created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE RESTRICT,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT suppliers_business_id_key UNIQUE (business_id, id),
@@ -34,6 +34,8 @@ CREATE INDEX idx_suppliers_business_name
   ON public.suppliers (business_id, lower(name));
 CREATE INDEX idx_suppliers_business_active
   ON public.suppliers (business_id, is_active);
+CREATE INDEX idx_suppliers_created_by
+  ON public.suppliers (created_by);
 
 CREATE TABLE public.supplier_products (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -107,6 +109,46 @@ CREATE POLICY supplier_products_update_managers
 REVOKE ALL ON public.suppliers, public.supplier_products FROM PUBLIC, anon, service_role;
 GRANT SELECT, INSERT, UPDATE ON public.suppliers, public.supplier_products TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.suppliers, public.supplier_products TO audit_ledger_rpc_owner;
+
+CREATE OR REPLACE FUNCTION app_private.guard_supplier_directory_identity()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $guard_supplier_directory_identity$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'An authenticated business user is required to maintain supplier records'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF TG_TABLE_NAME = 'suppliers' THEN
+      NEW.created_by := auth.uid();
+    END IF;
+  ELSE
+    IF NEW.business_id IS DISTINCT FROM OLD.business_id THEN
+      RAISE EXCEPTION 'Supplier records cannot be moved between businesses';
+    END IF;
+    IF TG_TABLE_NAME = 'suppliers' THEN
+      NEW.created_by := OLD.created_by;
+    ELSIF NEW.supplier_id IS DISTINCT FROM OLD.supplier_id
+       OR NEW.product_id IS DISTINCT FROM OLD.product_id THEN
+      RAISE EXCEPTION 'Supplier-product identity cannot be reassigned; deactivate the old link and create a new one';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$guard_supplier_directory_identity$;
+
+REVOKE ALL ON FUNCTION app_private.guard_supplier_directory_identity()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER suppliers_guard_identity
+  BEFORE INSERT OR UPDATE ON public.suppliers
+  FOR EACH ROW EXECUTE FUNCTION app_private.guard_supplier_directory_identity();
+CREATE TRIGGER supplier_products_guard_identity
+  BEFORE INSERT OR UPDATE ON public.supplier_products
+  FOR EACH ROW EXECUTE FUNCTION app_private.guard_supplier_directory_identity();
 
 CREATE OR REPLACE FUNCTION app_private.touch_supplier_directory_updated_at()
 RETURNS trigger
