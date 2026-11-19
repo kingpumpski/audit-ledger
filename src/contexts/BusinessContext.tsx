@@ -21,6 +21,7 @@ export interface BusinessMembership {
 
 interface BusinessContextValue {
   memberships: BusinessMembership[];
+  hasAnyMembership: boolean;
   activeBusiness: BusinessSummary | null;
   activeMembership: BusinessMembership | null;
   isLoading: boolean;
@@ -43,18 +44,18 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     queryKey: ["business-memberships", user?.id],
     enabled: !!user && !authLoading,
     staleTime: 30_000,
-    queryFn: async (): Promise<BusinessMembership[]> => {
-      if (!user) return [];
+    queryFn: async (): Promise<{ memberships: BusinessMembership[]; hasAnyMembership: boolean }> => {
+      if (!user) return { memberships: [], hasAnyMembership: false };
 
       const { data: membershipRows, error: membershipError } = await supabase
         .from("business_members")
-        .select("business_id, role")
-        .eq("user_id", user.id)
-        .eq("status", "active");
+        .select("business_id, role, status")
+        .eq("user_id", user.id);
 
       if (membershipError) throw membershipError;
-      const rows = membershipRows ?? [];
-      if (!rows.length) return [];
+      const allRows = membershipRows ?? [];
+      const rows = allRows.filter((row) => row.status === "active");
+      if (!rows.length) return { memberships: [], hasAnyMembership: allRows.length > 0 };
 
       const businessIds = [...new Set(rows.map((row) => row.business_id))];
       const { data: businessRows, error: businessError } = await supabase
@@ -66,16 +67,20 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
       if (businessError) throw businessError;
       const businesses = new Map((businessRows ?? []).map((business) => [business.id, business]));
 
-      return rows.flatMap((membership) => {
-        const business = businesses.get(membership.business_id);
-        return business
-          ? [{ business_id: membership.business_id, role: membership.role, business }]
-          : [];
-      });
+      return {
+        memberships: rows.flatMap((membership) => {
+          const business = businesses.get(membership.business_id);
+          return business
+            ? [{ business_id: membership.business_id, role: membership.role, business }]
+            : [];
+        }),
+        hasAnyMembership: allRows.length > 0,
+      };
     },
   });
 
-  const memberships = membershipsQuery.data ?? [];
+  const memberships = membershipsQuery.data?.memberships ?? [];
+  const hasAnyMembership = membershipsQuery.data?.hasAnyMembership ?? false;
   // Metadata is only a navigation hint; the server-side acceptance RPC verifies
   // the signed-in email and invitation ownership before granting membership.
   const pendingInvitationId = String(
@@ -139,6 +144,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<BusinessContextValue>(() => ({
     memberships,
+    hasAnyMembership,
     activeBusiness,
     activeMembership,
     isLoading: authLoading || membershipsQuery.isLoading,
@@ -149,6 +155,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     refreshMemberships,
   }), [
     memberships,
+    hasAnyMembership,
     activeBusiness,
     activeMembership,
     authLoading,
