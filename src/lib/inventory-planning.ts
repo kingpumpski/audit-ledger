@@ -340,3 +340,64 @@ export function calculateMinMaxReplenishment(
     suggestedQuantity,
   };
 }
+
+
+export interface ReplenishmentBalanceRow {
+  id: string;
+  location_id: string;
+  product_id: string;
+  available_quantity: number;
+}
+
+export interface ReplenishmentSettingRow {
+  location_id: string;
+  product_id: string;
+}
+
+export interface ReplenishmentLocationProductRow {
+  id: string;
+  locationId: string;
+  productId: string;
+  available: number;
+}
+
+/**
+ * Build the union of stock, explicitly configured and inbound location/product
+ * pairs. A missing balance row is zero available stock, not an absent SKU.
+ */
+export function buildReplenishmentLocationProductRows(
+  balances: ReplenishmentBalanceRow[],
+  settings: ReplenishmentSettingRow[],
+  incoming: ReadonlyMap<string, number> = new Map(),
+): ReplenishmentLocationProductRow[] {
+  const balanceByKey = new Map<string, ReplenishmentBalanceRow>();
+  const pairs = new Map<string, { locationId: string; productId: string }>();
+
+  const addPair = (locationId: string, productId: string) => {
+    const key = `${locationId}:${productId}`;
+    if (!pairs.has(key)) pairs.set(key, { locationId, productId });
+    return key;
+  };
+
+  for (const balance of balances) {
+    const key = addPair(balance.location_id, balance.product_id);
+    balanceByKey.set(key, balance);
+  }
+  for (const setting of settings) addPair(setting.location_id, setting.product_id);
+  for (const key of incoming.keys()) {
+    const separator = key.indexOf(':');
+    if (separator > 0 && separator < key.length - 1) {
+      addPair(key.slice(0, separator), key.slice(separator + 1));
+    }
+  }
+
+  return Array.from(pairs.entries()).map(([key, pair]) => {
+    const balance = balanceByKey.get(key);
+    return {
+      id: balance?.id ?? key,
+      locationId: pair.locationId,
+      productId: pair.productId,
+      available: balance ? Number(balance.available_quantity) : 0,
+    };
+  });
+}
