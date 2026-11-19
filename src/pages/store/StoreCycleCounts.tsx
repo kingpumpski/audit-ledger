@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
 import { useBusiness } from '@/contexts/BusinessContext';
 import { useStoreInventoryData } from '@/hooks/useStoreInventoryData';
 import { supabase } from '@/integrations/supabase/client';
