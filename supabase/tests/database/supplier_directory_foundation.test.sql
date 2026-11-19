@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(13);
+SELECT extensions.plan(14);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -80,6 +80,15 @@ SELECT extensions.ok(
   AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.supplier_products'::regclass),
   'Supplier and supplier-product tables enforce row-level security'
 );
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM pg_catalog.pg_policies
+   WHERE schemaname = 'public'
+     AND policyname IN ('suppliers_tenant_scope', 'supplier_products_tenant_scope')
+     AND permissive = 'RESTRICTIVE'),
+  2,
+  'Both supplier tables have restrictive tenant policies that cannot be widened by permissive policies'
+);
+
 SELECT extensions.ok(
   NOT has_table_privilege('authenticated', 'public.suppliers', 'DELETE')
   AND NOT has_table_privilege('authenticated', 'public.supplier_products', 'DELETE'),
