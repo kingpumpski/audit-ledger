@@ -151,6 +151,38 @@ export default function StoreSuppliers() {
     onError: error => toast.error(error.message || 'Supplier product terms could not be saved.'),
   });
 
+  const setSupplierActive = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      if (!businessId) throw new Error('Select an active business workspace.');
+      const { error } = await supabase.from('suppliers')
+        .update({ is_active: isActive })
+        .eq('business_id', businessId)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await refresh();
+      toast.success('Supplier status updated.');
+    },
+    onError: error => toast.error(error.message || 'Supplier status could not be updated.'),
+  });
+
+  const deactivateSupplierProduct = useMutation({
+    mutationFn: async (id: string) => {
+      if (!businessId) throw new Error('Select an active business workspace.');
+      const { error } = await supabase.from('supplier_products')
+        .update({ is_active: false, is_preferred: false })
+        .eq('business_id', businessId)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await refresh();
+      toast.success('Supplier product link deactivated.');
+    },
+    onError: error => toast.error(error.message || 'Supplier product link could not be deactivated.'),
+  });
+
   const visibleSuppliers = useMemo(() => {
     const rows = directory.data?.suppliers ?? [];
     const query = search.trim().toLowerCase();
@@ -261,7 +293,7 @@ export default function StoreSuppliers() {
             <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Supplier</TableHead><TableHead>Code</TableHead><TableHead>Contact</TableHead><TableHead>Terms</TableHead><TableHead>Currency</TableHead><TableHead>Products</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>
               {visibleSuppliers.map(supplier => {
                 const linked = directory.data.links.filter(link => link.supplier_id === supplier.id && link.is_active);
-                return <TableRow key={supplier.id}><TableCell className="font-medium"><div>{supplier.name}</div>{supplier.legal_name && <div className="text-xs text-muted-foreground">{supplier.legal_name}</div>}</TableCell><TableCell>{supplier.supplier_code ?? '—'}</TableCell><TableCell><div>{supplier.contact_name ?? '—'}</div><div className="text-xs text-muted-foreground">{supplier.email ?? supplier.phone ?? ''}</div></TableCell><TableCell>{supplier.payment_terms_days} days</TableCell><TableCell>{supplier.currency ?? activeBusiness?.base_currency ?? '—'}</TableCell><TableCell><div className="font-medium">{linked.length}</div><div className="max-w-48 truncate text-xs text-muted-foreground">{linked.slice(0, 2).map(link => productName.get(link.product_id)).filter(Boolean).join(', ') || 'No linked products'}</div></TableCell><TableCell><Badge variant={supplier.is_active ? 'default' : 'secondary'}>{supplier.is_active ? 'Active' : 'Inactive'}</Badge></TableCell></TableRow>;
+                return <TableRow key={supplier.id}><TableCell className="font-medium"><div>{supplier.name}</div>{supplier.legal_name && <div className="text-xs text-muted-foreground">{supplier.legal_name}</div>}</TableCell><TableCell>{supplier.supplier_code ?? '—'}</TableCell><TableCell><div>{supplier.contact_name ?? '—'}</div><div className="text-xs text-muted-foreground">{supplier.email ?? supplier.phone ?? ''}</div></TableCell><TableCell>{supplier.payment_terms_days} days</TableCell><TableCell>{supplier.currency ?? activeBusiness?.base_currency ?? '—'}</TableCell><TableCell><div className="font-medium">{linked.length}</div><div className="max-w-48 truncate text-xs text-muted-foreground">{linked.slice(0, 2).map(link => productName.get(link.product_id)).filter(Boolean).join(', ') || 'No linked products'}</div></TableCell><TableCell><div className="flex items-center gap-2"><Badge variant={supplier.is_active ? 'default' : 'secondary'}>{supplier.is_active ? 'Active' : 'Inactive'}</Badge>{canManage && <Button type="button" size="sm" variant="ghost" disabled={setSupplierActive.isPending} onClick={() => setSupplierActive.mutate({ id: supplier.id, isActive: !supplier.is_active })}>{supplier.is_active ? 'Deactivate' : 'Reactivate'}</Button>}</div></TableCell></TableRow>;
               })}
             </TableBody></Table></div>
           )}
@@ -272,7 +304,7 @@ export default function StoreSuppliers() {
         <CardContent>
           {directory.data.links.length === 0 ? <p className="text-sm text-muted-foreground">No supplier-product terms have been recorded.</p> : (
             <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Supplier</TableHead><TableHead>Supplier SKU</TableHead><TableHead className="text-right">Unit cost</TableHead><TableHead className="text-right">MOQ</TableHead><TableHead className="text-right">Multiple</TableHead><TableHead className="text-right">Lead time</TableHead><TableHead>Preferred</TableHead></TableRow></TableHeader><TableBody>
-              {directory.data.links.map(link => <TableRow key={link.id}><TableCell className="font-medium">{productName.get(link.product_id) ?? 'Unavailable product'}</TableCell><TableCell>{supplierName.get(link.supplier_id) ?? 'Unavailable supplier'}</TableCell><TableCell>{link.supplier_sku ?? '—'}</TableCell><TableCell className="text-right tabular-nums">{link.unit_cost === null ? 'Not recorded' : `${link.currency ?? ''} ${Number(link.unit_cost).toFixed(4)}`}</TableCell><TableCell className="text-right tabular-nums">{link.minimum_order_quantity}</TableCell><TableCell className="text-right tabular-nums">{link.order_multiple}</TableCell><TableCell className="text-right tabular-nums">{link.lead_time_days} days</TableCell><TableCell>{link.is_preferred ? <Badge>Preferred</Badge> : '—'}</TableCell></TableRow>)}
+              {directory.data.links.map(link => <TableRow key={link.id}><TableCell className="font-medium">{productName.get(link.product_id) ?? 'Unavailable product'}</TableCell><TableCell>{supplierName.get(link.supplier_id) ?? 'Unavailable supplier'}</TableCell><TableCell>{link.supplier_sku ?? '—'}</TableCell><TableCell className="text-right tabular-nums">{link.unit_cost === null ? 'Not recorded' : `${link.currency ?? ''} ${Number(link.unit_cost).toFixed(4)}`}</TableCell><TableCell className="text-right tabular-nums">{link.minimum_order_quantity}</TableCell><TableCell className="text-right tabular-nums">{link.order_multiple}</TableCell><TableCell className="text-right tabular-nums">{link.lead_time_days} days</TableCell><TableCell><div className="flex items-center gap-2">{link.is_preferred && <Badge>Preferred</Badge>}{!link.is_active && <Badge variant="secondary">Inactive</Badge>}{canManage && link.is_active && <Button type="button" size="sm" variant="ghost" disabled={deactivateSupplierProduct.isPending} onClick={() => deactivateSupplierProduct.mutate(link.id)}>Deactivate</Button>}</div></TableCell></TableRow>)}
             </TableBody></Table></div>
           )}
           {!canManage && <p className="mt-3 text-xs text-muted-foreground">Your role has read-only access to supplier records. Contact a business owner, administrator or accountant to make changes.</p>}
