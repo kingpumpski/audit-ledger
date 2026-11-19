@@ -89,7 +89,10 @@ export default function StoreReplenishment() {
         const location = locationById.get(balance.location_id);
         const setting = settingsByKey.get(`${balance.location_id}:${balance.product_id}`);
         const inbound = incoming.get(`${balance.location_id}:${balance.product_id}`) ?? 0;
-        const reorderPoint = Number(setting?.reorder_point ?? product?.min_stock_level ?? 0);
+        const minimum = Number(setting?.minimum_quantity ?? product?.min_stock_level ?? 0);
+        const configuredReorderPoint = Number(setting?.reorder_point ?? product?.min_stock_level ?? 0);
+        // Never let a configured reorder trigger undercut the minimum stock floor.
+        const reorderPoint = Math.max(minimum, configuredReorderPoint);
         const target = setting?.target_quantity === null || setting?.target_quantity === undefined
           ? null
           : Number(setting.target_quantity);
@@ -122,7 +125,7 @@ export default function StoreReplenishment() {
           targetConfigured,
           suggestedQuantity,
           method: setting?.replenishment_method ?? 'min_max',
-          minimum: Number(setting?.minimum_quantity ?? 0),
+          minimum,
           leadTimeDays: Number(setting?.lead_time_days ?? 0),
         };
       })
@@ -149,8 +152,8 @@ export default function StoreReplenishment() {
         || !Number.isInteger(leadTimeDays)) {
         throw new Error('Minimum, reorder point and lead time must be valid non-negative values.');
       }
-      if (target !== null && (!Number.isFinite(target) || target < reorderPoint)) {
-        throw new Error('Target stock must be blank or greater than or equal to the reorder point.');
+      if (target !== null && (!Number.isFinite(target) || target <= reorderPoint)) {
+        throw new Error('Target stock must be blank or greater than the effective reorder trigger.');
       }
       const { error } = await supabase.from('product_location_settings').upsert({
         business_id: businessId,
@@ -304,7 +307,7 @@ export default function StoreReplenishment() {
           <CardHeader>
             <CardTitle>Location replenishment settings</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Configure the minimum, reorder trigger, target stock and expected supplier lead time for this product at this location.
+              The effective reorder trigger is the higher of the minimum quantity and reorder point. Supplier lead time is recorded for the upcoming demand-forecast and purchasing workflow; this first min/max view does not yet calculate demand from it.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -326,7 +329,7 @@ export default function StoreReplenishment() {
                   onChange={event => setConfigValues(current => ({ ...current, target: event.target.value }))} />
               </label>
               <label className="space-y-1 text-sm">
-                <span>Supplier lead time (days)</span>
+                <span>Supplier lead time (days; forecast input)</span>
                 <Input type="number" min="0" step="1" value={configValues.leadTimeDays}
                   onChange={event => setConfigValues(current => ({ ...current, leadTimeDays: event.target.value }))} />
               </label>
