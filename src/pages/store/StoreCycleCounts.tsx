@@ -26,6 +26,7 @@ export default function StoreCycleCounts() {
   const [locationId, setLocationId] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [selectedCountId, setSelectedCountId] = useState('');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
@@ -103,10 +104,11 @@ export default function StoreCycleCounts() {
       p_reference_number: reference.trim(),
       p_notes: notes.trim() || null,
       p_idempotency_key: crypto.randomUUID(),
-      p_product_ids: null,
+      p_product_ids: selectedProductIds.length ? selectedProductIds : null,
     }).then(({ error }) => ({ error })));
     setReference('');
     setNotes('');
+    setSelectedProductIds([]);
   };
 
   const saveLine = (line: StockCountLine) => {
@@ -139,10 +141,10 @@ export default function StoreCycleCounts() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Plus className="h-5 w-5" /> Start a blind stock count</CardTitle>
           <p className="text-sm text-muted-foreground">
-            The system snapshots stock without showing expected quantities to counters. All active physical SKUs at the selected location are included.
+            The system snapshots stock without showing expected quantities to counters. Leave SKU selection empty for all active physical SKUs, or select specific products for a focused count.
           </p>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <select value={locationId} onChange={event => setLocationId(event.target.value)}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm" aria-label="Count location">
             <option value="">Select location</option>
@@ -150,6 +152,13 @@ export default function StoreCycleCounts() {
           </select>
           <Input value={reference} onChange={event => setReference(event.target.value)} placeholder="Count reference" aria-label="Count reference" />
           <Input value={notes} onChange={event => setNotes(event.target.value)} placeholder="Notes (optional)" aria-label="Count notes" />
+          <select multiple value={selectedProductIds}
+            onChange={event => setSelectedProductIds(Array.from(event.target.selectedOptions, option => option.value))}
+            aria-label="Optional SKU selection" title="Leave empty to count every active physical SKU"
+            className="min-h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
+            {(inventory.products ?? []).filter(product => product.is_service !== true && product.is_active !== false)
+              .map(product => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}
+          </select>
           <Button onClick={createCount} disabled={mutation.isPending || !locationId || !reference.trim()}>
             {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-4 w-4" />}
             Start count
