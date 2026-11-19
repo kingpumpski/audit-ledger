@@ -740,6 +740,14 @@ BEGIN
     RAISE EXCEPTION 'A customer and a positive receipt amount are required';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1 FROM public.customers
+    WHERE id = p_customer_id AND business_id = v_business_id
+  ) THEN
+    RAISE EXCEPTION 'The selected customer does not belong to the active business'
+      USING ERRCODE = '42501';
+  END IF;
+
   IF p_idempotency_key IS NULL THEN
     RAISE EXCEPTION 'An idempotency key is required to issue a receipt';
   END IF;
