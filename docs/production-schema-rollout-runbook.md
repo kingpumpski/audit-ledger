@@ -18,8 +18,8 @@ Production Supabase project ref: `phfpbqlhxagonpofzvtn`; project status was prev
   - `20261117114039` → `add_tenant_consistent_foreign_keys` → `20261117130000_add_tenant_consistent_foreign_keys.sql`
   - `20261117114343` → `add_business_scoped_unique_keys` → `20261117140000_add_business_scoped_unique_keys.sql`
   - `20261117120018` → `use_active_business_for_new_records` → `20261117150000_use_active_business_for_new_records.sql`
-- Therefore, production version `20261117120018` is the active-business migration by name, not the ownership-columns migration. The earlier timestamp-only interpretation has been corrected.
-- Seven repository migrations after that mapped active-business migration are not present in the production history list: tenant/RPC ownership cutover, business invitations, legacy finance membership reads, project-wide notifications, cross-business audit trigger handling, location stock balances and stock transfers.
+- Production also records `20261112120819` named `restrict_security_definer_execute_grants`. The matching SQL was recovered from historical branch `fix/supabase-function-execute-grants`; draft PR #96 restores it in the repository using the production version identifier. This is source-control recovery only, not a production change.
+- Thus, 69 production migration entries map to current repository files by original timestamp or migration name; the remaining entry has recovered SQL proposed in PR #96. The seven repository migrations after the mapped active-business migration are not present in production history.
 - Read-only inspection confirmed `public.store_locations`, `public.stock_balances`, `public.product_location_settings` and role `audit_ledger_rpc_owner` are absent.
 - All 47 public tables have RLS enabled; 36 have a `business_id` column, but none of the 47 has a RESTRICTIVE policy and none of the 36 business tables has a restrictive tenant policy.
 - 85 public SECURITY DEFINER functions are owned by `postgres`; seven retain `search_path=public`.
@@ -45,7 +45,7 @@ This is a candidate sequence, not an instruction to apply it. The tenant/RPC cut
 
 1. **Read-only preflight.** Run `supabase/diagnostics/production-schema-rollout-preflight.sql` in the production SQL Editor. Save the complete results, including migration versions/names, object existence, RLS status and policies.
 2. **Backup and recovery.** Confirm a current complete backup stored independently of production and a successful isolated restore rehearsal. A database-only dump or untested backup is insufficient.
-3. **Semantic reconciliation.** Compare the eight mapped production migration names against their repository SQL files and actual production DDL/catalog effects. Migration name equality is a useful mapping, not proof of identical SQL. Record every difference.
+3. **Semantic reconciliation.** Compare mapped production migration names and recovered sources against their repository SQL files and actual production DDL/catalog effects. Migration name equality is a useful mapping, not proof of identical SQL. Record every difference.
 4. **Review candidate migrations.** Inspect the seven remaining migrations for DDL, data backfills, locks, grants, RLS, function ownership, event triggers, dependencies and rollback/recovery behavior. Reconcile all object and policy state.
 5. **Tenant security review.** Resolve the retained global-role fallback in `current_business_id()`; review all SECURITY DEFINER owners/ACLs/search_path/row_security; validate restrictive policies on every business-owned table; test at least two businesses and cross-business access.
 6. **Isolated replay.** Replay the exact candidate migration sequence from a clean local Supabase database. Run the full database integration suite, frontend quality checks, Edge Function type checks and production build. Run security/performance advisors and review relevant findings.
