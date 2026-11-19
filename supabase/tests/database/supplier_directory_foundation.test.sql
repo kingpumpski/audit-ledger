@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(12);
+SELECT extensions.plan(13);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -135,6 +135,32 @@ SELECT extensions.is(
      AND product_id = 'e6000000-0000-4000-8000-000000000030'),
   1,
   'A supplier can be linked to a product with MOQ, pack multiple and lead-time terms'
+);
+
+UPDATE public.supplier_products
+SET is_active = false, is_preferred = false
+WHERE business_id = 'e6000000-0000-4000-8000-000000000010'
+  AND supplier_sku = 'WHOLESALE-001';
+
+INSERT INTO public.supplier_products (
+  business_id, supplier_id, product_id, supplier_sku, unit_cost, currency,
+  minimum_order_quantity, order_multiple, lead_time_days
+)
+SELECT
+  'e6000000-0000-4000-8000-000000000010', s.id,
+  'e6000000-0000-4000-8000-000000000030', 'WHOLESALE-002', 5.50, 'GHS',
+  12, 12, 5
+FROM public.suppliers s
+WHERE s.business_id = 'e6000000-0000-4000-8000-000000000010'
+  AND s.supplier_code = 'SUP-001';
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.supplier_products
+   WHERE business_id = 'e6000000-0000-4000-8000-000000000010'
+     AND supplier_id = (SELECT id FROM public.suppliers WHERE supplier_code = 'SUP-001')
+     AND product_id = 'e6000000-0000-4000-8000-000000000030'),
+  2,
+  'A deactivated supplier-product term remains as history while a replacement can be created'
 );
 
 SELECT extensions.throws_ok(
