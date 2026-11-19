@@ -20,7 +20,7 @@ Production Supabase project ref: `phfpbqlhxagonpofzvtn`; project status was prev
   - `20261117120018` → `use_active_business_for_new_records` → `20261117150000_use_active_business_for_new_records.sql`
 - Production also records `20261112120819` named `restrict_security_definer_execute_grants`. The matching SQL was recovered from historical branch `fix/supabase-function-execute-grants`; draft PR #96 restores it in the repository using the production version identifier. PR #96 passed isolated replay and CI, but remains unmerged.
 - Thus, 69 production migration entries map to current repository files by original timestamp or migration name; the remaining entry has recovered SQL proposed in PR #96.
-- Read-only inspection confirmed `public.store_locations`, `public.stock_balances`, `public.product_location_settings` and role `audit_ledger_rpc_owner` are absent.
+- Read-only inspection confirmed these objects are absent: `public.store_locations`, `public.stock_balances`, `public.product_location_settings`, `public.business_invitations`, `public.stock_transfers`, `public.stock_transfer_lines`, `public.stock_transfer_receipts`, `public.stock_transfer_receipt_lines`, `public.store_stock_counts`, `public.store_stock_count_lines`, `public.suppliers`, and `public.supplier_products`. Role `audit_ledger_rpc_owner` is also absent.
 - All 47 public tables have RLS enabled; 36 have a `business_id` column, but none of the 47 has a RESTRICTIVE policy and none of the 36 business tables has a restrictive tenant policy.
 - 85 public SECURITY DEFINER functions are owned by `postgres`; seven retain `search_path=public`.
 - Production currently has one Auth user, one active business membership and one active business; no global-role user without a membership was found.
