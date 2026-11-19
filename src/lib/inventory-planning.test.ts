@@ -125,6 +125,23 @@ describe('calculateReplenishmentPlan', () => {
     expect(result.explanation.some(line => line.includes('stockout days'))).toBe(true);
   });
 
+  it('rounds the minimum order quantity up to a valid supplier pack multiple', () => {
+    const result = calculateReplenishmentPlan({
+      averageDailyDemand: 1,
+      dailyDemandStandardDeviation: 0,
+      leadTimeDays: 1,
+      onHand: 0,
+      targetDaysOfCover: 2,
+      minimumOrderQuantity: 10,
+      orderMultiple: 6,
+    });
+
+    expect(result.shouldReorder).toBe(true);
+    expect(result.suggestedOrderQuantity).toBe(12);
+    expect(result.suggestedOrderQuantity % 6).toBe(0);
+    expect(result.suggestedOrderQuantity).toBeGreaterThanOrEqual(10);
+  });
+
   it('does not recommend an order when inventory position is above the reorder point', () => {
     const result = calculateReplenishmentPlan({
       averageDailyDemand: 1,
