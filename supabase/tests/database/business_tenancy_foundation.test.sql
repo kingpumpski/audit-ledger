@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(12);
+SELECT extensions.plan(15);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -66,7 +66,35 @@ SELECT extensions.is(
   'A business owner can read their own membership'
 );
 
+RESET ROLE;
+UPDATE public.business_members
+SET status = 'suspended'
+WHERE business_id = current_setting('test.business_id')::uuid
+  AND user_id = 'b1000000-0000-4000-8000-000000000001';
+
+SELECT set_config('request.jwt.claim.sub', 'b1000000-0000-4000-8000-000000000001', true);
+SET LOCAL ROLE authenticated;
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.business_members
+   WHERE business_id = current_setting('test.business_id')::uuid
+     AND user_id = auth.uid() AND status = 'suspended'),
+  1,
+  'A user can read their own suspended membership status'
+);
+SELECT extensions.ok(
+  NOT public.is_business_member(current_setting('test.business_id')::uuid),
+  'A suspended membership does not grant active business access'
+);
+
+RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', 'b1000000-0000-4000-8000-000000000002', true);
+SET LOCAL ROLE authenticated;
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.business_members
+   WHERE business_id = current_setting('test.business_id')::uuid),
+  0,
+  'A user outside the business cannot read another user’s suspended membership'
+);
 SELECT extensions.ok(
   NOT public.is_business_member(current_setting('test.business_id')::uuid),
   'A user outside the business is not a member'
