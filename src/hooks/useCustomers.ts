@@ -65,8 +65,9 @@ export function useCustomers() {
   });
 
   const updateCustomerMutation = useMutation({
-    mutationFn: async ({ id, business_id: _businessId, ...data }: Partial<Customer> & { id: string }) => {
+    mutationFn: async ({ id, business_id, ...data }: Partial<Customer> & { id: string }) => {
       if (!businessId) throw new Error('Select an active business before updating a customer.');
+      if (business_id && business_id !== businessId) throw new Error('A customer cannot be moved to another business.');
       const { error } = await supabase
         .from('customers')
         .update(data)
