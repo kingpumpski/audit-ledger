@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
+import { useBusiness } from '@/contexts/BusinessContext';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, Search, Loader2, Lock } from 'lucide-react';
 import { z } from 'zod';
@@ -89,6 +90,7 @@ const emptyForm = {
 
 export function ChartOfAccounts() {
   const roles = useEffectiveRoles();
+  const { activeBusiness } = useBusiness();
   const { toast } = useToast();
   const canEdit = roles.includes('admin') || roles.includes('accountant');
   const canDelete = roles.includes('admin');
@@ -104,18 +106,32 @@ export function ChartOfAccounts() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const businessId = activeBusiness?.id;
+    if (!businessId) {
+      setAccounts([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const { data, error } = await supabase
       .from('chart_of_accounts')
       .select('*')
+      .eq('business_id', businessId)
       .order('code', { ascending: true });
+
+    // A workspace switch can happen while the previous request is in flight.
+    // Never let its response repopulate this component with another tenant's accounts.
+    if (activeBusiness?.id !== businessId) return;
+
     if (error) {
+      setAccounts([]);
       toast({ title: 'Failed to load accounts', description: error.message, variant: 'destructive' });
     } else {
       setAccounts((data as Account[]) || []);
     }
     setLoading(false);
-  }, [toast]);
+  }, [toast, activeBusiness?.id]);
 
   useEffect(() => { void load(); }, [load]);
 
