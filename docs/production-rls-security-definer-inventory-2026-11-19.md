@@ -16,9 +16,14 @@ This is positive baseline evidence, but RLS-enabled does not by itself prove tha
 
 ## SECURITY DEFINER inventory
 
-The production catalog returned 63 public SECURITY DEFINER function signatures in the query scope. All returned functions were owned by `postgres` at inspection time, rather than the dedicated `audit_ledger_rpc_owner` role (which is absent).
+A count query returned **85 public SECURITY DEFINER functions** in the inspected schema:
 
-Most functions had an empty configured search_path. Seven functions still had `search_path=public`:
+- 85 owned by `postgres`.
+- 76 with an empty configured `search_path`.
+- 7 with `search_path=public`.
+- The dedicated `audit_ledger_rpc_owner` role is absent.
+
+The seven functions with `search_path=public` are:
 
 - `public.audit_trigger_func()`
 - `public.clear_reset_lockout(text,text)`
