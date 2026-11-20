@@ -610,8 +610,8 @@ SELECT extensions.throws_ok(
     CURRENT_DATE,'Cashier attempt','RETURN-REF-CN-CASHIER',
     'c1000000-0000-4000-8000-000000000601'
   ) $$,
-  'P0001',
-  'Only an admin or accountant can issue customer credit notes',
+  '42501',
+  'Only an active business owner, admin or accountant can issue customer credit notes',
   'Cashier cannot issue customer credit notes'
 );
 
