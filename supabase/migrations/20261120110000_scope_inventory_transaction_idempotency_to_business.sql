@@ -226,7 +226,7 @@ BEGIN
     business_id, journal_entry_id, line_number, account_id, description, debit, credit
   )
   VALUES (
-    v_journal_id, v_line_number, v_inventory_account,
+    v_business_id, v_journal_id, v_line_number, v_inventory_account,
     'Inventory received - ' || v_product.name, v_total_cost, 0
   );
   v_line_number := v_line_number + 1;
@@ -236,7 +236,7 @@ BEGIN
       business_id, journal_entry_id, line_number, account_id, description, debit, credit
     )
     VALUES (
-      v_journal_id, v_line_number, v_cash_account,
+      v_business_id, v_journal_id, v_line_number, v_cash_account,
       'Purchase payment - ' || v_product.name, 0, v_amount_paid
     );
     v_line_number := v_line_number + 1;
@@ -247,14 +247,14 @@ BEGIN
       business_id, journal_entry_id, line_number, account_id, description, debit, credit
     )
     VALUES (
-      v_journal_id, v_line_number, v_payable_account,
+      v_business_id, v_journal_id, v_line_number, v_payable_account,
       'Supplier balance - ' || v_product.name, 0, v_total_cost - v_amount_paid
     );
   END IF;
 
   RETURN v_transaction_id;
 END;
-$stock_purchase$
+$stock_purchase$;
 
 CREATE OR REPLACE FUNCTION public.record_inventory_damage(
   p_product_id uuid,
@@ -383,7 +383,7 @@ BEGIN
 
   RETURN v_transaction_id;
 END;
-$inventory_damage$
+$inventory_damage$;
 
 CREATE OR REPLACE FUNCTION public.reverse_stock_purchase(
   p_purchase_transaction_id uuid,
@@ -628,6 +628,6 @@ BEGIN
 
   RETURN v_reversal_id;
 END;
-$reverse_stock_purchase$
+$reverse_stock_purchase$;
 
 NOTIFY pgrst, 'reload schema';
