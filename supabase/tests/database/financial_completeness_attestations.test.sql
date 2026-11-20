@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(13);
+SELECT extensions.plan(14);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -190,6 +190,15 @@ SELECT extensions.throws_ok(
   '42501',
   'You are not authorized to view financial completeness attestations',
   'Cashier cannot view finance attestation records'
+);
+
+SELECT extensions.ok(
+  EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname = 'financial_completeness_attestations_business_idempotency_uidx'
+  ),
+  'Financial-completeness attestation idempotency is unique within each business'
 );
 
 SELECT extensions.finish();
