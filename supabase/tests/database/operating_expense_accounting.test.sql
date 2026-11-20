@@ -29,14 +29,18 @@ SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.lives_ok(
-  $$ SELECT public.record_operating_expense(
+  $ SELECT set_config(
+    'test.expense_id',
+    public.record_operating_expense(
     'Office internet service', 'Example Telecom', 'OPEX-TEST-001',
     (SELECT id FROM public.chart_of_accounts
      WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500') ORDER BY code LIMIT 1),
     CURRENT_DATE, CURRENT_DATE + 14, 100.00, 40.00,
     'cash', 'CASH-TEST-001', 'Monthly internet subscription',
     'e0000000-0000-4000-8000-000000000101'
-  ) $$,
+    )::text,
+    true
+  ) $,
   'Accountant can record an evidenced operating expense with a partial payment'
 );
 
@@ -69,7 +73,7 @@ SELECT set_config(
 
 SELECT extensions.throws_ok(
   $ SELECT public.pay_operating_expense(
-    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    current_setting('test.expense_id')::uuid,
     1.00, CURRENT_DATE, 'cash', 'CROSS-BUSINESS-PAYMENT',
     'e0000000-0000-4000-8000-000000000121'
   ) $,
@@ -80,7 +84,7 @@ SELECT extensions.throws_ok(
 
 SELECT extensions.throws_ok(
   $ SELECT public.reverse_unpaid_operating_expense(
-    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    current_setting('test.expense_id')::uuid,
     'Cross-business attempt',
     'CROSS-BUSINESS-REVERSAL',
     'e0000000-0000-4000-8000-000000000122'
