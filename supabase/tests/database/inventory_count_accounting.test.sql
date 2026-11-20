@@ -63,7 +63,15 @@ INSERT INTO public.products (
   20,NULL,false,0,false,true
 );
 
--- Keep the owner claim through all fixture inserts; restore authentication below.
+-- Keep the owner claim, but switch the fixture default back to the
+-- legacy business before creating the two products used by the posting tests.
+-- The foreign-business product above deliberately belongs to tenant B.
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object('sub','d1000000-0000-4000-8000-000000000001','role','postgres',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text))::text,
+  true
+);
 
 INSERT INTO public.products (
   sku, name, current_price, cost_price, cost_price_verified,
