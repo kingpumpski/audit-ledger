@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(40);
+SELECT extensions.plan(46);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -10,24 +10,37 @@ INSERT INTO auth.users (
   ('e0000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
    'expense-accountant@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
   ('e0000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
-   'expense-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+   'expense-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('e0000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
+   'expense-other-business@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
 
 INSERT INTO public.user_roles (user_id, role) VALUES
   ('e0000000-0000-4000-8000-000000000001', 'accountant'),
   ('e0000000-0000-4000-8000-000000000002', 'cashier');
 
+-- Establish explicit business memberships so this test exercises the tenant
+-- authorization path rather than the legacy global-role compatibility path.
+INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
+VALUES
+  (public.legacy_business_id(), 'e0000000-0000-4000-8000-000000000001', 'accountant', 'active', now()),
+  (public.legacy_business_id(), 'e0000000-0000-4000-8000-000000000002', 'cashier', 'active', now());
+
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.lives_ok(
-  $$ SELECT public.record_operating_expense(
+  $expense_capture$ SELECT set_config(
+    'test.expense_id',
+    public.record_operating_expense(
     'Office internet service', 'Example Telecom', 'OPEX-TEST-001',
     (SELECT id FROM public.chart_of_accounts
      WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500') ORDER BY code LIMIT 1),
     CURRENT_DATE, CURRENT_DATE + 14, 100.00, 40.00,
     'cash', 'CASH-TEST-001', 'Monthly internet subscription',
     'e0000000-0000-4000-8000-000000000101'
-  ) $$,
+    )::text,
+    true
+  ) $expense_capture$,
   'Accountant can record an evidenced operating expense with a partial payment'
 );
 
@@ -48,6 +61,107 @@ SELECT extensions.is(
   1,
   'Expense record is created once'
 );
+
+-- A second, unrelated business must not be able to settle or reverse the
+-- first business's expense even when its user has owner-level permissions.
+SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000003', true);
+SELECT set_config(
+  'test.expense_other_business',
+  public.create_business('Other Expense Business', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  current_setting('test.expense_other_business')::uuid,
+  'A business owner resolves the newly created workspace as the active business'
+);
+
+SELECT extensions.throws_ok(
+  $expense_cross_payment$ SELECT public.pay_operating_expense(
+    current_setting('test.expense_id')::uuid,
+    1.00, CURRENT_DATE, 'cash', 'CROSS-BUSINESS-PAYMENT',
+    'e0000000-0000-4000-8000-000000000121'
+  ) $expense_cross_payment$,
+  'P0001',
+  'Operating expense not found',
+  'A different business cannot settle an expense by guessing its UUID'
+);
+
+SELECT extensions.throws_ok(
+  $expense_cross_reversal$ SELECT public.reverse_unpaid_operating_expense(
+    current_setting('test.expense_id')::uuid,
+    'Cross-business attempt',
+    'CROSS-BUSINESS-REVERSAL',
+    'e0000000-0000-4000-8000-000000000122'
+  ) $expense_cross_reversal$,
+  'P0001',
+  'Operating expense not found',
+  'A different business cannot reverse an expense by guessing its UUID'
+);
+
+-- A second business may reuse the first business's expense key. Seed a
+-- matching pre-existing row so the RPC exercises its idempotent retry path
+-- without relying on cross-business journal sequence provisioning.
+WITH account AS (
+  INSERT INTO public.chart_of_accounts (
+    business_id, code, name, account_type, account_subtype, currency, is_system, created_by
+  ) VALUES (
+    public.current_business_id(), 'EXP-OTHER-01', 'Other business operating expense',
+    'expense', 'operating_expense', 'GHS', false, auth.uid()
+  )
+  RETURNING id
+),
+expense AS (
+  INSERT INTO public.operating_expenses (
+    business_id, expense_number, description, vendor_name, reference_number,
+    expense_account_id, incurred_on, due_on, amount, amount_paid,
+    initial_amount_paid, initial_payment_method, initial_payment_reference,
+    notes, idempotency_key, recorded_by
+  )
+  SELECT
+    public.current_business_id(), 'EXP-OTHER-BUSINESS-01',
+    'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
+    account.id, CURRENT_DATE, NULL, 50.00, 0,
+    0, NULL, NULL, NULL,
+    'e0000000-0000-4000-8000-000000000101',
+    auth.uid()
+  FROM account
+  RETURNING id
+)
+SELECT set_config('test.expense_other_id', id::text, true) FROM expense;
+
+SELECT extensions.lives_ok(
+  $$ SELECT public.record_operating_expense(
+    'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
+    (SELECT id FROM public.chart_of_accounts WHERE code = 'EXP-OTHER-01'),
+    CURRENT_DATE, NULL, 50.00, 0, NULL, NULL, NULL,
+    'e0000000-0000-4000-8000-000000000101'
+  ) $$,
+  'A separate business can reuse an operating-expense idempotency key'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expenses
+   WHERE idempotency_key = 'e0000000-0000-4000-8000-000000000101'),
+  2,
+  'The same expense idempotency key can exist once in each business'
+);
+
+SELECT extensions.ok(
+  (SELECT count(*)::integer FROM pg_indexes
+   WHERE schemaname = 'public'
+     AND indexname = ANY(ARRAY[
+       'uq_operating_expenses_business_idempotency_key',
+       'uq_operating_expense_payments_business_idempotency_key',
+       'uq_operating_expense_reversals_business_idempotency_key',
+       'uq_operating_expense_refunds_business_idempotency_key',
+       'uq_petty_cash_expense_reversals_business_idempotency_key'
+     ])) = 5,
+  'All operating-expense and petty-cash idempotency indexes are business-scoped'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
 
 SELECT extensions.is(
   (SELECT amount_paid FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
