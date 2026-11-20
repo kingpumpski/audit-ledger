@@ -43,6 +43,7 @@ const StoreStock = lazy(() => import("./pages/store/StoreStock"));
 const StoreLocations = lazy(() => import("./pages/store/StoreLocations"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AdminPasswordResets = lazy(() => import("./pages/AdminPasswordResets"));
+const BackupRecovery = lazy(() => import("./pages/BackupRecovery"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const ResetSuccess = lazy(() => import("./pages/ResetSuccess"));
 const ResetExpired = lazy(() => import("./pages/ResetExpired"));
@@ -106,6 +107,7 @@ const App = () => (
                 <Route path="/admin/users" element={<ProtectedRoute requiredRoles={['admin']} globalRolesOnly><AdminUsers /></ProtectedRoute>} />
                 <Route path="/admin/business-members" element={<BusinessManagerRoute><BusinessMembers /></BusinessManagerRoute>} />
                 <Route path="/admin/password-resets" element={<ProtectedRoute requiredRoles={['admin']} globalRolesOnly><AdminPasswordResets /></ProtectedRoute>} />
+                <Route path="/admin/backup-recovery" element={<ProtectedRoute requiredRoles={['admin']} globalRolesOnly><BackupRecovery /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute requiredRoles={['admin']}><Settings /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

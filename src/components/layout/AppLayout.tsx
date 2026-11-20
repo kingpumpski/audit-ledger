@@ -10,7 +10,7 @@ import { useEffectiveRoles } from '@/hooks/useEffectiveRoles';
 import { BusinessSwitcher } from './BusinessSwitcher';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight } from 'lucide-react';
+import { Bell, Search, Menu, User, Settings, Users, KeyRound, LogOut, ChevronRight, ShieldCheck } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
@@ -194,6 +194,7 @@ function AppLayoutInner({ children, title, subtitle, actions }: AppLayoutProps) 
                 {isGlobalAdmin && <DropdownMenuItem asChild><Link to="/admin/users"><Users className="mr-2 h-4 w-4" />User management</Link></DropdownMenuItem>}
                 {isBusinessManager && <DropdownMenuItem asChild><Link to="/admin/business-members"><Users className="mr-2 h-4 w-4" />Business members</Link></DropdownMenuItem>}
                 {isGlobalAdmin && <DropdownMenuItem asChild><Link to="/admin/password-resets"><KeyRound className="mr-2 h-4 w-4" />Password resets</Link></DropdownMenuItem>}
+                {isGlobalAdmin && <DropdownMenuItem asChild><Link to="/admin/backup-recovery"><ShieldCheck className="mr-2 h-4 w-4" />Backup & Recovery</Link></DropdownMenuItem>}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => void signOut()} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />Sign out
