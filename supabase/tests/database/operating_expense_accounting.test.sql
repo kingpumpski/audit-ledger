@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(43);
+SELECT extensions.plan(46);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -98,6 +98,47 @@ SELECT extensions.throws_ok(
   'P0001',
   'Operating expense not found',
   'A different business cannot reverse an expense by guessing its UUID'
+);
+
+-- The same client-generated idempotency tokens are valid in a different
+-- business. The resulting records must remain independently attributable.
+SELECT extensions.lives_ok(
+  $expense_same_business_key$ SELECT set_config(
+    'test.expense_other_id',
+    public.record_operating_expense(
+      'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
+      (SELECT id FROM public.chart_of_accounts
+       WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500')
+       ORDER BY code LIMIT 1),
+      CURRENT_DATE, NULL, 50.00, 0, NULL, NULL, NULL,
+      'e0000000-0000-4000-8000-000000000101'
+    )::text,
+    true
+  ) $expense_same_business_key$,
+  'A separate business can reuse an operating-expense idempotency key'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.pay_operating_expense(
+    current_setting('test.expense_other_id')::uuid,
+    10.00, CURRENT_DATE, 'cash', 'OTHER-BUSINESS-CASH-001',
+    'e0000000-0000-4000-8000-000000000102'
+  ) $,
+  'A separate business can reuse a settlement idempotency key'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expenses
+   WHERE idempotency_key = 'e0000000-0000-4000-8000-000000000101'),
+  2,
+  'The same expense idempotency key can exist once in each business'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.operating_expense_payments
+   WHERE idempotency_key = 'e0000000-0000-4000-8000-000000000102'),
+  2,
+  'The same settlement idempotency key can exist once in each business'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
