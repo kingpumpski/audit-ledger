@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(40);
+SELECT extensions.plan(42);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -10,11 +10,20 @@ INSERT INTO auth.users (
   ('e0000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
    'expense-accountant@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
   ('e0000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
-   'expense-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+   'expense-cashier@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('e0000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
+   'expense-other-business@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
 
 INSERT INTO public.user_roles (user_id, role) VALUES
   ('e0000000-0000-4000-8000-000000000001', 'accountant'),
   ('e0000000-0000-4000-8000-000000000002', 'cashier');
+
+-- Establish explicit business memberships so this test exercises the tenant
+-- authorization path rather than the legacy global-role compatibility path.
+INSERT INTO public.business_members (business_id, user_id, role, status, joined_at)
+VALUES
+  (public.legacy_business_id(), 'e0000000-0000-4000-8000-000000000001', 'accountant', 'active', now()),
+  (public.legacy_business_id(), 'e0000000-0000-4000-8000-000000000002', 'cashier', 'active', now());
 
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -48,6 +57,40 @@ SELECT extensions.is(
   1,
   'Expense record is created once'
 );
+
+-- A second, unrelated business must not be able to settle or reverse the
+-- first business's expense even when its user has owner-level permissions.
+SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000003', true);
+SELECT set_config(
+  'test.expense_other_business',
+  public.create_business('Other Expense Business', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.pay_operating_expense(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    1.00, CURRENT_DATE, 'cash', 'CROSS-BUSINESS-PAYMENT',
+    'e0000000-0000-4000-8000-000000000121'
+  ) $,
+  'P0001',
+  'Operating expense not found',
+  'A different business cannot settle an expense by guessing its UUID'
+);
+
+SELECT extensions.throws_ok(
+  $ SELECT public.reverse_unpaid_operating_expense(
+    (SELECT id FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
+    'Cross-business attempt',
+    'CROSS-BUSINESS-REVERSAL',
+    'e0000000-0000-4000-8000-000000000122'
+  ) $,
+  'P0001',
+  'Operating expense not found',
+  'A different business cannot reverse an expense by guessing its UUID'
+);
+
+SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
 
 SELECT extensions.is(
   (SELECT amount_paid FROM public.operating_expenses WHERE reference_number = 'OPEX-TEST-001'),
