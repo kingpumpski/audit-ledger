@@ -81,7 +81,37 @@ Where Supabase does not support a category's export/import, mark it as unsupport
 ### Storage
 Capture both database metadata and object bytes. For each bucket/object preserve path, content type, size, checksum/etag/version where available, cache-control and relevant metadata. Compare source and copied object inventories and reconcile concurrent writes. Bucket policies and public/private status are part of configuration recovery.
 
-## 6. Migration safety-gate contract
+## 6. Supabase export and restore boundaries (verified 2026-11-20)
+
+The worker must not treat a normal `supabase db dump` as a full-project backup. The current CLI excludes Supabase-managed schemas by default, including `auth`, `storage` and extension-managed schemas. Its default output is schema-only and does not include table data or custom roles unless the corresponding flags are requested.
+
+A baseline logical export therefore needs separate, explicitly verified components:
+
+```bash
+supabase db dump --remote="$SUPABASE_DB_URL" -f roles.sql --role-only
+supabase db dump --remote="$SUPABASE_DB_URL" -f schema.sql
+supabase db dump --remote="$SUPABASE_DB_URL" -f data.sql --data-only --use-copy \
+  -x "storage.buckets_vectors" -x "storage.vector_indexes"
+```
+
+These commands are a baseline for the application database, not proof of Auth/Storage completeness. The worker must add a separately tested export for required Auth data and Storage metadata, and must copy the actual Storage object bytes. A database backup alone does not contain those bytes.
+
+The restore runbook must also account for the following platform boundaries:
+
+- Supabase's documented “Restore to a new project” flow can copy Auth user data (including password hashes and authentication records) and the project's encryption root key, but it does not copy Storage objects/settings, Edge Functions, Auth settings/API keys, Realtime settings, extension configuration or read replicas. The flow is currently plan-gated and can create additional monthly costs.
+- A manual logical restore requires required extensions and Realtime publications/settings to be recreated. If Vault/pgsodium is used, its encryption root key must be transferred separately through a secure process; it is not contained in the logical backup archive.
+- Custom role passwords are not included in Supabase's daily backup downloads and must be reset after restoration.
+- Migration history may need a separate schema/data export and restore; never mark a target ready solely because application tables restored.
+
+Official references:
+- [Supabase Database Backups](https://supabase.com/docs/guides/platform/backups)
+- [Supabase CLI `db dump`](https://supabase.com/docs/reference/cli/global-flags)
+- [Backup and Restore using the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore)
+- [Restore to a new project](https://supabase.com/docs/guides/platform/clone-project)
+
+The worker must expose each unsupported or unverified component as an explicit failed/partial component. It must not convert these limitations into a “full backup” success state.
+
+## 8. Migration safety-gate contract
 
 The migration workflow must call the control-plane API using a workload identity before applying production migrations. The gate returns allow only if:
 - the artifact source project ref exactly matches the configured production ref;
@@ -107,7 +137,7 @@ The gate does not replace migration sequence reconciliation, data preflight, sta
 - Measure RPO/RTO in recurring recovery exercises.
 - Download URLs must be short-lived, one-artifact scoped, and audited.
 
-## 8. Required secrets and cost decision before implementation
+## 9. Required secrets and cost decision before implementation
 
 Before provisioning, the owner must approve:
 - worker hosting/provider and monthly cost ceiling;
@@ -121,7 +151,7 @@ Do not reuse the production Supabase service-role key as the worker's general cr
 
 No secret should be requested in chat or committed to GitHub. Provision through the provider's secret manager.
 
-## 9. Acceptance tests before production use
+## 10. Acceptance tests before production use
 
 - Non-owner requests are denied by the API even if they call endpoints directly.
 - Forged job IDs and cross-project artifact IDs are denied.
@@ -135,6 +165,6 @@ No secret should be requested in chat or committed to GitHub. Provision through 
 - Tenant RLS, cross-business isolation, accounting balances, inventory quantities, audit history and authenticated smoke tests pass after restore.
 - Migration gate rejects stale, wrong-project, incomplete, unverified and history-mismatched artifacts.
 
-## 10. Current implementation status
+## 11. Current implementation status
 
 This document defines M1. It is not an implemented service. The current Backup & Recovery UI must continue to display "not configured" until the worker, API, independent storage, encryption, Auth/Storage recovery, restore rehearsal and migration gate have all passed operational acceptance.
