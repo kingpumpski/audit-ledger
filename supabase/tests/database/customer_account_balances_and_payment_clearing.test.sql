@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(16);
+SELECT extensions.plan(18);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -10,8 +10,19 @@ INSERT INTO auth.users (
 );
 INSERT INTO public.user_roles(user_id,role)
 VALUES ('ca100000-0000-4000-8000-000000000001','accountant');
+INSERT INTO public.business_members(business_id,user_id,role,status,joined_at)
+SELECT public.legacy_business_id(),'ca100000-0000-4000-8000-000000000001','accountant','active',now();
 SELECT set_config('request.jwt.claim.sub','ca100000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','ca100000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text)
+  )::text,
+  true
+);
 
 INSERT INTO public.customers(code,name)
 VALUES('CAB-001','Customer balance as-of test');
@@ -173,6 +184,33 @@ SELECT extensions.is(
   'Processor fee is separately recognized as a settlement expense'
 );
 
+INSERT INTO public.businesses(id,name,created_by)
+VALUES('ca100000-0000-4000-8000-000000000003','Other tenant clearing isolation test','ca100000-0000-4000-8000-000000000001');
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','ca100000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id','ca100000-0000-4000-8000-000000000003')
+  )::text,
+  true
+);
+SELECT extensions.throws_ok(
+  $cab_unauthorized_clearing_read$ SELECT * FROM public.get_payment_clearing_balances() $cab_unauthorized_clearing_read$,
+  '42501',
+  'You are not authorized to view payment clearing balances',
+  'A member cannot query clearing balances for a business where they have no active membership'
+);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub','ca100000-0000-4000-8000-000000000001',
+    'role','authenticated',
+    'app_metadata',jsonb_build_object('active_business_id',public.legacy_business_id()::text)
+  )::text,
+  true
+);
+
 SELECT extensions.throws_ok(
   $cab_over_settle_test$ SELECT public.settle_payment_clearing_account(
     '1020',1,0,CURRENT_DATE,'CARD-PROVIDER-OVERSETTLE','BANK-STATEMENT-OVERSETTLE',
@@ -181,6 +219,15 @@ SELECT extensions.throws_ok(
   'P0001',
   format('Settlement exceeds the clearing balance available on %s (available 0.00)',CURRENT_DATE),
   'Settlement cannot exceed the clearing balance available on the selected date'
+);
+
+SELECT extensions.ok(
+  EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname = 'payment_clearing_settlements_business_idempotency_uidx'
+  ),
+  'Payment-clearing settlement idempotency is unique within each business'
 );
 
 SELECT * FROM extensions.finish();
