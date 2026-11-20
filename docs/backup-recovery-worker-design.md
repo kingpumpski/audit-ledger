@@ -111,7 +111,7 @@ Official references:
 
 The worker must expose each unsupported or unverified component as an explicit failed/partial component. It must not convert these limitations into a “full backup” success state.
 
-## 8. Migration safety-gate contract
+## 7. Migration safety-gate contract
 
 The migration workflow must call the control-plane API using a workload identity before applying production migrations. The gate returns allow only if:
 - the artifact source project ref exactly matches the configured production ref;
@@ -127,7 +127,7 @@ A browser checkbox, UI status, manual SQL row or GitHub artifact is never suffic
 
 The gate does not replace migration sequence reconciliation, data preflight, staging validation, review and explicit release approval.
 
-## 7. Scheduling, retention and operations
+## 8. Scheduling, retention and operations
 
 - Schedule daily full backups initially; choose incremental/object-deduplicated optimizations only after restore testing.
 - Trigger an additional backup before approved production migration releases.
