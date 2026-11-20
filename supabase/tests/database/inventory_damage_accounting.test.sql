@@ -829,12 +829,12 @@ SELECT set_config(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_inventory_damage(
+  $tenant_damage_retry$ SELECT public.record_inventory_damage(
     (SELECT id FROM public.products WHERE sku = 'TEST-TENANT-IDEMPOTENCY-001'),
     3, 'DAMAGE-TEST-001',
     'd0000000-0000-4000-8000-000000000101',
     'pgTAP inventory damage test'
-  ) $,
+  ) $tenant_damage_retry$,
   'A separate business can reuse an inventory-damage idempotency key'
 );
 
@@ -846,12 +846,12 @@ SELECT extensions.is(
 );
 
 SELECT extensions.lives_ok(
-  $ SELECT public.record_stock_purchase(
+  $tenant_purchase_retry$ SELECT public.record_stock_purchase(
     (SELECT id FROM public.products WHERE sku = 'TEST-TENANT-IDEMPOTENCY-001'),
     4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
     'cash', 'Initial test purchase', NULL,
     'd0000000-0000-4000-8000-000000000201'
-  ) $,
+  ) $tenant_purchase_retry$,
   'A separate business can reuse a stock-purchase idempotency key'
 );
 
