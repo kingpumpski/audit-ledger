@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(55);
+SELECT extensions.plan(56);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -613,6 +613,17 @@ SELECT extensions.throws_ok(
   'P0001',
   'Only an admin or accountant can issue customer credit notes',
   'Cashier cannot issue customer credit notes'
+);
+
+SELECT extensions.ok(
+  (SELECT count(*)::integer FROM pg_indexes
+   WHERE schemaname = 'public'
+     AND indexname = ANY(ARRAY[
+       'credit_notes_business_idempotency_uidx',
+       'customer_credit_applications_business_idempotency_uidx',
+       'customer_credit_refunds_business_idempotency_uidx'
+     ])) = 3,
+  'Credit note, application and refund idempotency indexes are business-scoped'
 );
 
 SELECT * FROM extensions.finish();
