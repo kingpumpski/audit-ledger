@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
 
-SELECT extensions.plan(67);
+SELECT extensions.plan(72);
 
 -- Isolated fixture users. The JWT subject setting exercises the same auth.uid()
 -- and user_roles checks used by authenticated RPC calls.
@@ -14,7 +14,9 @@ VALUES
   ('d0000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
    'inventory-accountant-test@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
   ('d0000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
-   'inventory-cashier-test@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
+   'inventory-cashier-test@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb),
+  ('d0000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
+   'inventory-other-business-test@example.invalid', '', now(), '{}'::jsonb, '{}'::jsonb);
 
 INSERT INTO public.user_roles (user_id, role)
 VALUES
@@ -748,6 +750,98 @@ SELECT extensions.is(
      AND coa.code = '5000'),
   8.00::numeric,
   'Mixed invoice posts verified COGS for its physical line despite service line having no stock cost'
+);
+
+-- Verify that inventory purchase and damage retry keys are isolated by
+-- business. Seed matching evidence rows so both RPCs exercise their retry
+-- branches without requiring a new business journal sequence.
+SELECT set_config('request.jwt.claim.sub', 'd0000000-0000-4000-8000-000000000003', true);
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config(
+  'test.inventory_other_business',
+  public.create_business('Other Inventory Business', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
+  true
+);
+
+WITH product AS (
+  INSERT INTO public.products (
+    business_id, sku, name, current_price, cost_price, cost_price_verified,
+    stock_quantity, is_service, is_active
+  ) VALUES (
+    public.current_business_id(), 'TEST-TENANT-IDEMPOTENCY-001',
+    'Tenant idempotency test product', 20, 8.25, true, 10, false, true
+  )
+  RETURNING id, business_id
+)
+INSERT INTO public.inventory_transactions (
+  business_id, product_id, type, quantity, previous_quantity, new_quantity,
+  unit_cost, total_cost, reference_type, supplier_name, reference_number,
+  payment_method, amount_paid, notes, performed_by, idempotency_key,
+  opening_unit_cost, previous_unit_cost, previous_cost_verified
+)
+SELECT
+  product.business_id, product.id, 'damage', 3, 10, 7,
+  8.25, 24.75, 'inventory_damage', NULL, 'DAMAGE-TEST-001',
+  NULL, 0, 'pgTAP inventory damage test', auth.uid(),
+  'd0000000-0000-4000-8000-000000000101', NULL, NULL, false
+FROM product;
+
+INSERT INTO public.inventory_transactions (
+  business_id, product_id, type, quantity, previous_quantity, new_quantity,
+  unit_cost, total_cost, reference_type, supplier_name, reference_number,
+  payment_method, amount_paid, notes, performed_by, idempotency_key,
+  opening_unit_cost, previous_unit_cost, previous_cost_verified
+)
+SELECT
+  public.current_business_id(), p.id, 'purchase', 4, 0, 4,
+  7.50, 30.00, 'stock_purchase', 'Test supplier', 'PURCHASE-TEST-001',
+  'cash', 10.00, 'Initial test purchase', auth.uid(),
+  'd0000000-0000-4000-8000-000000000201', NULL, NULL, false
+FROM public.products p
+WHERE p.sku = 'TEST-TENANT-IDEMPOTENCY-001';
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_inventory_damage(
+    (SELECT id FROM public.products WHERE sku = 'TEST-TENANT-IDEMPOTENCY-001'),
+    3, 'DAMAGE-TEST-001',
+    'd0000000-0000-4000-8000-000000000101',
+    'pgTAP inventory damage test'
+  ) $,
+  'A separate business can reuse an inventory-damage idempotency key'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.inventory_transactions
+   WHERE idempotency_key = 'd0000000-0000-4000-8000-000000000101'),
+  2,
+  'The same inventory-damage idempotency key can exist once in each business'
+);
+
+SELECT extensions.lives_ok(
+  $ SELECT public.record_stock_purchase(
+    (SELECT id FROM public.products WHERE sku = 'TEST-TENANT-IDEMPOTENCY-001'),
+    4, 7.50, 'Test supplier', 'PURCHASE-TEST-001', 10.00,
+    'cash', 'Initial test purchase', NULL,
+    'd0000000-0000-4000-8000-000000000201'
+  ) $,
+  'A separate business can reuse a stock-purchase idempotency key'
+);
+
+SELECT extensions.is(
+  (SELECT count(*)::integer FROM public.inventory_transactions
+   WHERE idempotency_key = 'd0000000-0000-4000-8000-000000000201'),
+  2,
+  'The same stock-purchase idempotency key can exist once in each business'
+);
+
+SELECT extensions.ok(
+  (SELECT count(*)::integer FROM pg_indexes
+   WHERE schemaname = 'public'
+     AND indexname = ANY(ARRAY[
+       'inventory_transactions_business_idempotency_key_uidx',
+       'inventory_purchase_reversals_business_idempotency_uidx'
+     ])) = 2,
+  'Inventory transaction and stock-purchase reversal idempotency indexes are business-scoped'
 );
 
 SELECT * FROM extensions.finish();
