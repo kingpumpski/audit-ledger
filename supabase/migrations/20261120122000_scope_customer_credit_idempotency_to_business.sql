@@ -527,7 +527,7 @@ BEGIN
     id,business_id,credit_note_id,applied_to_invoice_id,amount,applied_on,reference_number,
     idempotency_key,request_fingerprint,created_by
   ) VALUES (
-    v_application_id,v_business_id,v_note.id,v_invoice.id,ROUND(p_amount,2),
+    v_application_id,v_business_id,v_note.id,v_invoice.id,ROUND(p_amount,2),p_applied_on,
     BTRIM(p_reference_number),p_idempotency_key,v_fingerprint,auth.uid()
   );
 
@@ -602,7 +602,10 @@ BEGIN
   IF p_payment_method NOT IN (
     'cash'::public.payment_method,
     'bank_transfer'::public.payment_method,
-    'mobile_payment'::public.payment_method
+    'credit_card'::public.payment_method,
+    'debit_card'::public.payment_method,
+    'mobile_payment'::public.payment_method,
+    'check'::public.payment_method
   ) THEN
     RAISE EXCEPTION 'Customer-credit refunds must use cash, bank transfer or mobile payment';
   END IF;
@@ -641,13 +644,7 @@ BEGIN
 
   SELECT id INTO v_credit_account FROM public.chart_of_accounts
   WHERE code='2200' AND account_type='liability' AND is_active LIMIT 1;
-  IF p_payment_method='cash' THEN
-    SELECT id INTO v_payment_account FROM public.chart_of_accounts
-    WHERE code='1000' AND account_type='asset' AND is_active LIMIT 1;
-  ELSE
-    SELECT id INTO v_payment_account FROM public.chart_of_accounts
-    WHERE code='1010' AND account_type='asset' AND is_active LIMIT 1;
-  END IF;
+  v_payment_account := public.resolve_payment_account_id(p_payment_method);
   IF v_credit_account IS NULL OR v_payment_account IS NULL THEN
     RAISE EXCEPTION 'Customer credit liability or cash/bank account is not configured';
   END IF;
