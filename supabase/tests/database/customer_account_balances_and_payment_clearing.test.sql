@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 BEGIN;
-SELECT extensions.plan(17);
+SELECT extensions.plan(18);
 
 INSERT INTO auth.users (
   id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data
@@ -219,6 +219,15 @@ SELECT extensions.throws_ok(
   'P0001',
   format('Settlement exceeds the clearing balance available on %s (available 0.00)',CURRENT_DATE),
   'Settlement cannot exceed the clearing balance available on the selected date'
+);
+
+SELECT extensions.ok(
+  EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname = 'payment_clearing_settlements_business_idempotency_uidx'
+  ),
+  'Payment-clearing settlement idempotency is unique within each business'
 );
 
 SELECT * FROM extensions.finish();
