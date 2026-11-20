@@ -29,7 +29,7 @@ SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
 
 SELECT extensions.lives_ok(
-  $ SELECT set_config(
+  $expense_capture$ SELECT set_config(
     'test.expense_id',
     public.record_operating_expense(
     'Office internet service', 'Example Telecom', 'OPEX-TEST-001',
@@ -40,7 +40,7 @@ SELECT extensions.lives_ok(
     'e0000000-0000-4000-8000-000000000101'
     )::text,
     true
-  ) $,
+  ) $expense_capture$,
   'Accountant can record an evidenced operating expense with a partial payment'
 );
 
@@ -72,23 +72,23 @@ SELECT set_config(
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.pay_operating_expense(
+  $expense_cross_payment$ SELECT public.pay_operating_expense(
     current_setting('test.expense_id')::uuid,
     1.00, CURRENT_DATE, 'cash', 'CROSS-BUSINESS-PAYMENT',
     'e0000000-0000-4000-8000-000000000121'
-  ) $,
+  ) $expense_cross_payment$,
   'P0001',
   'Operating expense not found',
   'A different business cannot settle an expense by guessing its UUID'
 );
 
 SELECT extensions.throws_ok(
-  $ SELECT public.reverse_unpaid_operating_expense(
+  $expense_cross_reversal$ SELECT public.reverse_unpaid_operating_expense(
     current_setting('test.expense_id')::uuid,
     'Cross-business attempt',
     'CROSS-BUSINESS-REVERSAL',
     'e0000000-0000-4000-8000-000000000122'
-  ) $,
+  ) $expense_cross_reversal$,
   'P0001',
   'Operating expense not found',
   'A different business cannot reverse an expense by guessing its UUID'
