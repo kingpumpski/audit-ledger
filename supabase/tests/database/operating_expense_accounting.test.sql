@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(42);
+SELECT extensions.plan(43);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -69,6 +69,12 @@ SELECT set_config(
   'test.expense_other_business',
   public.create_business('Other Expense Business', 'small_business', 'Ghana', 'GHS', 'Africa/Accra')::text,
   true
+);
+
+SELECT extensions.is(
+  public.current_business_id(),
+  current_setting('test.expense_other_business')::uuid,
+  'A business owner resolves the newly created workspace as the active business'
 );
 
 SELECT extensions.throws_ok(
