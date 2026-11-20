@@ -763,6 +763,21 @@ SELECT set_config(
   true
 );
 
+-- Seed a non-zero stock snapshot as a database-owner fixture, then restore
+-- the authenticated owner claim before invoking the RPCs under test.
+SELECT set_config('request.jwt.claim.role', 'postgres', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'd0000000-0000-4000-8000-000000000003',
+    'role', 'postgres',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', public.current_business_id()::text
+    )
+  )::text,
+  true
+);
+
 WITH product AS (
   INSERT INTO public.products (
     business_id, sku, name, current_price, cost_price, cost_price_verified,
@@ -799,6 +814,19 @@ SELECT
   'd0000000-0000-4000-8000-000000000201', NULL, NULL, false
 FROM public.products p
 WHERE p.sku = 'TEST-TENANT-IDEMPOTENCY-001';
+
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config(
+  'request.jwt.claims',
+  jsonb_build_object(
+    'sub', 'd0000000-0000-4000-8000-000000000003',
+    'role', 'authenticated',
+    'app_metadata', jsonb_build_object(
+      'active_business_id', current_setting('test.inventory_other_business')
+    )
+  )::text,
+  true
+);
 
 SELECT extensions.lives_ok(
   $ SELECT public.record_inventory_damage(
