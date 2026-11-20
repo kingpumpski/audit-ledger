@@ -50,7 +50,7 @@ jobs:
 
           with open("supabase/config.toml", "a", encoding="utf-8") as config:
               config.write(
-                  f"\\n[db]\\nport = {db_port}\\nshadow_port = {shadow_port}\\n"
+                  f"\n[db]\nport = {db_port}\nshadow_port = {shadow_port}\n"
               )
 
           print(f"Using isolated Supabase ports: db={db_port}, shadow={shadow_port}")
