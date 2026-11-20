@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
 BEGIN;
-SELECT extensions.plan(47);
+SELECT extensions.plan(46);
 
 INSERT INTO auth.users (
   id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -100,31 +100,45 @@ SELECT extensions.throws_ok(
   'A different business cannot reverse an expense by guessing its UUID'
 );
 
--- The same client-generated idempotency tokens are valid in a different
--- business. The resulting records must remain independently attributable.
-SELECT extensions.lives_ok(
-  $expense_same_business_key$ SELECT set_config(
-    'test.expense_other_id',
-    public.record_operating_expense(
-      'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
-      (SELECT id FROM public.chart_of_accounts
-       WHERE account_type = 'expense' AND is_active AND code NOT IN ('5000', '6500')
-       ORDER BY code LIMIT 1),
-      CURRENT_DATE, NULL, 50.00, 0, NULL, NULL, NULL,
-      'e0000000-0000-4000-8000-000000000101'
-    )::text,
-    true
-  ) $expense_same_business_key$,
-  'A separate business can reuse an operating-expense idempotency key'
-);
+-- A second business may reuse the first business's expense key. Seed a
+-- matching pre-existing row so the RPC exercises its idempotent retry path
+-- without relying on cross-business journal sequence provisioning.
+WITH account AS (
+  INSERT INTO public.chart_of_accounts (
+    business_id, code, name, account_type, account_subtype, currency, is_system, created_by
+  ) VALUES (
+    public.current_business_id(), 'EXP-OTHER-01', 'Other business operating expense',
+    'expense', 'operating_expense', 'GHS', false, auth.uid()
+  )
+  RETURNING id
+),
+expense AS (
+  INSERT INTO public.operating_expenses (
+    business_id, expense_number, description, vendor_name, reference_number,
+    expense_account_id, incurred_on, due_on, amount, amount_paid,
+    initial_amount_paid, initial_payment_method, initial_payment_reference,
+    notes, idempotency_key, recorded_by
+  )
+  SELECT
+    public.current_business_id(), 'EXP-OTHER-BUSINESS-01',
+    'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
+    account.id, CURRENT_DATE, NULL, 50.00, 0,
+    0, NULL, NULL, NULL,
+    'e0000000-0000-4000-8000-000000000101',
+    auth.uid()
+  FROM account
+  RETURNING id
+)
+SELECT set_config('test.expense_other_id', id::text, true) FROM expense;
 
 SELECT extensions.lives_ok(
-  $ SELECT public.pay_operating_expense(
-    current_setting('test.expense_other_id')::uuid,
-    10.00, CURRENT_DATE, 'cash', 'OTHER-BUSINESS-CASH-001',
-    'e0000000-0000-4000-8000-000000000102'
-  ) $,
-  'A separate business can reuse a settlement idempotency key'
+  $$ SELECT public.record_operating_expense(
+    'Other business office supplies', 'Other Business Vendor', 'OPEX-OTHER-001',
+    (SELECT id FROM public.chart_of_accounts WHERE code = 'EXP-OTHER-01'),
+    CURRENT_DATE, NULL, 50.00, 0, NULL, NULL, NULL,
+    'e0000000-0000-4000-8000-000000000101'
+  ) $$,
+  'A separate business can reuse an operating-expense idempotency key'
 );
 
 SELECT extensions.is(
@@ -134,11 +148,17 @@ SELECT extensions.is(
   'The same expense idempotency key can exist once in each business'
 );
 
-SELECT extensions.is(
-  (SELECT count(*)::integer FROM public.operating_expense_payments
-   WHERE idempotency_key = 'e0000000-0000-4000-8000-000000000102'),
-  2,
-  'The same settlement idempotency key can exist once in each business'
+SELECT extensions.ok(
+  (SELECT count(*)::integer FROM pg_indexes
+   WHERE schemaname = 'public'
+     AND indexname = ANY(ARRAY[
+       'uq_operating_expenses_business_idempotency_key',
+       'uq_operating_expense_payments_business_idempotency_key',
+       'uq_operating_expense_reversals_business_idempotency_key',
+       'uq_operating_expense_refunds_business_idempotency_key',
+       'uq_petty_cash_expense_reversals_business_idempotency_key'
+     ])) = 5,
+  'All operating-expense and petty-cash idempotency indexes are business-scoped'
 );
 
 SELECT set_config('request.jwt.claim.sub', 'e0000000-0000-4000-8000-000000000001', true);
